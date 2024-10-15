@@ -1,0 +1,42 @@
+{
+  "hosting": {
+    "source": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "frameworksBackend": {
+      "region": "us-central1"
+    }
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "sokoni-s-grocery",
+          "appId": "1:492372104602:android:992b8ed44f5c8ab6831623",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "sokoni-s-grocery",
+          "configurations": {
+            "android": "1:492372104602:android:992b8ed44f5c8ab6831623",
+            "ios": "1:492372104602:ios:91ef8a27758766a6831623",
+            "web": "1:492372104602:web:fa0b5a298ae3968c831623",
+            "windows": "1:492372104602:web:8a6c052463829f29831623"
+          }
+        }
+      }
+    }
+  },
+  "database": {
+    "rules": "database.rules.json"
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

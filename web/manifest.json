@@ -1,0 +1,78 @@
+{
+    "name": "Grocery",
+    "short_name": "Grocery",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0175C2",
+    "theme_color": "#0175C2",
+    "description": "A new Flutter project.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "screenshots/screenshot1.png",
+            "sizes": "1080x1920",
+            "type": "image/png"
+        },
+        {
+            "src": "screenshots/screenshot2.png",
+            "sizes": "1080x1920",
+            "type": "image/png"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Search Products",
+            "short_name": "Search",
+            "description": "Search for products",
+            "url": "/search",
+            "icons": [
+                {
+                    "src": "icons/Icon-192.png",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                }
+            ]
+        },
+        {
+            "name": "Favorite Items",
+            "short_name": "Favorites",
+            "description": "View your favorite items",
+            "url": "/favorites",
+            "icons": [
+                {
+                    "src": "icons/Icon-192.png",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                }
+            ]
+        }
+    ],
+    "categories": ["shopping", "utilities"],
+    "lang": "en",
+    "dir": "ltr"
+}

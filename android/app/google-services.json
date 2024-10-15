@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "492372104602",
+    "firebase_url": "https://sokoni-s-grocery-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "sokoni-s-grocery",
+    "storage_bucket": "sokoni-s-grocery.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:492372104602:android:992b8ed44f5c8ab6831623",
+        "android_client_info": {
+          "package_name": "com.example.grocerry"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "492372104602-vv5b5kf132har2bcn527tvt9i8hon6iu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBGmhtaiwTfZga_WOceocEYKsYrRtS11l0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "492372104602-vv5b5kf132har2bcn527tvt9i8hon6iu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "492372104602-2e2kn3i7n2aagnp1kk4sngtrpr44dhhu.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.grocerry"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

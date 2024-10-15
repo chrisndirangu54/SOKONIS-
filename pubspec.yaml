@@ -1,0 +1,93 @@
+name: grocerry
+description: A new Flutter project.
+
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: ^3.4.1  # Latest version
+  firebase_auth: ^5.2.1  # Latest version
+  cloud_firestore: ^5.4.1 # Latest version
+  flutter_svg: ^2.0.10+1  # Already up to date
+  cupertino_icons: ^1.0.2 # Already up to date
+  provider: any  # Latest stable version
+  http: ^1.0.0  # Already specified latest version
+  cloud_functions: ^5.1.1  # Latest version
+  url_launcher: ^6.1.12  # Already specified
+  dio: any  # Already specified latest version
+  google_maps_flutter: any  # Already specified
+  geolocator: ^13.0.1  # Latest version
+  firebase_messaging: ^15.1.1  # Latest version
+  permission_handler: ^11.0.1  # Already specified latest
+  firebase_database: ^11.1.2  # Latest version
+  image: ^3.0.1
+  firebase_storage: ^12.3.0  # Already specified latest version
+  intl: ^0.18.0  # Already specified
+  cached_network_image: 3.4.1  # Latest version
+  flutter_local_notifications: 17.2.2  # Already specified
+  animated_text_kit: ^4.2.2  # Already specified latest
+  carousel_slider: ^5.0.0  # Already specified
+  equatable: ^2.0.5  # Already specified
+  fl_chart: ^0.69.0  # Already specified
+  string_similarity: ^2.1.1  # Already specified
+  tuple: ^2.0.2  # Already specified
+  path_provider: any  # Already specified
+  google_fonts: any  # Already specified
+  image_picker: any # Already specified
+  uuid: any  # Already specified
+  google_sign_in: any  # Already specified latest version
+  shimmer: ^2.0.0  # Add this line with the latest version available
+  csv: ^6.0.0
+  file_picker: ^8.1.2
+  share: any
+  uni_links: ^0.5.1
+  collection: ^1.18.0
+  fluttertoast: ^8.2.8
+  firebase_ml_vision: ^0.12.0+3
+  google_mlkit_text_recognition: ^0.13.1
+  google_mlkit_object_detection: ^0.13.1
+  flutter_stripe: ^11.1.0
+  glassmorphism: ^3.0.0
+  model_viewer_plus: ^1.9.0
+  country_code_picker: ^3.0.0
+  background_locator: ^1.6.12
+  geocoding: ^3.0.0
+  fuzzy: ^0.5.1
+  bento: ^0.0.1+alpha
+  lottie: ^3.1.2
+  video_player: ^2.9.2
+  percent_indicator: ^4.2.3
+  url_strategy: ^0.3.0
+  video_player_web: ^2.0.11 # Ensure this is present for web support
+  shared_preferences: ^2.3.2
+  sensors_plus: ^6.0.1
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0  # Already specified
+  mockito: ^5.4.2  # Already specified latest
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+
+  fonts:
+    - family: Comfortaa
+      fonts:
+        - asset: assets/Comfortaa/Comfortaa-Bold.ttf
+        - asset: assets/Comfortaa/Comfortaa-Light.ttf
+        - asset: assets/Comfortaa/Comfortaa-Medium.ttf
+        - asset: assets/Comfortaa/Comfortaa-Regular.ttf
+        - asset: assets/Comfortaa/Comfortaa-SemiBold.ttf
