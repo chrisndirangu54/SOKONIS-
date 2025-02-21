@@ -3,15 +3,17 @@ import 'package:grocerry/models/user.dart';
 import 'product.dart';
 
 class CartItem {
-  final User user;
   final Product product;
-  final int quantity;
-  final double price;
+  int quantity;
+  String? selectedVariety;
+  double price;
+  String? notes; // New field for notes
 
   CartItem({
-    required this.user,
     required this.product,
-    required this.quantity,
-    required this.price, // Include price in the constructor
+    this.quantity = 1,
+    this.selectedVariety,
+    required this.price,
+    this.notes,
   });
 }

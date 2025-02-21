@@ -232,7 +232,12 @@ class CartProvider with ChangeNotifier {
   }
 
   // Method to show success messages
-
+  void updateItemNotes(Product product, String? notes) {
+    if (items.containsKey(product.id)) {
+      items[product.id]!.notes = notes;
+      notifyListeners();
+    }
+  }
   // Updated method to show payment methods for selected items
   void _selectPaymentMethod(List<CartItem> selectedItems, dynamic context) {
     showModalBottomSheet(
@@ -453,30 +458,36 @@ class CartProvider with ChangeNotifier {
     return snapshot.docs.map((doc) => Subscription.fromSnapshot(doc)).toList();
   }
 
-  Future<void> calculateDeliveryFee(LatLng origin, LatLng destination) async {
-    try {
-      final activeSubscriptions = await _fetchActiveSubscriptions();
+Future<double> calculateDeliveryFee(LatLng origin, LatLng destination) async {
+  try {
+    final activeSubscriptions = await _fetchActiveSubscriptions();
 
-      if (activeSubscriptions.isNotEmpty) {
-        // If the user has an active subscription, make the delivery free
-        deliveryFee = 0.0;
-        print('Delivery fee: Free (Active subscription)');
-      } else {
-        final etaService = ETAService('YOUR_GOOGLE_MAPS_API_KEY');
-        final etaAndDistance =
-            await etaService.calculateETAAndDistance(origin, destination);
+    // Check if the total price of all active subscriptions is more than 10,000
+    final totalSubscriptionPrice = activeSubscriptions.fold<double>(
+      0,
+      (sum, subscription) => sum + (subscription.price ?? 0),
+    );
 
-        final distanceInKm = etaAndDistance['distance'] as double;
-        deliveryFee = distanceInKm * 40; // $40 per km
-        print('Delivery fee: \$${deliveryFee.toStringAsFixed(2)}');
-      }
+    if (totalSubscriptionPrice > 10000) {
+      print('Delivery fee: Free (Total subscription price > 10000)');
+      return 0.0; // If the total price of subscriptions exceeds 10,000, make delivery free
+    } else {
+      // Proceed with calculating delivery fee based on distance
+      final etaService = ETAService('YOUR_GOOGLE_MAPS_API_KEY');
+      final etaAndDistance = await etaService.calculateETAAndDistance(origin, destination);
 
-      // Notify listeners that the delivery fee has changed
-      notifyListeners();
-    } catch (e) {
-      print('Error calculating delivery fee: $e');
+      final distanceInKm = etaAndDistance['distance'] as double;
+      final calculatedDeliveryFee = distanceInKm * 40; // $40 per km
+      return calculatedDeliveryFee;
     }
+  } catch (e) {
+    print('Error calculating delivery fee: $e');
+    // Return a default value in case of an error
+    return 0.0; // Or you could return a different default value or throw an exception
   }
+}
+
+
 
   Future<List<Map<String, dynamic>>> fetchQualifiedCoupons(
       List<CartItem> cartItems,
@@ -648,8 +659,73 @@ class CartProvider with ChangeNotifier {
       return totalDiscount + itemDiscount;
     });
   }
-}
 
+    // New method to send order for confirmation
+  void sendOrderForConfirmation(BuildContext context, Set<String> selectedItems, Function onConfirmationReceived) {
+    final itemsToConfirm = cart.items.values
+        .where((item) => selectedItems.contains(item.product.id))
+        .map((item) => {
+              'productId': item.product.id,
+              'quantity': item.quantity,
+              'notes': item.notes,
+              'status': 'pending',
+              // Add any other necessary data here...
+            })
+        .toList();
+
+    // Here you'd typically interact with a backend service to send the data.
+    // For simplicity, we're simulating this with a local function:
+    _simulateBackendConfirmation(itemsToConfirm, onConfirmationReceived);
+  }
+
+  // Simulated backend confirmation (replace with actual API call)
+  void _simulateBackendConfirmation(List<Map<String, dynamic>> items, Function onConfirmationReceived) {
+    Future.delayed(const Duration(seconds: 3), () {
+      // Simulated confirmation response from backend
+      List<Map<String, dynamic>> confirmedItems = items.map((item) {
+        if (item['notes'] != null && item['notes'].isNotEmpty) {
+          item['status'] = 'pending_attendant'; // Needs attendant check
+        } else {
+          item['status'] = 'confirmed'; // No notes, auto-confirm
+        }
+        return item;
+      }).toList();
+      onConfirmationReceived(confirmedItems);
+    });
+  }
+
+  // Method to handle attendant's decision
+  void handleAttendantDecision(String productId, String decision) {
+    if (items.containsKey(productId)) {
+      switch (decision) {
+        case 'confirm':
+          items[productId]!.status = 'confirmed';
+          break;
+        case 'decline':
+          items[productId]!.status = 'declined';
+          break;
+        case 'chargeMore':
+          // Here you would typically update the price or show a dialog for price adjustment
+          items[productId]!.status = 'price_adjustment';
+          break;
+      }
+      notifyListeners();
+    }
+  }
+
+  // Update processSelectedItemsCheckout method
+  void processSelectedItemsCheckout(BuildContext context, Set<String> selectedItems) {
+    final itemsToCheckout = cart.items.values
+        .where((item) => selectedItems.contains(item.product.id) && item.status == 'confirmed')
+        .map((item) => {
+              'productId': item.product.id,
+              'quantity': item.quantity,
+              'notes': item.notes,
+              // other necessary data...
+            })
+        .toList();
+}
+}
 class CouponInputField extends StatefulWidget {
   final Function(String) onCouponApplied;
 

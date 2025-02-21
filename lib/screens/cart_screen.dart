@@ -250,6 +250,16 @@ class _CartScreenState extends State<CartScreen> {
                         ],
                       ),
                     ),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Notes',
+                    hintText: 'e.g., not so ripe',
+                  ),
+                  controller: TextEditingController(text: cartItem.notes),
+                  onChanged: (value) {
+                    cart.updateItemNotes(cartItem.product, value);
+                  },
+                ),
                     // Coupon Input Field
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -290,14 +300,29 @@ class _CartScreenState extends State<CartScreen> {
                 ),
         ),
       ),
-      floatingActionButton: _selectedItems.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () =>
-                  cart.processSelectedItemsCheckout(context, _selectedItems),
-              label: const Text('Checkout'),
-              icon: const Icon(Icons.payment),
-            ),
-    );
-  }
+    floatingActionButton: _selectedItems.isEmpty
+        ? null
+        : FloatingActionButton.extended(
+            onPressed: () {
+              if (cart.items.any((item) => item.notes != null && item.notes!.isNotEmpty)) {
+                cart.sendOrderForConfirmation(context, _selectedItems, (List<Map<String, dynamic>> confirmedItems) {
+                  setState(() {
+                    // Update UI based on confirmation status
+                    for (var item in confirmedItems) {
+                      cart.handleAttendantDecision(item['productId'], item['status']);
+                    }
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Items sent for confirmation')),
+                  );
+                });
+              } else {
+                cart.processSelectedItemsCheckout(context, _selectedItems);
+              }
+            },
+            label: const Text('Checkout'),
+            icon: const Icon(Icons.payment),
+          ),
+  );
+}
 }

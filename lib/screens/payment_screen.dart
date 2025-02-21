@@ -35,9 +35,8 @@ class PaymentScreenState extends State<PaymentScreen> {
     final totalAfterDiscount = basePrice - discountAmount;
     final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
-    // Calculate additional service or delivery fee if applicable
-    const deliveryFee =
-        5.0; // Example fee, you can replace with any other logic
+    final deliveryFee = cart.calculateDeliveryFee(origin, destination);
+    final totalWithDelivery = totalAfterDiscount + deliveryFee;
     final totalWithDelivery = totalAfterDiscount + deliveryFee;
 
     // Calculate the selected total amount for coupon validation

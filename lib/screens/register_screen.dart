@@ -24,11 +24,11 @@ class RegisterScreenState extends State<RegisterScreen>
   final _contactController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
-  bool _isLoading = false;
-  bool _passwordVisible = false;
-  String _passwordStrength = '';
+  bool? _isLoading = false;
+  bool? _passwordVisible = false;
+  String? _passwordStrength = '';
   String? _referralCode; // Store the referral code
-  String _countryCode = '+254'; // Default country code
+  late String _countryCode = '+254'; // Default country code
 
   late AnimationController _controller;
   late StreamSubscription _linkSubscription;
@@ -163,14 +163,14 @@ class RegisterScreenState extends State<RegisterScreen>
                             alt: "A 3D model of a basket",
                             autoRotate: _isLoading, // Auto-rotate when loading
                             cameraControls:
-                                !_isLoading, // Disable camera controls when loading
+                                !_isLoading!, // Disable camera controls when loading
                             disablePan:
                                 _isLoading, // Disable panning when loading
                             disableZoom:
                                 _isLoading, // Disable zooming when loading
                             autoRotateDelay:
                                 0, // Start rotating immediately when loading
-                            cameraOrbit: _isLoading
+                            cameraOrbit: _isLoading!
                                 ? "0deg 90deg 2.5m"
                                 : "0deg 0deg 2.5m", // Define camera angle
                           )),
@@ -259,18 +259,18 @@ class RegisterScreenState extends State<RegisterScreen>
                           labelText: 'Password',
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _passwordVisible
+                              _passwordVisible!
                                   ? Icons.visibility
                                   : Icons.visibility_off,
-                              color: _passwordVisible
+                              color: _passwordVisible!
                                   ? Colors.orange
                                   : Colors.black,
                             ),
                             onPressed: () => setState(
-                                () => _passwordVisible = !_passwordVisible),
+                                () => _passwordVisible = !_passwordVisible!),
                           ),
                         ),
-                        obscureText: !_passwordVisible,
+                        obscureText: !_passwordVisible!,
                         validator: (value) => value!.length < 6
                             ? 'Password must be at least 6 characters'
                             : null,
@@ -282,12 +282,27 @@ class RegisterScreenState extends State<RegisterScreen>
                       // Password Strength Indicator
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: Text(
-                          _passwordStrength,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
+                        child: RichText(
                           textAlign: TextAlign.center,
+                          text: TextSpan(
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            children: [
+                              TextSpan(
+                                text: _passwordStrength!.substring(0,
+                                    2), // Assuming the first two characters are the emoji
+                                style: TextStyle(
+                                    color: _getPasswordStrengthColor(
+                                        _passwordStrength!)),
+                              ),
+                              TextSpan(
+                                text: _passwordStrength!.substring(
+                                    2), // The rest of the text after the emoji
+                                style: const TextStyle(
+                                    color: Colors
+                                        .black), // Or any color you prefer for the text part
+                              ),
+                            ],
+                          ),
                         ),
                       ),
 
@@ -296,7 +311,7 @@ class RegisterScreenState extends State<RegisterScreen>
                         decoration: BoxDecoration(
                           boxShadow: [
                             BoxShadow(
-                              color: _isLoading
+                              color: _isLoading!
                                   ? Colors.orange.withOpacity(0.5)
                                   : Colors.black.withOpacity(0.2),
                               spreadRadius: 5,
@@ -333,7 +348,7 @@ class RegisterScreenState extends State<RegisterScreen>
                                 alignment: Alignment.center,
                                 child: ElevatedButton(
                                   onPressed:
-                                      _isLoading ? null : _handleRegistration,
+                                      _isLoading! ? null : _handleRegistration,
                                   style: ElevatedButton.styleFrom(
                                     foregroundColor: Colors.blue,
                                     backgroundColor: Colors.white,
@@ -347,7 +362,7 @@ class RegisterScreenState extends State<RegisterScreen>
                                     side: const BorderSide(
                                         color: Colors.blue, width: 1),
                                   ),
-                                  child: _isLoading
+                                  child: _isLoading!
                                       ? Stack(
                                           alignment: Alignment.center,
                                           children: [
@@ -466,6 +481,29 @@ class RegisterScreenState extends State<RegisterScreen>
     );
   }
 
+  // You keep the existing _getPasswordStrengthColor function as is:
+  Color _getPasswordStrengthColor(String strength) {
+    switch (strength) {
+      case '❤️ Empty':
+        return Colors.grey;
+      case '💔 Weak':
+        return Colors.red;
+      case '🖤 Very Weak':
+        return Colors.black;
+      case '❤️ Weak':
+        return Colors.red;
+      case '💛 Medium':
+        return Colors.yellow;
+      case '💚 Strong':
+        return Colors.green;
+      case '💙 Very Strong':
+        return Colors.blue;
+      default:
+        return Colors.red; // Default color if strength is not recognized
+    }
+  }
+
+// Your existing function remains largely the same
   String _getPasswordStrength(String password) {
     if (password.isEmpty) return '❤️ Empty';
 

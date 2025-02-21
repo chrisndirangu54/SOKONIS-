@@ -1,14 +1,11 @@
 import 'dart:async';
 import 'package:glassmorphism/glassmorphism.dart';
-import 'package:model_viewer_plus/model_viewer_plus.dart'; // Import ModelViewer
-
+import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uni_links/uni_links.dart';
-// for TickerProvider
 
 import '../providers/auth_provider.dart';
-// Import UserProvider
 import '../screens/home_screen.dart';
 import 'password_retrieval_screen.dart';
 
@@ -24,11 +21,14 @@ class LoginScreenState extends State<LoginScreen>
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _showPassword = false; // To toggle password visibility
-  bool _showAdditionalButtons = false; // To toggle buttons visibility
-  bool _isLoading = false; // To manage the loading indicator
-  String? _referralCode; // Store the referral code
-
+  bool _showPassword = false;
+  bool _showAdditionalButtons = false;
+  bool _isLoading = false;
+  String? _referralCode;
+// Add separate controllers for different animations
+  late AnimationController _logoController;
+  late AnimationController _buttonController;
+  late AnimationController _fabController;
   late AnimationController _controller;
   late StreamSubscription _linkSubscription;
 
@@ -41,6 +41,13 @@ class LoginScreenState extends State<LoginScreen>
     );
     _controller.repeat(reverse: true);
 
+    // Handle initial URI if app was started via a link
+    getInitialUri().then((Uri? uri) {
+      if (uri != null) {
+        _parseReferralCode(uri.toString());
+      }
+    });
+
     // Listen for incoming links
     _linkSubscription = linkStream.listen((String? link) {
       if (link != null) {
@@ -49,20 +56,42 @@ class LoginScreenState extends State<LoginScreen>
     }, onError: (err) {
       print("Error listening for links: $err");
     });
+    _logoController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    )..repeat(reverse: true);
+
+    _buttonController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+
+    _fabController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
   }
 
   void _parseReferralCode(String link) {
-    Uri uri = Uri.parse(link);
-    setState(() {
-      _referralCode = uri.queryParameters['ref']; // Extract referral code
-    });
-    print('Referral Code: $_referralCode'); // For debugging
+    try {
+      Uri uri = Uri.parse(link);
+      setState(() {
+        _referralCode = uri.queryParameters['ref'];
+      });
+      print('Referral Code: $_referralCode');
+    } catch (e) {
+      print('Error parsing referral link: $e');
+    }
   }
 
   @override
   void dispose() {
-    _linkSubscription.cancel(); // Cancel the subscription
+    _linkSubscription.cancel();
     _controller.dispose();
+    _fabController.dispose();
+    _logoController.dispose();
+    _buttonController.dispose();
+
     super.dispose();
   }
 
@@ -109,10 +138,10 @@ class LoginScreenState extends State<LoginScreen>
                     ],
                   ),
                   child: AnimatedBuilder(
-                    animation: _controller,
+                    animation: _logoController,
                     builder: (context, child) {
                       final tiltValue = 0.02 *
-                          Curves.elasticInOut.transform(_controller.value);
+                          Curves.elasticInOut.transform(_logoController.value);
                       return Transform(
                         transform: Matrix4.identity()
                           ..setEntry(3, 2, 0.002) // Perspective for 3D depth
@@ -160,8 +189,8 @@ class LoginScreenState extends State<LoginScreen>
                         width: 300, // Set the width of the 3D model
                         child: ModelViewer(
                           src:
-                              'assets/3d/basket.gltf', // Path to your 3D model (GLTF or GLB format)
-                          alt: "A 3D model of a basket",
+                              'assets/3d/apple.glb', // Path to your 3D model (GLTF or GLB format)
+                          alt: "A 3D model of an apple",
                           autoRotate: _isLoading, // Auto-rotate when loading
                           cameraControls:
                               !_isLoading, // Disable camera controls when loading
@@ -171,6 +200,8 @@ class LoginScreenState extends State<LoginScreen>
                               _isLoading, // Disable zooming when loading
                           autoRotateDelay:
                               0, // Start rotating immediately when loading
+
+                          
                           cameraOrbit: _isLoading
                               ? "0deg 90deg 2.5m"
                               : "0deg 0deg 2.5m", // Define camera angle
@@ -259,12 +290,13 @@ class LoginScreenState extends State<LoginScreen>
                               .reverse(); // Return to normal state on release
                         }),
                         child: AnimatedBuilder(
-                          animation: _controller,
+                          animation: _buttonController,
                           builder: (context, child) {
                             final tiltValue = 0.03 *
-                                _controller.value; // Slight tilt for 3D effect
+                                _buttonController
+                                    .value; // Slight tilt for 3D effect
                             final scaleValue = 1 -
-                                _controller.value *
+                                _buttonController.value *
                                     0.1; // Scale down when pressed
 
                             return Transform(
@@ -407,23 +439,20 @@ class LoginScreenState extends State<LoginScreen>
         ),
       ),
       floatingActionButton: GestureDetector(
-        onTapDown: (_) => _controller.forward(), // Start scaling down
-        onTapUp: (_) => _controller.reverse(), // Scale back up
-        onTapCancel: () =>
-            _controller.reverse(), // Scale back up if tap canceled
+        onTapDown: (_) => _controller.forward(),
+        onTapUp: (_) => _controller.reverse(),
+        onTapCancel: () => _controller.reverse(),
         child: Stack(
           alignment: Alignment.bottomRight,
           children: [
             AnimatedBuilder(
-              animation: _controller,
+              animation: _fabController,
               builder: (context, child) {
-                final scale =
-                    1 - (_controller.value * 0.1); // Scale down by 10%
-
+                final scale = 1 - (_fabController.value * 0.1);
                 return Transform(
                   transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.001) // Set perspective
-                    ..scale(scale), // Apply scaling
+                    ..setEntry(3, 2, 0.001)
+                    ..scale(scale),
                   alignment: Alignment.center,
                   child: FloatingActionButton(
                     onPressed: () {
@@ -439,7 +468,7 @@ class LoginScreenState extends State<LoginScreen>
             ),
             if (_showAdditionalButtons) ...[
               Transform.translate(
-                offset: const Offset(0, -80), // Vertical positioning
+                offset: const Offset(0, -80),
                 child: FloatingActionButton.extended(
                   onPressed: () {
                     Navigator.of(context).pushReplacementNamed('/register');
@@ -449,7 +478,7 @@ class LoginScreenState extends State<LoginScreen>
                 ),
               ),
               Transform.translate(
-                offset: const Offset(-60, -60), // Diagonal positioning
+                offset: const Offset(-60, -60),
                 child: FloatingActionButton.extended(
                   onPressed: () {
                     Navigator.of(context).push(MaterialPageRoute(
@@ -460,18 +489,19 @@ class LoginScreenState extends State<LoginScreen>
                 ),
               ),
               Transform.translate(
-                offset: const Offset(-80, 0), // Horizontal positioning
+                offset: const Offset(-80, 0),
                 child: FloatingActionButton.extended(
                   onPressed: () async {
                     setState(() {
-                      _isLoading = true; // Start loading for Google sign-in
+                      _isLoading = true;
                     });
                     try {
                       await Provider.of<AuthProvider>(context, listen: false)
                           .signInWithGoogle(_referralCode);
 
+                      // Corrected line: Use isLoggedIn property instead of method
                       if (Provider.of<AuthProvider>(context, listen: false)
-                          .isLoggedIn()) {
+                          .isLoggedIn) {
                         if (context.mounted) {
                           Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
@@ -492,7 +522,7 @@ class LoginScreenState extends State<LoginScreen>
                       }
                     } finally {
                       setState(() {
-                        _isLoading = false; // Stop loading after Google sign-in
+                        _isLoading = false;
                       });
                     }
                   },

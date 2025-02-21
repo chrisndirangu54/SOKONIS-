@@ -16,56 +16,49 @@ class AuthProvider with ChangeNotifier {
         '492372104602-vv5b5kf132har2bcn527tvt9i8hon6iu.apps.googleusercontent.com',
   );
 
-  final UserProvider userProvider;
-  final ProductProvider productProvider;
+  final UserProvider? userProvider;
+  final ProductProvider? productProvider;
   final Completer<void> _initializationCompleter = Completer<void>();
-  bool _isInitializing = true;
+  bool? _isInitializing = true;
 
   AuthProvider(this.userProvider, this.productProvider) {
-    _initializeUser().then((_) {
-      _isInitializing = false;
-      notifyListeners();
-
-      _auth.authStateChanges().listen((auth.User? user) async {
-        await _initializationCompleter.future;
-
-        if (user != null) {
+    _auth.authStateChanges().listen((auth.User? user) async {
+      await _initializationCompleter.future;
+      if (user != null && (_user == null || _user?.uid != user.uid)) {
+        try {
           await _updateUserState(user.uid);
-        } else {
-          _user = null;
+        } catch (e) {
+          _handleAuthError(e);
         }
-        notifyListeners();
-      });
-    }).catchError((error) {
-      _handleInitializationError(error);
+      } else if (user == null) {
+        _user = null;
+        userProvider!.updateUser(user! as models.User);
+      }
+      notifyListeners();
     });
   }
 
   auth.User? get user => _user;
 
-  /// Refined isLoggedIn logic with loading state check
-  bool isLoggedIn() {
-    // Return false if initialization is still in progress or user data is not yet available
-    if (_isInitializing || _auth.currentUser == null || _user == null) {
-      return false;
-    }
-    // Ensure the user isn't anonymous
-    return !(_auth.currentUser?.isAnonymous ?? true);
+bool get isLoggedIn {
+  if (_isInitializing! || _auth.currentUser == null || _user == null) {
+    return false;
   }
+  return !(_auth.currentUser?.isAnonymous ?? true);
+}
 
   Future<void> _initializeUser() async {
     final currentUser = _auth.currentUser;
     if (currentUser != null) {
       await _updateUserState(currentUser.uid);
     }
-    _initializationCompleter.complete();
   }
 
   Future<void> _updateUserState(String uid) async {
     try {
       final userData = await _fetchUserDataFromFirestore(uid);
-      _user = userData as auth.User?;
-      userProvider.updateUser(userData);
+      _user = _auth.currentUser;
+      userProvider!.updateUser(userData);
 
       final token = await _fetchNotificationToken();
       if (token != null && token != userData.token) {
@@ -118,8 +111,13 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> signInWithGoogle(String? referralCode) async {
     try {
+      await _googleSignIn
+          .signOut(); // Sign out before signing in again, if needed
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return; // User aborted Google Sign-In
+      if (googleUser == null) {
+        // Handle case where user cancels sign-in
+        throw AuthException('Google Sign-In was cancelled by the user.');
+      }
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
@@ -163,6 +161,8 @@ class AuthProvider with ChangeNotifier {
       await _auth.signOut();
       await _googleSignIn.signOut();
       _user = null;
+      userProvider!
+          .updateUser(user! as models.User); // Clear user data on logout
       notifyListeners();
     } catch (e) {
       _handleAuthError(e);
@@ -189,21 +189,24 @@ class AuthProvider with ChangeNotifier {
         pinLocation: null,
       );
     } else {
-      throw Exception('User data not found in Firestore.');
+      throw AuthException('User data not found in Firestore.');
     }
   }
 
   Future<String?> _fetchNotificationToken() async {
-    // Replace this with your FCM or notification logic
-    return 'exampleToken'; // Placeholder for the actual token logic
+    // Implement actual token fetching logic here
+    return null; // Return null if token fetching fails or isn't implemented
   }
 
   void _handleAuthError(Object error) {
     String errorMessage = 'Unexpected Error: ${error.toString()}';
     if (error is auth.FirebaseAuthException) {
       errorMessage = 'Firebase Auth Error: ${error.code} - ${error.message}';
+    } else if (error is AuthException) {
+      errorMessage = 'Authentication Error: ${error.message}';
     }
     debugPrint(errorMessage);
+    // Here you might want to reset any states or flags that could lead to redundant operations
   }
 
   void _handleInitializationError(Object error) {
