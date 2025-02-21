@@ -590,80 +590,91 @@ class ProductScreenState extends State<ProductScreen>
     );
   }
 
-  // Widget to manage quantity in cart
-  Widget buildQuantityManager(BuildContext context) {
-    final productProvider = Provider.of<ProductProvider>(context);
-    final userProvider = Provider.of<UserProvider>(context);
-    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+// Widget to manage quantity
+Widget buildQuantityManager(BuildContext context) {
+  final productProvider = Provider.of<ProductProvider>(context);
+  final userProvider = Provider.of<UserProvider>(context);
+  final cartProvider = Provider.of<CartProvider>(context, listen: false);
 
-    final user = userProvider.user;
-    final product = productProvider.getProductById(widget.productId);
+  final user = userProvider.user;
+  final product = productProvider.getProductById(widget.productId);
 
-    return Row(
-      crossAxisAlignment:
-          CrossAxisAlignment.center, // Align items vertically at the center
-      children: [
-        // Quantity Manager Section
-        Expanded(
-          child: Row(
-            mainAxisAlignment:
-                MainAxisAlignment.start, // Align quantity manager to the start
-            children: [
-              IconButton(
-                icon: SvgPicture.asset(
-                  'assets/icons/minus-solid.svg',
-                  width: 14,
-                  height: 14,
-                  colorFilter: const ColorFilter.mode(
-                      Color.fromARGB(255, 157, 157, 157), BlendMode.srcIn),
-                ),
-                onPressed: () {
-                  // Call updateQuantity with increment set to false (decrease quantity)
-                  cartProvider.updateQuantity(
-                      product!, user.id, false, selectedVariety);
-                },
+  // Local state for quantity
+  int quantity = cartProvider.items[product?.id]?.quantity ?? 1;
+
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      // Quantity Manager Section
+      Expanded(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            IconButton(
+              icon: SvgPicture.asset(
+                'assets/icons/minus-solid.svg',
+                width: 14,
+                height: 14,
+                colorFilter: const ColorFilter.mode(
+                    Color.fromARGB(255, 157, 157, 157), BlendMode.srcIn),
               ),
-              Selector<CartProvider, int>(
-                selector: (context, cart) =>
-                    cart.items[product?.id]?.quantity ?? 0,
-                builder: (context, quantity, _) {
-                  return Text(
-                    quantity.toString(),
-                    style: const TextStyle(color: Colors.white, fontSize: 20),
-                  );
-                },
+              onPressed: () {
+                setState(() {
+                  if (quantity > 1) {
+                    quantity--;
+                  }
+                });
+              },
+            ),
+            // Quantity display window
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(5),
               ),
-              IconButton(
-                icon: SvgPicture.asset(
-                  'assets/icons/plus-solid.svg',
-                  width: 14,
-                  height: 14,
-                  colorFilter: const ColorFilter.mode(
-                      Color.fromARGB(255, 157, 157, 157), BlendMode.srcIn),
-                ),
-                onPressed: () {
-                  // Call updateQuantity with increment set to true (increase quantity)
-                  cartProvider.updateQuantity(
-                      product!, user.id, true, selectedVariety);
-                },
+              child: Text(
+                quantity.toString(),
+                style: const TextStyle(color: Colors.white, fontSize: 20),
               ),
-            ],
-          ),
+            ),
+            IconButton(
+              icon: SvgPicture.asset(
+                'assets/icons/plus-solid.svg',
+                width: 14,
+                height: 14,
+                colorFilter: const ColorFilter.mode(
+                    Color.fromARGB(255, 157, 157, 157), BlendMode.srcIn),
+              ),
+              onPressed: () {
+                setState(() {
+                  quantity++;
+                });
+              },
+            ),
+          ],
         ),
+      ),
 
-        // Add to Cart Button Section
-        IconButton(
-          icon: const Icon(Icons.add_shopping_cart,
-              color: Colors.white, size: 40),
-          onPressed: () {
-            cartProvider.addItem(product!, user, selectedVariety, quantity);
-            _logClick('add_to_cart');
-          },
-        ),
-      ],
-    );
-  }
-
+      // Add to Cart Button Section
+      IconButton(
+        icon: const Icon(Icons.add_shopping_cart, color: Colors.white, size: 40),
+        onPressed: () {
+          if (product != null) {
+            cartProvider.addItem(
+              product,
+              user,
+              selectedVariety,
+              quantity, // Using the local quantity state
+              notes,
+            );
+            _logClick(product, 'add to cart');
+          }
+        },
+      ),
+    ],
+  );
+}
   void _askForSubscription(product) {
     int selectedFrequency = 7; // Default to weekly
     int selectedDay = DateTime.now().weekday; // Default to today’s weekday

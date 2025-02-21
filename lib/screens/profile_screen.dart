@@ -161,7 +161,37 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
-
+Widget _buildTopUpSection(BuildContext context, WalletProvider walletProvider) {
+  return Card(
+    elevation: 4,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+    child: InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const TopUpForm()),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Top Up Your Wallet',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Add money to your wallet for easy purchases.',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
   Widget _buildReferralSection(
       BuildContext context, UserProvider userProvider) {
     final referralCode = userProvider.referralCode;

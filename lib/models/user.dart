@@ -1,4 +1,6 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 class User {
   final String id; // Firebase Auth uid
@@ -37,11 +39,11 @@ class User {
     required this.id,
     required this.uid,
     required this.email,
-    required this.token,
+    this.token,
     required this.name,
     required this.address,
+    this.pinLocation,
     required this.profilePictureUrl,
-    required this.pinLocation,
     this.favoriteProductIds = const [],
     this.recentlyBoughtProductIds = const [],
     this.lastLoginDate,
@@ -67,7 +69,7 @@ class User {
       id: json['id'] ?? '',
       uid: json['uid'] ?? '',
       email: json['email'] ?? '',
-      token: json['token'] ?? '',
+      token: json['token'],
       name: json['name'] ?? '',
       address: json['address'] ?? '',
       profilePictureUrl: json['profilePictureUrl'] ?? '',
@@ -94,6 +96,31 @@ class User {
       pinLocation: json['pinLocation'] != null
           ? LatLng(json['pinLocation']['lat'], json['pinLocation']['lng'])
           : null,
+      referralCode: json['referralCode'],
+      referredBy: json['referredBy'],
+    );
+  }
+
+  // Static method to create a guest user with a persistent ID
+  static Future<User> guest() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? guestId = prefs.getString('guestId');
+    
+    if (guestId == null) {
+      guestId = const Uuid().v4();
+      await prefs.setString('guestId', guestId);
+    }
+    
+    return User(
+      id: guestId,
+      uid: guestId,
+      email: 'guest@example.com', // More realistic email for guest
+      token: null, // Token typically null for guests
+      name: 'Guest',
+      address: 'N/A', // Using N/A instead of 'Guest' for clarity
+      profilePictureUrl: '', // Empty string for no profile picture
+      contact: 'N/A',
+      pinLocation: null,
     );
   }
 
@@ -127,6 +154,8 @@ class User {
       'canConfirmPreparing': canConfirmPreparing,
       'canConfirmReadyForDelivery': canConfirmReadyForDelivery,
       'contact': contact,
+      'referralCode': referralCode,
+      'referredBy': referredBy,
     };
   }
 
@@ -190,20 +219,6 @@ class User {
     );
   }
 
-  factory User.guest() {
-    return User(
-      id: 'Guest',
-      email: 'Guest',
-      token: 'Guest',
-      name: 'Guest',
-      address: 'Guest',
-      profilePictureUrl: 'Guest',
-      uid: 'Guest',
-      contact: 'Guest',
-      pinLocation: null, // Pin location can be null for Guest
-    );
-  }
-
   // Method to convert User instance to a Map (for Firestore or other map-based storage)
   Map<String, dynamic> toMap() {
     return {
@@ -216,8 +231,7 @@ class User {
       'profilePictureUrl': profilePictureUrl,
       'favoriteProductIds': favoriteProductIds,
       'recentlyBoughtProductIds': recentlyBoughtProductIds,
-      'lastLoginDate':
-          lastLoginDate?.toIso8601String(), // Converts DateTime to a String
+      'lastLoginDate': lastLoginDate?.toIso8601String(),
       'isAdmin': isAdmin,
       'canManageUsers': canManageUsers,
       'canManageProducts': canManageProducts,
@@ -227,14 +241,16 @@ class User {
       'isAvailableForDelivery': isAvailableForDelivery,
       'liveLocation': liveLocation != null
           ? {'lat': liveLocation!.latitude, 'lng': liveLocation!.longitude}
-          : null, // Handles the nested liveLocation field
+          : null,
       'isAttendant': isAttendant,
       'canConfirmPreparing': canConfirmPreparing,
       'canConfirmReadyForDelivery': canConfirmReadyForDelivery,
       'contact': contact,
       'pinLocation': pinLocation != null
-          ? {'lat': pinLocation!.latitude, 'lng': liveLocation!.longitude}
-          : null, // Handles the nested liveLocation field
+          ? {'lat': pinLocation!.latitude, 'lng': pinLocation!.longitude}
+          : null, // Fixed typo: was using liveLocation instead of pinLocation
+      'referralCode': referralCode,
+      'referredBy': referredBy,
     };
   }
 }

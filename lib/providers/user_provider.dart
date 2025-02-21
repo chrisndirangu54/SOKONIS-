@@ -13,22 +13,10 @@ import 'dart:io';
 
 class UserProvider with ChangeNotifier {
   // Profile-related fields
-  String id; // Referring user ID
-  String _name;
-  String _email;
-  final String _contact;
-  String _address;
-  String _pinLocation;
-  String _profilePictureUrl;
-  DateTime? _lastLoginDate;
-  String? _referralCode;
-  String? _referredBy;
-  bool hasUsedReferral =
-      false; // Indicates if this user has used a referral code
-
-  final Map<String, String> _pinLocationCache = {};
+  final Map _pinLocationCache = {};
   final Dio _dio = Dio();
-  String addressCache = [] as String;
+  List addressCache = []; //as Address?;
+
   // User-related fields
   late User _user;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -38,8 +26,7 @@ class UserProvider with ChangeNotifier {
 
   // Streams
   final _userStreamController = StreamController<User>.broadcast();
-  final _cartStreamController =
-      StreamController<Map<String, CartItem>>.broadcast();
+  final _cartStreamController = StreamController<Map<String, CartItem>>.broadcast();
 
   var isUploadingProfilePicture;
   var profilePictureUploadError;
@@ -55,27 +42,27 @@ class UserProvider with ChangeNotifier {
     required String name,
     required String email,
     String contact = '',
-    String address = '',
-    String pinLocation = '',
+    Address? address,
+    LatLng? pinLocation = const LatLng(0, 0),
     String profilePictureUrl = '',
     DateTime? lastLoginDate,
-    User? user,
     String? referralCode,
     String? referredBy,
     bool? hasUsedReferral,
-  })  : _name = name,
-        _email = email,
-        _contact = contact,
-        _address = address,
-        _pinLocation = pinLocation,
-        _profilePictureUrl = profilePictureUrl,
-        _lastLoginDate = lastLoginDate,
-        _user = user ?? User.guest() {
+  }) : super() {
     _referralCode = referralCode ?? UserProvider.generateStaticReferralCode();
     _referredBy = referredBy;
     if (hasUsedReferral != null) {
       this.hasUsedReferral = hasUsedReferral;
     }
+
+    // Call this method to initialize or update the user asynchronously after construction
+    _initializeUser();
+  }
+
+  Future<void> _initializeUser() async {
+    _user = await User.guest();
+    notifyListeners();
   }
 
   // Apply a referral code to the user account
@@ -83,8 +70,7 @@ class UserProvider with ChangeNotifier {
     if (isValidReferralCode(code)) {
       try {
         // Check Firestore for the referral code
-        final referralCodeDoc =
-            await _firestore.collection('referralCodes').doc(code).get();
+        final referralCodeDoc = await _firestore.collection('referralCodes').doc(code).get();
 
         if (referralCodeDoc.exists) {
           final referralData = referralCodeDoc.data()!;
@@ -110,8 +96,7 @@ class UserProvider with ChangeNotifier {
           // Update the usage count in the referral codes document
           await _firestore.collection('referralCodes').doc(code).update({
             'usageCount': FieldValue.increment(1),
-            'usedBy':
-                FieldValue.arrayUnion([id]), // Add this user to the usedBy list
+            'usedBy': FieldValue.arrayUnion([id]), // Add this user to the usedBy list
           });
 
           // Update local fields
@@ -141,15 +126,15 @@ class UserProvider with ChangeNotifier {
   }
 
   // Getters
-  String get name => _name;
-  String get email => _email;
-  String get contact => _contact;
-  String get address => _address;
-  String get pinLocation => _pinLocation;
-  String get profilePictureUrl => _profilePictureUrl;
-  DateTime? get lastLoginDate => _lastLoginDate;
-  String? get referralCode => _referralCode;
-  String? get referredBy => _referredBy;
+  String get name => _user.name;
+  String get email => _user.email;
+  String get contact => _user.contact;
+  Address? get address => _user.address;
+  LatLng? get pinLocation => _user.pinLocation;
+  String get profilePictureUrl => _user.profilePictureUrl;
+  DateTime? get lastLoginDate => _user.lastLoginDate;
+  String? get referralCode => _user.referralCode;
+  String? get referredBy => _user.referredBy;
   User get user => _user;
 
   Stream<User> get userStream => _userStreamController.stream;
@@ -164,45 +149,40 @@ class UserProvider with ChangeNotifier {
     String? profilePictureUrl,
     DateTime? lastLoginDate,
     required String contact,
-    required String address,
+    required Address address,
     String? referralCode,
+    required LatLng pinLocation,
   }) {
-    _name = name;
-    _email = email;
-    if (profilePictureUrl != null) _profilePictureUrl = profilePictureUrl;
-    if (lastLoginDate != null) _lastLoginDate = lastLoginDate;
-    if (referralCode != null) {
-      _referralCode = referralCode;
-    }
     _user = _user.copyWith(
       name: name,
       email: email,
       profilePictureUrl: profilePictureUrl,
       lastLoginDate: lastLoginDate,
+      contact: contact,
+      address: address,
+      referralCode: referralCode,
+      pinLocation: pinLocation,
     );
     _userStreamController.add(_user);
     notifyListeners();
   }
 
-  void updateAddress(String newAddress) {
-    _address = newAddress;
-    addressCache = newAddress;
+  void updateAddress(Address? newAddress) {
     _user = _user.copyWith(address: newAddress);
+    addressCache = newAddress as List;
     _userStreamController.add(_user);
     notifyListeners();
   }
 
-  void updatePinLocation(String newPinLocation) {
-    _pinLocation = newPinLocation;
-    _user =
-        _user.copyWith(address: _pinLocationCache[newPinLocation] ?? _address);
+  void updatePinLocation(LatLng newPinLocation) {
+    _user = _user.copyWith(
+        pinLocation: _pinLocationCache[newPinLocation] ?? newPinLocation);
     _userStreamController.add(_user);
     notifyListeners();
   }
 
   void updateProfilePictureUrl(String? newUrl) {
     if (newUrl != null) {
-      _profilePictureUrl = newUrl;
       _user = _user.copyWith(profilePictureUrl: newUrl);
       _userStreamController.add(_user);
       notifyListeners();
@@ -211,7 +191,6 @@ class UserProvider with ChangeNotifier {
 
   void updateLastLoginDate(DateTime? newDate) {
     if (newDate != null) {
-      _lastLoginDate = newDate;
       _user = _user.copyWith(lastLoginDate: newDate);
       _userStreamController.add(_user);
       notifyListeners();
@@ -233,7 +212,7 @@ class UserProvider with ChangeNotifier {
     String? token,
     String? name,
     String? contact,
-    String? address,
+    Address? address,
     String? profilePictureUrl,
     List<String>? favoriteProductIds,
     List<String>? recentlyBoughtProductIds,
@@ -289,28 +268,28 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void addFavoriteProduct(String productId) {
-    if (!_user.favoriteProductIds.contains(productId)) {
+  void addFavoriteProduct(Product product) {
+    if (!_user.favoriteProductIds!.contains(product.id)) {
       _user = _user.copyWith(
-          favoriteProductIds: [..._user.favoriteProductIds, productId]);
+          favoriteProductIds: [...?_user.favoriteProductIds, product.id]);
       _userStreamController.add(_user);
       notifyListeners();
     }
   }
 
-  void removeFavoriteProduct(String productId) {
+  void removeFavoriteProduct(Product product) {
     _user = _user.copyWith(
         favoriteProductIds:
-            _user.favoriteProductIds.where((id) => id != productId).toList());
+            _user.favoriteProductIds!.where((id) => id != product.id).toList());
     _userStreamController.add(_user);
     notifyListeners();
   }
 
-  void addRecentlyBoughtProduct(String productId) {
-    if (!_user.recentlyBoughtProductIds.contains(productId)) {
+  void addRecentlyBoughtProduct(Product product) {
+    if (!_user.recentlyBoughtProductIds.contains(product.id)) {
       _user = _user.copyWith(recentlyBoughtProductIds: [
         ..._user.recentlyBoughtProductIds,
-        productId
+        product.id
       ]);
       _userStreamController.add(_user);
       notifyListeners();
@@ -318,11 +297,10 @@ class UserProvider with ChangeNotifier {
   }
 
   // Function to fetch the address
-  Future<void> fetchpinLocation(String pinLocation) async {
+  Future<void> fetchpinLocation(LatLng pinLocation) async {
     // Check if the address is already cached
     if (_pinLocationCache.containsKey(pinLocation)) {
-      _pinLocation = _pinLocationCache[pinLocation]!;
-      _pinLocation = pinLocation;
+      _user = _user.copyWith(pinLocation: _pinLocationCache[pinLocation]!);
       _notifypinLocationChange();
       return;
     }
@@ -336,7 +314,7 @@ class UserProvider with ChangeNotifier {
     }
 
     final url =
-        'https://maps.googleapis.com/maps/api/geocode/json?latlng=$pinLocation&key=$apiKey';
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${pinLocation.latitude},${pinLocation.longitude}&key=$apiKey';
 
     try {
       final response = await _dio.get(url);
@@ -344,15 +322,15 @@ class UserProvider with ChangeNotifier {
       // Handle successful response
       if (response.statusCode == 200 && response.data['status'] == 'OK') {
         final results = response.data['results'];
-        if (results.isNotEmpty && results[0]['formatted_address'] != null) {
-          _address = results[0]['formatted_address'];
+        if (results.isNotEmpty &&
+            results[0]['formatted_address'] != null) {
+          _user = _user.copyWith(pinLocation: LatLng(results[0]['geometry']['location']['lat'], results[0]['geometry']['location']['lng']));
         } else {
-          _address = 'Unknown Address'; // Handle case when no address is found
+          _user = _user.copyWith(pinLocation: null); // Handle case when no address is found
         }
 
         // Cache the result to avoid future API calls for the same location
-        _pinLocationCache[pinLocation] = _address;
-        _pinLocation = pinLocation;
+        _pinLocationCache[pinLocation] = _user.pinLocation;
         _notifypinLocationChange();
       } else {
         _handleError(
@@ -368,19 +346,19 @@ class UserProvider with ChangeNotifier {
 
   // Helper function to notify address changes
   void _notifypinLocationChange() {
-    print('Pin Location updated: $_pinLocation');
+    print('Address updated: ${_user.pinLocation}');
   }
 
   // Private function to handle errors
   void _handleError(String error) {
     print('Error: $error');
-    _address = 'Unknown Pin Location'; // Set fallback address in case of errors
+    _user = _user.copyWith(pinLocation: null); // Set fallback address in case of errors
     _notifypinLocationChange();
   }
 
   // Fetch methods
   Future<List<Product>> fetchFavorites() async {
-    if (_user.favoriteProductIds.isEmpty) return [];
+    if (_user.favoriteProductIds!.isEmpty) return [];
 
     try {
       final querySnapshot = await _firestore
@@ -388,8 +366,9 @@ class UserProvider with ChangeNotifier {
           .where(FieldPath.documentId, whereIn: _user.favoriteProductIds)
           .get();
 
-      final favorites =
-          querySnapshot.docs.map((doc) => Product.fromFirestore(doc)).toList();
+      final favorites = querySnapshot.docs
+          .map((doc) => Product.fromFirestore(doc: doc))
+          .toList();
 
       return favorites;
     } catch (e) {
@@ -407,8 +386,9 @@ class UserProvider with ChangeNotifier {
           .where(FieldPath.documentId, whereIn: _user.recentlyBoughtProductIds)
           .get();
 
-      final recentlyBought =
-          querySnapshot.docs.map((doc) => Product.fromFirestore(doc)).toList();
+      final recentlyBought = querySnapshot.docs
+          .map((doc) => Product.fromFirestore(doc: doc))
+          .toList();
 
       return recentlyBought;
     } catch (e) {
@@ -424,11 +404,15 @@ class UserProvider with ChangeNotifier {
       email: '',
       token: '',
       name: '',
-      address: '',
+      address: null,
+      pinLocation: null,
       profilePictureUrl: '',
       favoriteProductIds: [],
       recentlyBoughtProductIds: [],
       lastLoginDate: null,
+      contact: '',
+      referralCode: null,
+      referredBy: null,
       isAdmin: false,
       canManageUsers: false,
       canManageProducts: false,
@@ -441,8 +425,6 @@ class UserProvider with ChangeNotifier {
       canConfirmPreparing: false,
       canConfirmReadyForDelivery: false,
       uid: '',
-      contact: '',
-      pinLocation: null,
     );
     _userStreamController.add(_user);
     notifyListeners();
@@ -456,9 +438,8 @@ class UserProvider with ChangeNotifier {
   }
 
   Stream<List<Product>> get favoritesStream {
-    if (_user?.favoriteProductIds?.isEmpty ?? true) {
-      return Stream.value(
-          []); // Return an empty stream or null might be more appropriate depending on usage
+    if (_user.favoriteProductIds?.isEmpty ?? true) {
+      return Stream.value([]);
     }
 
     return _firestore
@@ -466,17 +447,15 @@ class UserProvider with ChangeNotifier {
         .where(FieldPath.documentId, whereIn: _user.favoriteProductIds)
         .snapshots()
         .map((querySnapshot) => querySnapshot.docs
-            .map((doc) => Product.fromFirestore(doc))
-            .where((product) =>
-                product != null) // Ensure no null products are included
+            .map((doc) => Product.fromFirestore(doc: doc))
+            .where((product) => product != null)
             .toList());
   }
 
   // Getter for the stream of recently bought products
   Stream<List<Product>> get recentlyBoughtStream {
-    if (_user?.recentlyBoughtProductIds?.isEmpty ?? true) {
-      return Stream.value(
-          []); // Return an empty stream or null might be more appropriate
+    if (_user.recentlyBoughtProductIds.isEmpty) {
+      return Stream.value([]);
     }
 
     return _firestore
@@ -484,7 +463,7 @@ class UserProvider with ChangeNotifier {
         .where(FieldPath.documentId, whereIn: _user.recentlyBoughtProductIds)
         .snapshots()
         .map((querySnapshot) => querySnapshot.docs
-            .map((doc) => Product.fromFirestore(doc))
+            .map((doc) => Product.fromFirestore(doc: doc))
             .where((product) => product != null)
             .toList());
   }
@@ -492,16 +471,16 @@ class UserProvider with ChangeNotifier {
   // Set CartProvider
   void setCartProvider(CartProvider cartProvider) {
     _cartProvider = cartProvider;
-    _cartProvider.cartStream.listen((cartItems) {
+    _cartProvider.cartStream.listen((cartItem) {
       // Handle cart item changes
-      print('Cart items updated: $cartItems');
-      _cartStreamController.add(cartItems); // Add cart items to the stream
+      print('Cart items updated: $cartItem');
+      _cartStreamController.add(cartItem); // Add cart items to the stream
       // You can update user-related logic here based on cart changes
     });
   }
 
   bool isLoggedIn() {
-    return _user.token!.isNotEmpty &&
+    return _user.token?.isNotEmpty == true &&
         _user.email.isNotEmpty &&
         _user.email != 'Guest';
   }
@@ -521,8 +500,10 @@ class UserProvider with ChangeNotifier {
   final ImagePicker _imagePicker = ImagePicker();
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-// Method to select and upload a profile picture
-  Future<void> selectAndUploadProfilePicture(dynamic user) async {
+  static var addressList;
+
+  // Method to select and upload a profile picture
+  Future<void> selectAndUploadProfilePicture() async {
     try {
       // Pick an image from the device
       final XFile? pickedFile =
@@ -534,7 +515,7 @@ class UserProvider with ChangeNotifier {
 
         // Upload the image to Firebase Storage
         final ref =
-            _storage.ref().child('user_profile_pictures/${user.id}.jpg');
+            _storage.ref().child('user_profile_pictures/${_user.id}.jpg');
         final uploadTask = ref.putFile(imageFile);
         final snapshot = await uploadTask.whenComplete(() {});
 

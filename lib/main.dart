@@ -1,7 +1,9 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:grocerry/providers/auth_provider.dart';
+import 'package:grocerry/screens/group_buy_page.dart';
 import 'package:grocerry/screens/product_screen.dart';
 import 'package:grocerry/utils.dart';
 import 'package:provider/provider.dart';
@@ -55,6 +57,8 @@ class MyAppState extends State<MyApp> {
     super.initState();
     // Initialize deep linking based on the platform
     _initDeepLinking();
+    _handleNotification();
+
   }
 
   Future<void> _initDeepLinking() async {
@@ -100,9 +104,47 @@ class MyAppState extends State<MyApp> {
             builder: (context) => ProductScreen(productId: productId),
           ),
         );
-      }
+      } else if (uri.pathSegments.contains('groupbuy')) {
+      final groupId = uri.pathSegments.last;
+      // Navigate to group buy join page or handle join directly
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => GroupBuyPage(groupBuyId: groupId, userLocation: '', userId: '',),
+        ),
+      );
+    }
     }
   }
+
+
+  void _handleNotification() async {
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      _handleNotificationAction(message);
+    });
+
+    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+      if (message != null) {
+        _handleNotificationAction(message);
+      }
+    });
+  }
+
+  void _handleNotificationAction(RemoteMessage message) {
+    final data = message.data;
+    if (data['action'] == 'confirm_payment') {
+      final orderId = data['orderId'];
+      _openPaymentSelection(orderId);
+    }
+  }
+
+  void _openPaymentSelection(String orderId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => PaymentConfirmationScreen(orderId: orderId),
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +152,7 @@ class MyAppState extends State<MyApp> {
       providers: [
         ChangeNotifierProvider<UserProvider>(
             create: (_) =>
-                UserProvider(id: '', name: '', email: '', user: null)),
+                UserProvider(id: '', name: '', email: '')),
         ChangeNotifierProvider<ProductProvider>(
             create: (_) => ProductProvider()),
         ChangeNotifierProvider<AuthProvider>(

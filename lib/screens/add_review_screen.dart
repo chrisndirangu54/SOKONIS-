@@ -1,4 +1,4 @@
-// ignore_for_file: use_build_context_synchronously
+import 'package:grocerry/models/user.dart' as model;
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -34,7 +34,8 @@ class AddReviewScreenState extends State<AddReviewScreen> {
     if (_formKey.currentState!.validate()) {
       try {
         // Get the current user
-        final User? user = FirebaseAuth.instance.currentUser;
+        final model.User? user =
+            FirebaseAuth.instance.currentUser as model.User?;
         if (user == null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -44,7 +45,7 @@ class AddReviewScreenState extends State<AddReviewScreen> {
         }
 
         // Get user's display name or email
-        String? userName = (user ?? user.email ?? 'Anonymous') as String?;
+        String? userName = (user.name ?? 'Anonymous');
 
         // Censor the user's name
         final String censoredName = _censorName(userName!);
@@ -58,11 +59,14 @@ class AddReviewScreenState extends State<AddReviewScreen> {
         };
 
         // Submit the review
-        await FirebaseFirestore.instance
+        final reviewRef = await FirebaseFirestore.instance
             .collection('products')
             .doc(widget.productId)
             .collection('reviews')
             .add(reviewData);
+
+        // Update the review count
+        await _updateReviewCount(reviewRef.id);
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Review submitted successfully!')),
@@ -74,6 +78,22 @@ class AddReviewScreenState extends State<AddReviewScreen> {
           const SnackBar(content: Text('Failed to submit review')),
         );
       }
+    }
+  }
+
+  // New method to update review count
+  Future<void> _updateReviewCount(String reviewId) async {
+    try {
+      // Increment the review count for the product
+      await FirebaseFirestore.instance
+          .collection('products')
+          .doc(widget.productId)
+          .update({
+        'reviewCount': FieldValue.increment(1),
+      });
+    } catch (e) {
+      print('Failed to update review count: $e');
+      // Optionally, show an error message to the user if updating fails
     }
   }
 

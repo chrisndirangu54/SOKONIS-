@@ -1,11 +1,10 @@
-import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:grocerry/screens/home_screen.dart';
-import 'package:sensors_plus/sensors_plus.dart';
+import 'package:gyroscope/gyroscope.dart'; // Assuming this is the correct package for gyroscope events
+import 'package:grocerry/screens/home_screen.dart'; // Replace with your actual HomeScreen import
 
 class LoadingScreen extends StatefulWidget {
-  const LoadingScreen({super.key});
+  const LoadingScreen({Key? key}) : super(key: key);
 
   @override
   LoadingScreenState createState() => LoadingScreenState();
@@ -18,6 +17,7 @@ class LoadingScreenState extends State<LoadingScreen>
   double _rotationX = 0.0;
   final double _scale = 1.0;
   late AnimationController _controller;
+  late AnimationController _pulseController;
 
   @override
   void initState() {
@@ -25,6 +25,11 @@ class LoadingScreenState extends State<LoadingScreen>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
 
     _simulateLoading();
@@ -48,13 +53,11 @@ class LoadingScreenState extends State<LoadingScreen>
       loadingComplete = true;
     });
 
-    // Delay navigation by 5 seconds
+    // Delay navigation by 3 seconds
     Future.delayed(const Duration(seconds: 3), () {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                const HomeScreen()), // Replace 'HomeScreen' with your actual home screen widget
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
       );
     });
   }
@@ -85,32 +88,37 @@ class LoadingScreenState extends State<LoadingScreen>
                           ),
                           painter: WaterRipplePainter(_controller),
                         ),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(30.0),
-                          child: BackdropFilter(
-                            filter:
-                                ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                        AnimatedBuilder(
+                          animation: _pulseController,
+                          builder: (context, child) {
+                            return CustomPaint(
+                              painter: BorderGradientPainter(_pulseController),
+                              child: ClipRRect(
                                 borderRadius: BorderRadius.circular(30.0),
-                                border: Border.all(
-                                  color: Colors.orange
-                                      .withOpacity(0.6 * _controller.value),
-                                  width: 4.0,
+                                child: Container(
+                                  width: MediaQuery.of(context).size.width * 0.5,
+                                  height: MediaQuery.of(context).size.height * 0.5,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.9),
+                                    borderRadius: BorderRadius.circular(30.0),
+                                  ),
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      BackdropFilter(
+                                        filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                                        child: Container(),
+                                      ),
+                                      const Image(
+                                        image: AssetImage("assets/images/basket.png"),
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              child: SizedBox(
-                                width: MediaQuery.of(context).size.width * 0.5,
-                                height:
-                                    MediaQuery.of(context).size.height * 0.5,
-                                child: const Image(
-                                  image: AssetImage("assets/images/basket.png"),
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -125,7 +133,7 @@ class LoadingScreenState extends State<LoadingScreen>
                 style: TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.bold,
-                  color: Colors.deepOrangeAccent,
+                  color: Colors.orange,
                 ),
               ),
             ),
@@ -137,7 +145,60 @@ class LoadingScreenState extends State<LoadingScreen>
   @override
   void dispose() {
     _controller.dispose();
+    _pulseController.dispose();
     super.dispose();
+  }
+}
+
+class WaterRipplePainter extends CustomPainter {
+  final Animation<double> animation;
+
+  WaterRipplePainter(this.animation);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..color = Colors.blue.withOpacity(0.5 - animation.value * 0.5);
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * 0.5 * animation.value;
+
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(WaterRipplePainter oldDelegate) => true;
+}
+
+class BorderGradientPainter extends CustomPainter {
+  final Animation<double> animation;
+  final double pulseWidth;
+
+  BorderGradientPainter(this.animation, {this.pulseWidth = 4.0});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = pulseWidth + pulseWidth * animation.value * 0.5 // Pulsating effect
+      ..shader = LinearGradient(
+        colors: [Colors.blue, Colors.purple],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final rect = Rect.fromLTRB(0, 0, size.width, size.height);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(30.0)),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(BorderGradientPainter oldDelegate) {
+    return animation != oldDelegate.animation;
   }
 }
 
@@ -155,8 +216,7 @@ class BounceText extends StatefulWidget {
   State<BounceText> createState() => _BounceTextState();
 }
 
-class _BounceTextState extends State<BounceText>
-    with SingleTickerProviderStateMixin {
+class _BounceTextState extends State<BounceText> with TickerProviderStateMixin {
   final List<AnimationController> _controllers = [];
   final List<Animation<double>> _animations = [];
 
@@ -211,34 +271,5 @@ class _BounceTextState extends State<BounceText>
         );
       }),
     );
-  }
-}
-
-// Custom Painter for Water Ripple Effect
-class WaterRipplePainter extends CustomPainter {
-  final Animation<double> _animation;
-
-  WaterRipplePainter(this._animation) : super(repaint: _animation);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.blueAccent.withOpacity(0.4)
-      ..style = PaintingStyle.fill;
-
-    double rippleRadius =
-        size.width * 0.4 + (_animation.value * size.width * 0.3);
-
-    canvas.drawCircle(size.center(Offset.zero), rippleRadius, paint);
-
-    final secondaryPaint = Paint()..color = Colors.blueAccent.withOpacity(0.2);
-
-    canvas.drawCircle(
-        size.center(Offset.zero), rippleRadius / 2, secondaryPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
   }
 }

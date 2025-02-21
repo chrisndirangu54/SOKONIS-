@@ -358,3 +358,92 @@ class ProductService {
         .toList();
   }
 }
+Future<Product> determineProductUsingAI(
+    String productName,
+    Map<String, dynamic> productData,
+  ) async {
+    // URL for Grok API (this would need to be correct based on your setup)
+    final url = Uri.parse('https://api.x.ai/v1/chat/completions'); // Replace with actual Grok API endpoint
+
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $grokApiKey', // Replace 'grokApiKey' with your actual API key variable
+    };
+
+    String query =
+        'Product: $productName. Data: ${jsonEncode(productData)}. Please organize this into a Product object with the following structure. If product is repeated, convert it into a variety:\n\n'
+        '- **Name**: [String]\n'
+        '- **Base Price**: [double]\n'
+        '- **Description**: [String]\n'
+        '- **Category**: [String]\n'
+        '- **Units**: [String]\n'
+        '- **Category Image URL**: [String]\n'
+        '- **Subcategories**: [List<String>]\n'
+        '- **Subcategory Image URLs**: [List<String>]\n'
+        '- **Varieties**: [List<Variety>]\n'
+        '  - **Name**: [String]\n'
+        '  - **Color**: [String]\n'
+        '  - **Size**: [String]\n'
+        '  - **Image URL**: [String]\n'
+        '  - **Price**: [double]\n'
+        '  - **Discounted Price**: [double?]\n'
+        '- **Picture URL**: [String]\n'
+        '- **Is Fresh**: [bool]\n'
+        '- **Is Locally Sourced**: [bool]\n'
+        '- **Is Organic**: [bool]\n'
+        '- **Has Health Benefits**: [bool]\n'
+        '- **Has Discounts**: [bool]\n'
+        '- **Discounted Price**: [double]\n'
+        '- **Is Eco-Friendly**: [bool]\n'
+        '- **Is Superfood**: [bool]\n'
+        '- **Consumption Time**: [List<String>] // Possible values: lunch, breakfast, supper\n'
+        '- **Weather**: [List<String>] // Possible values: rainy, cloudy, sunny, other\n'
+        '- **Min Price**: [double?]\n\n'
+        'Respond in JSON format matching this structure.';
+
+    final body = jsonEncode({
+      'model': 'grok-beta', // Specify the Grok model you want to use
+      'messages': [
+        {
+          'role': 'system',
+          'content': 'You are an AI expert in product data organization.',
+        },
+        {
+          'role': 'user',
+          'content': query,
+        }
+      ],
+      'max_tokens': 1000,
+    });
+
+    final response = await http.post(url, headers: headers, body: body);
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      String jsonContent = data['choices'][0]['message']['content'];
+
+      Map<String, dynamic> productMap = jsonDecode(jsonContent);
+
+      // Assuming fromJson now returns Future<List<Product>>
+      List<Product> products = await Product.fromJson(productMap);
+      if (products.isNotEmpty) {
+        Product product = products[0];
+
+        // Update the discounted price stream with the first product's discounted price
+        groupBuyService!.updateDiscountedPrice(product.discountedPrice);
+
+        // Here, we might need to adjust the product's consumption time and weather
+        // based on your UI selections, assuming they are stored in controllers
+        if (_consumptionTimeController != null && _weatherController != null) {
+          product.consumptionTime = _consumptionTimeController.text.split(', ');
+          product.weather = _weatherController.text.split(', ');
+        }
+
+        return product;
+      } else {
+        throw Exception('No product data was returned');
+      }
+    } else {
+      print('Failed to determine product details: ${response.body}');
+      throw Exception('Failed to fetch product details from AI');
+    }
+  }

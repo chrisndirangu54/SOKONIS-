@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:grocerry/providers/user_provider.dart';
 import 'package:grocerry/services/notification_service.dart';
 import '../models/product.dart'; // Import the Product class
+import 'package:http/http.dart' as http;
 
 class ProductProvider with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -13,7 +15,7 @@ class ProductProvider with ChangeNotifier {
       StreamController<List<Product>>.broadcast();
   final StreamController<List<Product>> _seasonallyAvailableStreamController =
       StreamController<List<Product>>.broadcast();
-  final StreamController<List<Product>> _nearbyUsersBoughtStreamController =
+  final StreamController<List<Product>> _nearbyProductsStreamController =
       StreamController<List<Product>>.broadcast();
 
   final StreamController<List<Product>> _categoryProductsStreamController =
@@ -22,27 +24,45 @@ class ProductProvider with ChangeNotifier {
   // Local cache for products
   final List<Product> _products = [];
 
+  final StreamController<List<Product>> _timeOfDayProductsStreamController =
+      StreamController<List<Product>>.broadcast();
+  final StreamController<List<Product>> _weatherProductsStreamController =
+      StreamController<List<Product>>.broadcast();
+
+  // Getter for time of day product stream
+  Stream<List<Product>> get timeOfDayProductsStream =>
+      _timeOfDayProductsStreamController.stream;
+
+  // Getter for weather product stream
+  Stream<List<Product>> get weatherProductsStream =>
+      _weatherProductsStreamController.stream;
+
+  Product? product;
+
   // Getter for products
   List<Product> get products => _products;
 
-  Future<void> fetchNearbyUsersBought() async {
+  Future<List<Product>> fetchNearbyUsersBought() async {
     try {
+      // Simulate fetching data (could be from Firestore or another API)
       final querySnapshot = await _firestore
           .collection('products')
-          .orderBy('purchaseCount', descending: true)
-          .limit(10)
+          .where('nearby', isEqualTo: true)
           .get();
 
-      // Convert documents to products
-      final List<Product> nearbyUsersBought =
-          querySnapshot.docs.map((doc) => Product.fromFirestore(doc)).toList();
+      final List<Product> nearbyProducts = querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        return Product.fromFirestore(doc: doc); // Handle data safely here
+      }).toList();
 
-      // Add the list of products to the stream controller
-      _nearbyUsersBoughtStreamController.add(nearbyUsersBought);
+      // Update the stream controller with valid data
+      _nearbyProductsStreamController.add(nearbyProducts);
+
+      return nearbyProducts;
     } catch (e) {
-      print('Error fetching nearby users bought products: $e');
-      // You might want to add an empty list or an error state to the stream
-      _nearbyUsersBoughtStreamController.add([]);
+      print('Error fetching nearby products: $e');
+      _nearbyProductsStreamController.add([]);
+      return []; // Return an empty list in case of an error
     }
   }
 
@@ -57,37 +77,44 @@ class ProductProvider with ChangeNotifier {
   Stream<List<Product>> get seasonallyAvailableStream =>
       _seasonallyAvailableStreamController.stream;
   Stream<List<Product>> get nearbyUsersBoughtStream =>
-      _nearbyUsersBoughtStreamController.stream;
+      _nearbyProductsStreamController.stream;
 
   Stream<List<Product>> get categoryProductsStream =>
       _categoryProductsStreamController.stream;
 
   Future<List<Product>> fetchProducts() async {
     try {
+      // Fetch products from Firestore
       final querySnapshot = await _firestore.collection('products').get();
-      final List<Product> products =
-          querySnapshot.docs.map((doc) => Product.fromFirestore(doc)).toList();
 
-      // Add the list of products to the stream controller
+      // Map each document to a Product model
+      final List<Product> products = querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        return Product.fromFirestore(
+            doc: doc); // Make sure fromFirestore handles nulls properly
+      }).toList();
+
+      // Ensure the stream controller gets a valid non-null value
       _productsStreamController.add(products);
 
-      // Return the list of products
-      return products; // Ensure you return the list of products
+      return products; // Return the list of products
     } catch (e) {
+      // Error occurred, log it and return an empty list to avoid null issues
       print('Error fetching products: $e');
-      // Add an empty list in case of an error
+
+      // Ensure an empty list is returned on error, never null
       _productsStreamController.add([]);
-      return []; // Ensure you return an empty list to satisfy the return type
+
+      return []; // Return empty list instead of null
     }
   }
 
-
   // Update the purchase count of a product in Firestore
   Future<void> updatePurchaseCount(
-      String productId, int newPurchaseCount) async {
+      Product product, int newPurchaseCount) async {
     try {
       // Reference to the specific product document in Firestore
-      final productDoc = _firestore.collection('products').doc(productId);
+      final productDoc = _firestore.collection('products').doc(product.id);
 
       // Update the 'purchaseCount' field in the Firestore document
       await productDoc.update({
@@ -96,13 +123,13 @@ class ProductProvider with ChangeNotifier {
 
       // Optionally, you can also update the cached product
       final productIndex =
-          _products.indexWhere((product) => product.id == productId);
+          _products.indexWhere((product) => product.id == product.id);
       if (productIndex != -1) {
         _products[productIndex].purchaseCount = newPurchaseCount;
         _productsStreamController.add(_products); // Update the product stream
       }
 
-      print('Purchase count updated successfully for product: $productId');
+      print('Purchase count updated successfully for product: $product');
     } catch (e) {
       print('Error updating purchase count: $e');
     }
@@ -117,23 +144,25 @@ class ProductProvider with ChangeNotifier {
           .snapshots()
           .listen((querySnapshot) {
         final categoryProducts = querySnapshot.docs
-            .map((doc) => Product.fromFirestore(doc))
+            .map((doc) => Product.fromFirestore(doc: doc))
             .toList();
         _categoryProductsStreamController.add(categoryProducts);
       });
     } catch (e) {
       print("Error fetching products by category: $e");
       _categoryProductsStreamController.add([]);
+
     }
   }
 
-  Future<void> fetchSeasonallyAvailable() async {
+  Future<List<Product>> fetchSeasonallyAvailable() async {
     try {
       // Assuming 'products' is the collection in Firestore where your Product documents are stored
       final querySnapshot = await _firestore.collection('products').get();
 
-      final List<Product> allProducts =
-          querySnapshot.docs.map((doc) => Product.fromFirestore(doc)).toList();
+      final List<Product> allProducts = querySnapshot.docs
+          .map((doc) => Product.fromFirestore(doc: doc))
+          .toList();
 
       final currentDate = DateTime.now();
       final seasonallyAvailable = allProducts.where((product) {
@@ -146,12 +175,119 @@ class ProductProvider with ChangeNotifier {
       }).toList();
 
       _seasonallyAvailableStreamController.add(seasonallyAvailable);
+      return seasonallyAvailable; // Ensure a list is returned
     } catch (e) {
       print('Error fetching seasonally available products: $e');
       // You might want to handle the error by sending an empty list or an error signal to the stream.
       _seasonallyAvailableStreamController.add([]);
+      return []; // Return an empty list on error
     }
   }
+
+  Future<List<Product>> fetchProductsByName(String name) async {
+    try {
+      // Query Firestore for products whose name matches or partially matches the given name
+      final querySnapshot = await _firestore
+          .collection('products')
+          .where('name', isGreaterThanOrEqualTo: name)
+          .where('name',
+              isLessThan: name.substring(0, name.length - 1) +
+                  String.fromCharCode(name.codeUnitAt(name.length - 1) + 1))
+          .get();
+
+      // Convert Firestore documents to Product objects
+      final List<Product> matchingProducts = querySnapshot.docs
+          .map((doc) => Product.fromFirestore(doc: doc))
+          .toList();
+
+      return matchingProducts;
+    } catch (e) {
+      print('Error fetching products by name: $e');
+      return []; // Return an empty list if there's an error to handle it gracefully
+    }
+  }
+
+  Future<List<Product>> fetchProductsByConsumptionTime() async {
+    try {
+      // Fetch all products from Firestore
+      final querySnapshot = await _firestore.collection('products').get();
+      final List<Product> allProducts = querySnapshot.docs
+          .map((doc) => Product.fromFirestore(doc: doc))
+          .toList();
+
+      // Determine current time of day
+      final now = DateTime.now();
+      final hour = now.hour;
+      String consumptionTime;
+
+      // Classify time of day
+      if (hour >= 5 && hour < 11) {
+        consumptionTime = 'breakfast';
+      } else if (hour >= 11 && hour < 17) {
+        consumptionTime = 'lunch';
+      } else {
+        consumptionTime = 'supper';
+      }
+
+      // Filter products based on time of day
+      final filteredProducts = allProducts.where((product) {
+        return product.consumptionTime!.contains(consumptionTime);
+      }).toList();
+
+      _timeOfDayProductsStreamController.add(filteredProducts);
+      return filteredProducts; // Ensure a list is returned
+    } catch (e) {
+      print('Error fetching products by time of day: $e');
+      _timeOfDayProductsStreamController.add([]); // Send an empty list on error
+      return []; // Return an empty list on error
+    }
+  }
+
+Future<List<Product>> fetchProductsByWeather() async {
+  try {
+    // Assuming Nairobi, KE for example; replace with user's location if possible
+    const apiKey = 'YOUR_API_KEY';
+    final response = await http.get(Uri.parse(
+        'http://api.weatherapi.com/v1/current.json?key=$apiKey&q=Nairobi'));
+
+    if (response.statusCode == 200) {
+      final weatherData = jsonDecode(response.body);
+      final currentCondition = 
+          weatherData['current']?['condition']?['text']?.toLowerCase() ?? 'unknown';
+
+      // Fetch all products from Firestore
+      final querySnapshot = await _firestore.collection('products').get();
+      final List<Product> allProducts = querySnapshot.docs
+          .map((doc) => Product.fromFirestore(doc: doc))
+          .toList();
+
+      // Determine weather condition and filter products. This is a simplistic approach; you might want more specific conditions.
+      String weatherCondition = 'other'; // Default condition
+      if (currentCondition.contains('rain') || currentCondition.contains('drizzle')) {
+        weatherCondition = 'rainy';
+      } else if (currentCondition.contains('cloud') || currentCondition.contains('overcast')) {
+        weatherCondition = 'cloudy';
+      } else if (currentCondition.contains('sun') || currentCondition.contains('clear')) {
+        weatherCondition = 'sunny';
+      } 
+
+      // Filter products based on weather condition
+      final filteredProducts = allProducts.where((product) {
+        // Use null-aware check for weather in Product
+        return product.weather?.contains(weatherCondition) ?? false;
+      }).toList();
+
+      _weatherProductsStreamController.add(filteredProducts);
+      return filteredProducts; // Return the list explicitly
+    } else {
+      throw Exception('Failed to load weather data');
+    }
+  } catch (e) {
+    print('Error fetching products by weather: $e');
+    _weatherProductsStreamController.add([]); // Send an empty list on error
+    return []; // Return an empty list on error
+  }
+}
 
   // Get a single product by its ID from the cached products list
   Product? getProductById(String id) {
@@ -186,7 +322,7 @@ class ProductProvider with ChangeNotifier {
       // Check if the document exists
       if (docSnapshot.exists) {
         // Assuming you have a Product class to parse Firestore documents
-        final product = Product.fromFirestore(docSnapshot);
+        final product = Product.fromFirestore(doc: docSnapshot);
 
         // Construct the map with product details
         return {
@@ -215,7 +351,7 @@ class ProductProvider with ChangeNotifier {
   void dispose() {
     _productsStreamController.close();
     _seasonallyAvailableStreamController.close();
-    _nearbyUsersBoughtStreamController.close();
+    _nearbyProductsStreamController.close();
     _categoryProductsStreamController.close(); // Close category stream
     super.dispose();
   }

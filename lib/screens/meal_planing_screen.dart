@@ -29,23 +29,38 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   final MLService _mlService = MLService();
   Variety? selectedVariety;
   bool _isLoading = false;
-  String user = 'user_id_placeholder'; // Replace with actual user ID
+  User? user; // Replace with actual user ID
   late String selectedHealthCondition;
   List<GroceryItem> _linkedProducts = [];
   List<Meal> _weeklyMeals = [];
   List<String> recipeSuggestions = []; // List to store the recipe suggestions
-
+  Product? product;
   var quantity;
 
   @override
   void initState() {
     super.initState();
     _loadWeeklyMealPlan();
-    _recommendMeals(user);
+    _recommendMeals(user!.id!);
     _loadMealRecommendations();
+    for (var variety in product!.varieties!) {
+      _listenToDiscountedPriceStream(variety.discountedPriceStream);
+    }
   }
 
   List<String> mealRecommendations = [];
+  double? _currentDiscountedPrice;
+
+  void _listenToDiscountedPriceStream(Stream<Map<String, double?>?>? stream) {
+    if (stream != null) {
+      stream.listen((newPrice) {
+        setState(() {
+          // Extract the value for the 'variety' key
+          _currentDiscountedPrice = newPrice?['variety'];
+        });
+      });
+    }
+  }
 
   Future<void> _loadMealRecommendations() async {
     mealRecommendations = await _getSavedMealRecommendations();
@@ -64,7 +79,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
       DocumentSnapshot<Map<String, dynamic>> doc = await FirebaseFirestore
           .instance
           .collection('users')
-          .doc(user)
+          .doc(user!.id)
           .collection('mealPlans')
           .doc(weekIdentifier)
           .get();
@@ -121,7 +136,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
 
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(user)
+          .doc(user!.id)
           .collection('mealPlans')
           .doc(weekIdentifier)
           .set({'meals': mealsData});
@@ -166,10 +181,12 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
 
       if (querySnapshot.docs.isNotEmpty) {
         for (var doc in querySnapshot.docs) {
+          Product product =
+              Product.fromFirestore(doc: doc); // Use named parameter
           linkedProducts.add(GroceryItem(
-            name: doc['name'],
-            price: doc['basePrice'],
-            product: doc.id,
+            name: product.name,
+            price: product.basePrice!,
+            product: product,
           ));
         }
       }
@@ -184,7 +201,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     try {
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(user)
+          .doc(user!.id)
           .collection('groceryLists')
           .add({
         'ingredients': ingredients.split(', ').map((e) => e.trim()).toList(),
@@ -195,7 +212,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     }
   }
 
-  void _askForSubscription(product) {
+  void _askForSubscription(product, variety) {
     int selectedFrequency = 7; // Default to weekly
     int selectedDay = DateTime.now().weekday; // Default to today’s weekday
     final List<int> availableFrequencies = [
@@ -313,11 +330,13 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
                     _calculateNextDeliveryDate(selectedFrequency, selectedDay);
                 final subscription = Subscription(
                   product: product,
-                  user: user,
+                  user: user!,
                   quantity: quantity, // Adjusted quantity
                   nextDelivery: nextDeliveryDate,
                   frequency: selectedFrequency, // User-selected frequency
-                  price: product.price,
+                  variety: variety,
+                  price:
+                      product.variety!.price != null ? product.basePrice : 0.0,
                 );
                 _subscriptionService.addSubscription(subscription, context);
                 Navigator.pop(context);
@@ -352,28 +371,119 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     return nextDelivery;
   }
 
-  Future<void> _recommendMeals(String user) async {
-    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
-    final HealthConditionService healthConditionService =
-        HealthConditionService();
+Future<void> _recommendMeals(String userId) async {
+  final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+  final HealthConditionService healthConditionService = HealthConditionService();
 
-    healthConditionService.healthConditionStream
-        .listen((selectedHealthCondition) async {
-      final pastPurchases = await orderProvider.getPastPurchases(user);
+  // Check if a health condition is already selected
+  bool hasHealthCondition = await _checkHealthConditionSelected(userId);
 
-      final recommendations = await _mlService.recommendMeals(
-        pastPurchases.cast<String>(),
-        selectedHealthCondition,
-      );
-
-      // Save meal recommendations
-      await _saveMealRecommendations(recommendations);
-
-      setState(() {
-        // Trigger a UI update, if necessary
-      });
+  if (!hasHealthCondition) {
+    // Show a dialog asking if they want to select a health condition
+    bool? wantsToSelectCondition = await _askToSelectHealthCondition();
+    if (wantsToSelectCondition == true) {
+      List<String> conditions = await fetchHealthConditions(userId);
+      if (conditions.isNotEmpty) {
+        String? selectedCondition = await _showHealthConditionSelectionDialog(conditions);
+        if (selectedCondition != null) {
+          // Update the condition in the service or state management
+          healthConditionService.updateHealthCondition(selectedCondition);
+          
+          // Now proceed with recommendations using the new condition
+          _proceedWithMealRecommendations(userId, selectedCondition);
+        } else {
+          // If user cancels selection or no condition chosen, proceed without condition
+          _proceedWithMealRecommendations(userId, null);
+        }
+      } else {
+        // No conditions available, proceed without condition
+        _proceedWithMealRecommendations(userId, null);
+      }
+    } else {
+      // User doesn't want to select a condition, proceed without one
+      _proceedWithMealRecommendations(userId, null);
+    }
+  } else {
+    // Health condition already selected, proceed with recommendations
+    healthConditionService.healthConditionStream.listen((selectedHealthCondition) async {
+      _proceedWithMealRecommendations(userId, selectedHealthCondition);
     });
   }
+}
+
+Future<bool> _checkHealthConditionSelected(String userId) async {
+  return await healthConditionService.healthConditionStream.firstWhere((condition) => condition != null, orElse: () => null) != null;
+}
+
+Future<bool?> _askToSelectHealthCondition() async {
+  return await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Select a Health Condition?'),
+        content: const Text('Would you like to select a health condition for personalized meal recommendations?'),
+        actions: [
+          TextButton(
+            child: const Text('No'),
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          TextButton(
+            child: const Text('Yes'),
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<String?> _showHealthConditionSelectionDialog(List<String> conditions) async {
+  return await showDialog<String>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Select a Health Condition'),
+        content: SingleChildScrollView(
+          child: Column(
+            children: conditions.map((condition) => 
+              ListTile(
+                title: Text(condition),
+                onTap: () {
+                  Navigator.pop(context, condition);
+                },
+              )
+            ).toList(),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () {
+              Navigator.pop(context);
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
+
+void _proceedWithMealRecommendations(String userId, String? healthCondition) async {
+  final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+  final pastPurchases = await orderProvider.getPastPurchases(userId);
+
+  final recommendations = await _mlService.recommendMeals(
+    pastPurchases.cast<String>(),
+    healthCondition,
+  );
+
+  // Save meal recommendations
+  await _saveMealRecommendations(recommendations);
+
+  setState(() {
+    // Trigger a UI update
+  });
+}
 
   // Helper method to save meal recommendations
   Future<void> _saveMealRecommendations(List<String> recommendations) async {
@@ -394,7 +504,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     // Fetch the user's orders from the last two weeks
     final ordersSnapshot = await FirebaseFirestore.instance
         .collection('users')
-        .doc(user)
+        .doc(user!.id)
         .collection('orders')
         .where('orderDate', isGreaterThan: twoWeeksAgo)
         .get();
@@ -425,7 +535,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
                 onTap: () {
                   Navigator.of(context).pop(); // Close the dialog
                   _recommendMeals(
-                      user); // Your existing method for recommended meals
+                      user!.id!); // Your existing method for recommended meals
                 },
               ),
               ListTile(
@@ -692,7 +802,8 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   @override
   Widget build(BuildContext context) {
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
-
+    GroceryItem? groceryItem;
+    String? notes;
     // Display loading indicator if necessary
     if (_isLoading) {
       return Scaffold(
@@ -706,156 +817,372 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Meal Planning & Grocery List'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: _createOrEditMealPlan,
-            tooltip: 'Create/Edit Meal Plan',
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Weekly Meal Plan Table
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Day')),
-                    DataColumn(label: Text('Breakfast')),
-                    DataColumn(label: Text('Lunch')),
-                    DataColumn(label: Text('Dinner')),
-                    DataColumn(label: Text('Actions')),
-                  ],
-                  rows: List<DataRow>.generate(_weeklyMeals.length, (index) {
-                    final meal = _weeklyMeals[index];
-                    return DataRow(cells: [
-                      DataCell(Text(meal.day)),
-                      DataCell(Text(meal.breakfast)),
-                      DataCell(Text(meal.lunch)),
-                      DataCell(Text(meal.dinner)),
-                      DataCell(
-                        IconButton(
-                          icon: const Icon(Icons.edit),
-                          onPressed: () => _editMeal(index, meal),
+        appBar: AppBar(
+          title: const Text('Meal Planning & Grocery List'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: _createOrEditMealPlan,
+              tooltip: 'Create/Edit Meal Plan',
+            ),
+          ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              // Weekly Meal Plan Table
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text('Day')),
+                      DataColumn(label: Text('Breakfast')),
+                      DataColumn(label: Text('Lunch')),
+                      DataColumn(label: Text('Dinner')),
+                      DataColumn(label: Text('Actions')),
+                    ],
+                    rows: List<DataRow>.generate(_weeklyMeals.length, (index) {
+                      final meal = _weeklyMeals[index];
+                      return DataRow(cells: [
+                        DataCell(Text(meal.day)),
+                        DataCell(Text(meal.breakfast)),
+                        DataCell(Text(meal.lunch)),
+                        DataCell(Text(meal.dinner)),
+                        DataCell(
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => _editMeal(index, meal),
+                          ),
                         ),
-                      ),
-                    ]);
-                  }),
+                      ]);
+                    }),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            // Grocery List Section
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Grocery List:',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: _linkedProducts.isNotEmpty
-                        ? ListView.builder(
-                            itemCount: _linkedProducts.length,
-                            itemBuilder: (context, index) {
-                              final product = _linkedProducts[index];
-                              return ListTile(
-                                title: Text(product.name),
-                                subtitle: Text(
-                                    'Price: \$${product.price.toStringAsFixed(2)}'),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
+              const SizedBox(height: 20),
+              // Grocery List Section
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Grocery List:',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: _linkedProducts.isNotEmpty
+                          ? ListView.builder(
+                              itemCount: _linkedProducts.length,
+                              itemBuilder: (context, index) {
+                                final product = _linkedProducts[index];
+                                return Column(
                                   children: [
-                                    // Decrement Button
-                                    IconButton(
-                                      icon: const Icon(Icons.remove,
-                                          color: Colors.white),
-                                      onPressed: () {
-                                        setState(() {
-                                          if (quantity > 1) {
-                                            quantity--; // Decrease quantity
-                                          }
-                                        });
-                                      },
-                                    ),
-                                    // Quantity Display
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8.0),
-                                      child: Text(
-                                        '$quantity',
-                                        style: const TextStyle(
-                                            color: Colors.white, fontSize: 20),
-                                      ),
-                                    ),
-                                    // Increment Button
-                                    IconButton(
-                                      icon: const Icon(Icons.add,
-                                          color: Colors.white),
-                                      onPressed: () {
-                                        setState(() {
-                                          quantity++; // Increase quantity
-                                        });
-                                      },
-                                    ),
-                                    // Add to Cart Button
-                                    IconButton(
-                                      icon: const Icon(Icons.add_shopping_cart,
-                                          color: Colors.white, size: 40),
-                                      onPressed: () {
-                                        // Call the addItem function with the selected quantity
-                                        cartProvider.addItem(
-                                          product as Product,
-                                          user as User,
-                                          selectedVariety!, // Assuming selectedVariety is defined
-                                          quantity,
+                                    ValueListenableBuilder(
+                                      valueListenable:
+                                          ValueNotifier(selectedVariety),
+                                      builder: (context,
+                                          Variety? selectedVariety, _) {
+                                        return ExpansionTile(
+                                          leading: selectedVariety?.imageUrl !=
+                                                  null
+                                              ? Image.network(
+                                                  selectedVariety!.imageUrl!,
+                                                  width: 40,
+                                                  height: 40,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context, error,
+                                                          stackTrace) =>
+                                                      const Icon(
+                                                          Icons.error_outline,
+                                                          size: 40),
+                                                )
+                                              : (groceryItem!
+                                                          .product.pictureUrl !=
+                                                      null
+                                                  ? Image.network(
+                                                      groceryItem
+                                                          .product.pictureUrl!,
+                                                      width: 40,
+                                                      height: 40,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (context,
+                                                              error,
+                                                              stackTrace) =>
+                                                          const Icon(
+                                                              Icons
+                                                                  .error_outline,
+                                                              size: 40),
+                                                    )
+                                                  : null),
+                                          title: Text(product.name),
+                                          subtitle: Text(
+                                          'Price: \$${selectedVariety?.discountedPriceStream != null ? 
+                                          selectedVariety!.discountedPriceStream!.firstWhere((value) => value != null, orElse: () => null)?.then((map) => 
+                                            map?.values.first?.toStringAsFixed(2) ?? groceryItem!.product.basePrice!.toStringAsFixed(2)
+                                          ) : 
+                                          groceryItem!.product.basePrice!.toStringAsFixed(2)}' ),
+                                          children: [
+                                            if (groceryItem!
+                                                .product.varieties!.isNotEmpty)
+                                              SizedBox(
+                                                height:
+                                                    200, // Adjust height as needed
+                                                child: ListView.builder(
+                                                  scrollDirection:
+                                                      Axis.horizontal,
+                                                  itemCount: groceryItem.product
+                                                      .varieties!.length,
+                                                  itemBuilder:
+                                                      (context, varietyIndex) {
+                                                    var variety = groceryItem
+                                                            .product.varieties![
+                                                        varietyIndex];
+                                                    return Padding(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                              8.0),
+                                                      child: GestureDetector(
+                                                        onTap: () {
+                                                          setState(() {
+                                                            this.selectedVariety =
+                                                                variety;
+                                                          });
+                                                        },
+                                                        child: Container(
+                                                          width: 200,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            border: Border.all(
+                                                                color: this.selectedVariety ==
+                                                                        variety
+                                                                    ? Colors
+                                                                        .green
+                                                                    : Colors
+                                                                        .grey),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        8),
+                                                          ),
+                                                          child: Column(
+                                                            mainAxisSize:
+                                                                MainAxisSize
+                                                                    .min,
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              variety.imageUrl !=
+                                                                      null
+                                                                  ? ClipRRect(
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              8.0),
+                                                                      child: Image
+                                                                          .network(
+                                                                        variety
+                                                                            .imageUrl!,
+                                                                        width:
+                                                                            100,
+                                                                        height:
+                                                                            100,
+                                                                        fit: BoxFit
+                                                                            .cover,
+                                                                        errorBuilder: (context, error, stackTrace) => const Icon(
+                                                                            Icons
+                                                                                .error_outline,
+                                                                            size:
+                                                                                40),
+                                                                      ),
+                                                                    )
+                                                                  : Container(),
+                                                              Padding(
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .all(
+                                                                        8.0),
+                                                                child: Column(
+                                                                  crossAxisAlignment:
+                                                                      CrossAxisAlignment
+                                                                          .start,
+                                                                  children: [
+                                                                    Text(variety
+                                                                        .name!),
+                                                                    Text.rich(
+                                                                      TextSpan(
+                                                                        children: [
+                                                                          if (variety.discountedPriceStream != null &&
+                                                                              variety.discountedPriceStream! != 0.0)
+                                                                            TextSpan(
+                                                                              text: ' \$${variety.price?.toStringAsFixed(2) ?? 'N/A'}',
+                                                                              style: const TextStyle(
+                                                                                decoration: TextDecoration.lineThrough,
+                                                                                color: Colors.grey,
+                                                                              ),
+                                                                            ),
+                                                                          TextSpan(
+                                                                            text: variety.discountedPriceStream != null && variety.discountedPriceStream! != 0.0
+                                                                                ? ' \$${variety.discountedPriceStream?.toStringAsFixed(2) ?? 'N/A'}'
+                                                                                : variety.price != null
+                                                                                    ? ' \$${variety.price?.toStringAsFixed(2)}'
+                                                                                    : ' Price not available',
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.all(8.0),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  // Quantity controls
+                                                  Row(
+                                                    children: [
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                            Icons.remove,
+                                                            color:
+                                                                Colors.white),
+                                                        onPressed: () {
+                                                          setState(() {
+                                                            if (quantity > 1) {
+                                                              quantity--;
+                                                            }
+                                                          });
+                                                        },
+                                                      ),
+                                                      Text(
+                                                        '$quantity',
+                                                        style: const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 20),
+                                                      ),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                            Icons.add,
+                                                            color:
+                                                                Colors.white),
+                                                        onPressed: () {
+                                                          setState(() {
+                                                            quantity++;
+                                                          });
+                                                        },
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  // Add to Cart button
+
+                                                  ElevatedButton(
+                                                    onPressed: () {
+                                                      if (selectedVariety !=
+                                                          null) {
+                                                        cartProvider.addItem(
+                                                          groceryItem
+                                                              .product, // assuming product context
+                                                          user!, // assuming you have access to user data
+                                                          selectedVariety,
+                                                          quantity,
+
+                                                          '', // or whatever notes you want to pass
+                                                        );
+                                                        // Optionally, you might want to show a snackbar or some feedback
+                                                      } else {
+                                                        // Show an error or info message if no variety is selected
+                                                        ScaffoldMessenger.of(
+                                                                context)
+                                                            .showSnackBar(
+                                                          const SnackBar(
+                                                              content: Text(
+                                                                  'Please select a variety')),
+                                                        );
+                                                      }
+                                                    },
+                                                    child: const Text(
+                                                        'Add to Cart'),
+                                                  ),
+                                                  // Ask for Subscription button
+                                                  ElevatedButton(
+                                                    onPressed: () {
+                                                      if (selectedVariety !=
+                                                          null) {
+                                                        _askForSubscription(
+                                                          groceryItem!
+                                                              .product, // assuming product context
+                                                          selectedVariety,
+                                                        );
+                                                      } else {
+                                                        // Show an error or info message if no variety is selected
+                                                        ScaffoldMessenger.of(
+                                                                context)
+                                                            .showSnackBar(
+                                                          const SnackBar(
+                                                              content: Text(
+                                                                  'Please select a variety')),
+                                                        );
+                                                      }
+                                                    },
+                                                    child:
+                                                        const Text('Subscribe'),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                         );
                                       },
                                     ),
                                   ],
-                                ),
-                                onTap: () {
-                                  // Optionally, implement more details or actions
-                                  _askForSubscription(product as String);
-                                },
-                              );
-                            },
-                          )
-                        : const Text('No grocery items generated.'),
-                  ),
-                ],
+                                );
+                              },
+                            )
+                          : const Text('No grocery items generated.'),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            // Additional Buttons or Information
-            ElevatedButton(
-              onPressed: _suggestRecipesBasedOnPantry,
-              child: const Text('Suggest Recipes from Pantry'),
-            ),
-            // Additional Buttons or Information
-            ElevatedButton(
-              onPressed: _suggestRecipesBasedOnGroceryList,
-              child: const Text('Generate Recipes'),
-            ),
-            const SizedBox(height: 16),
-            // Display Recommendations if any
-            if (mealRecommendations.isNotEmpty)
-              Text('Recommended Meals: ${mealRecommendations.join(', ')}'),
-            if (recipeSuggestions.isNotEmpty)
-              Text('Recipe Suggestions: $recipeSuggestions'),
-          ],
-        ),
-      ),
-    );
+              const SizedBox(height: 20),
+              // Additional Buttons or Information
+              ElevatedButton(
+                onPressed: _suggestRecipesBasedOnPantry,
+                child: const Text('Suggest Recipes from Pantry'),
+              ),
+              // Additional Buttons or Information
+              ElevatedButton(
+                onPressed: _suggestRecipesBasedOnGroceryList,
+                child: const Text('Generate Recipes'),
+              ),
+              const SizedBox(height: 16),
+              // Display Recommendations if any
+              if (mealRecommendations.isNotEmpty)
+                Text('Recommended Meals: ${mealRecommendations.join(', ')}'),
+              if (recipeSuggestions.isNotEmpty)
+                Text('Recipe Suggestions: $recipeSuggestions'),
+            ],
+          ),
+        ));
   }
+}
+
+extension on Stream<Map<String, double?>?>? {
+  toStringAsFixed(int i) {}
 }
 
 // models/meal.dart
@@ -895,7 +1222,7 @@ class Meal {
 class GroceryItem {
   String name;
   double price;
-  String product;
+  Product product;
 
   GroceryItem({
     required this.name,
