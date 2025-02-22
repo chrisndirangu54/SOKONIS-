@@ -312,7 +312,7 @@ floatingActionButton: _selectedItems.isEmpty
               // Update UI or trigger confirmation dialog based on items
               for (var item in items) {
                 if (item['status'] == 'pending_attendant') {
-                  pendingDeliveriesScreen._showAttendantConfirmationDialog(context, item, cart);
+                  pendingDeliveriesScreen.showAttendantConfirmationDialog(context, item, cart);
                 }
               }
             });

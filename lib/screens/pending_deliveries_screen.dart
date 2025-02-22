@@ -24,7 +24,7 @@ class PendingDeliveriesScreen extends StatelessWidget {
   }
 
   // Helper method to show attendant confirmation dialog
-  Future<void> _showAttendantConfirmationDialog(
+  Future<void> showAttendantConfirmationDialog(
       BuildContext context, Map<String, dynamic> item, CartProvider cart) async {
     final NotificationService notificationService = NotificationService();
     showDialog(
@@ -150,7 +150,7 @@ class PendingDeliveriesScreen extends StatelessWidget {
                         ElevatedButton(
                           onPressed: () async {
                             for (var item in order.items.where((i) => i.notes?.isNotEmpty == true)) {
-                              await _showAttendantConfirmationDialog(context, {
+                              await showAttendantConfirmationDialog(context, {
                                 'productId': item.product,
                                 'quantity': item.quantity,
                                 'notes': item.notes,
