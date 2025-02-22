@@ -32,7 +32,9 @@ class RegisterScreenState extends State<RegisterScreen>
 
   late AnimationController _controller;
   late StreamSubscription _linkSubscription;
-
+  late AnimationController _logoController;
+  late AnimationController _buttonController;
+  late AnimationController _fabController;
   @override
   void initState() {
     super.initState();
@@ -41,7 +43,21 @@ class RegisterScreenState extends State<RegisterScreen>
       duration: const Duration(seconds: 1),
     );
     _controller.repeat(reverse: true);
+    _logoController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    )..repeat(reverse: true);
 
+    _buttonController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+
+    _fabController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+  
     // Listen for incoming links
     _linkSubscription = linkStream.listen((String? link) {
       if (link != null) {
@@ -52,18 +68,30 @@ class RegisterScreenState extends State<RegisterScreen>
     });
   }
 
-  void _parseReferralCode(String link) {
+void _parseReferralCode(String link) {
+  try {
     Uri uri = Uri.parse(link);
     setState(() {
-      _referralCode = uri.queryParameters['ref']; // Extract referral code
+      _referralCode = uri.queryParameters['ref'];
+      if (_referralCode != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Referral code applied: $_referralCode')),
+        );
+      }
     });
-    print('Referral Code: $_referralCode'); // For debugging
+  } catch (e) {
+    print('Error parsing referral link: $e');
   }
+}
 
   @override
   void dispose() {
-    _linkSubscription.cancel(); // Cancel the subscription
+    _linkSubscription.cancel();
     _controller.dispose();
+    _fabController.dispose();
+    _logoController.dispose();
+    _buttonController.dispose();
+
     super.dispose();
   }
 
@@ -110,10 +138,10 @@ class RegisterScreenState extends State<RegisterScreen>
                     ],
                   ),
                   child: AnimatedBuilder(
-                    animation: _controller,
+                    animation: _logoController,
                     builder: (context, child) {
                       final tiltValue = 0.02 *
-                          Curves.elasticInOut.transform(_controller.value);
+                          Curves.elasticInOut.transform(_logoController.value);
                       return Transform(
                         transform: Matrix4.identity()
                           ..setEntry(3, 2, 0.002) // Perspective for 3D depth
@@ -159,7 +187,7 @@ class RegisterScreenState extends State<RegisterScreen>
                           width: 300, // Set the width of the 3D model
                           child: ModelViewer(
                             src:
-                                'assets/3d/basket.gltf', // Path to your 3D model (GLTF or GLB format)
+                                'assets/3d/apple.glb', // Path to your 3D model (GLTF or GLB format)
                             alt: "A 3D model of a basket",
                             autoRotate: _isLoading, // Auto-rotate when loading
                             cameraControls:
@@ -330,13 +358,13 @@ class RegisterScreenState extends State<RegisterScreen>
                             _handleRegistration(); // Trigger registration after release
                           }),
                           child: AnimatedBuilder(
-                            animation: _controller,
+                            animation: _buttonController,
                             builder: (context, child) {
                               final tiltValue = 0.03 *
-                                  _controller
+                                  _buttonController
                                       .value; // Slight tilt for 3D effect
                               final scaleValue = 1 -
-                                  _controller.value *
+                                  _buttonController.value *
                                       0.1; // Scale down when pressed
 
                               return Transform(
@@ -419,15 +447,15 @@ class RegisterScreenState extends State<RegisterScreen>
         ),
       ),
       floatingActionButton: GestureDetector(
-        onTapDown: (_) => _controller.forward(), // Start scaling down
-        onTapUp: (_) => _controller.reverse(), // Scale back up
+        onTapDown: (_) => _fabController.forward(), // Start scaling down
+        onTapUp: (_) => _fabController.reverse(), // Scale back up
         onTapCancel: () =>
             _controller.reverse(), // Scale back up if tap canceled
         child: AnimatedBuilder(
-          animation: _controller,
+          animation: _fabController,
           builder: (context, child) {
             // Scale the button based on the controller value
-            final scale = 1 - (_controller.value * 0.1); // Scale down by 10%
+            final scale = 1 - (_fabController.value * 0.1); // Scale down by 10%
 
             return Transform(
               transform: Matrix4.identity()

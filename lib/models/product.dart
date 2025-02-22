@@ -2,6 +2,114 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:grocerry/models/user.dart';
 import 'package:grocerry/services/groupbuy_service.dart';
+import 'package:flutter/material.dart';
+
+class ProductPriceFloating extends StatelessWidget {
+  final String userId;
+  final String userLocation; // The location passed by the user (city/region)
+
+  const ProductPriceFloating({
+    super.key,
+    required this.userId,
+    required this.userLocation,
+  });
+
+  Future<void> cancelGroupBuy(String groupId) async {
+    final groupRef = FirebaseFirestore.instance.collection('GroupBuy').doc(groupId);
+    final groupDoc = await groupRef.get();
+
+    if (!groupDoc.exists) {
+      return;
+    }
+
+    // Update the user record to remove this group buy
+    final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
+    final userDoc = await userRef.get();
+    final activeGroupBuys = List<String>.from(userDoc.data()?['activeGroupBuys'] ?? []);
+    activeGroupBuys.remove(groupId);
+    await userRef.update({'activeGroupBuys': activeGroupBuys});
+
+    // Optionally, delete the group buy from Firestore
+    await groupRef.delete();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      bottom: 20,
+      right: 20,
+      child: Material(
+        color: Colors.transparent,
+        child: StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('GroupBuy')
+              .where('location', isEqualTo: userLocation) // Query based on the user's location
+              .where('active', isEqualTo: true) // Check if there's an active group buy
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const CircularProgressIndicator();
+            }
+
+            if (snapshot.hasError) {
+              return Text('Error: ${snapshot.error}');
+            }
+
+            if (snapshot.data == null || snapshot.data!.docs.isEmpty) {
+              return const SizedBox(); // No active group buy, do not show the widget
+            }
+
+            // Get the first group buy document from the query
+            final groupBuyDoc = snapshot.data!.docs.first;
+            final discountEndTime = (groupBuyDoc['endTime'] as Timestamp).toDate();
+            final timeLeft = discountEndTime.difference(DateTime.now());
+
+            if (timeLeft.isNegative) {
+              return Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: const Text(
+                  'Group Buy Ended',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              );
+            }
+
+            final timeLeftFormatted = "${timeLeft.inMinutes}m ${timeLeft.inSeconds % 60}s";
+
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Time Left: $timeLeftFormatted',
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  const SizedBox(height: 5),
+                  ElevatedButton(
+                    onPressed: () {
+                      cancelGroupBuy(groupBuyDoc.id); // Cancel the group buy
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    child: const Text('Cancel Group Buy'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
 
 class Product {
   num? rating;
@@ -48,7 +156,7 @@ class Product {
   int? groupSize = 0;
   int? currentGroupMembers = 0;
   double? minPrice = 0.0; // Buying price
-  Review? reviews;
+  List<Review>? reviews;
   late int userViews;
   late int userTimeSpent;
   List<String>? weather;
@@ -359,7 +467,7 @@ class Product {
   }
 
   static Future<List<Product>> fromJson(Map<String, dynamic> data) async {
-    if (data == null || data.isEmpty) {
+    if (data.isEmpty) {
       return [];
     }
 

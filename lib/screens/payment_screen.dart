@@ -10,7 +10,7 @@ import 'package:grocerry/providers/user_provider.dart';
 class PaymentScreen extends StatefulWidget {
   final Subscription subscription;
 
-  PaymentScreen({required this.subscription});
+  const PaymentScreen({super.key, required this.subscription});
 
   @override
   PaymentScreenState createState() => PaymentScreenState();
@@ -29,7 +29,7 @@ class PaymentScreenState extends State<PaymentScreen> {
   void initState() {
     super.initState();
     // Initialize origin or fetch it from somewhere appropriate
-    origin = LatLng(0, 0); // Replace with actual origin initialization
+    origin = const LatLng(0, 0); // Replace with actual origin initialization
     isActive = false; // Initialize isActive appropriately
   }
 
@@ -251,7 +251,7 @@ class CouponList extends StatelessWidget {
   final List<Map<String, dynamic>> coupons;
   final Function(String) onCouponApplied;
 
-  const CouponList({required this.coupons, required this.onCouponApplied});
+  const CouponList({super.key, required this.coupons, required this.onCouponApplied});
 
   @override
   Widget build(BuildContext context) {

@@ -48,7 +48,7 @@ class AddReviewScreenState extends State<AddReviewScreen> {
         String? userName = (user.name ?? 'Anonymous');
 
         // Censor the user's name
-        final String censoredName = _censorName(userName!);
+        final String censoredName = _censorName(userName);
 
         // Prepare review data
         final reviewData = {

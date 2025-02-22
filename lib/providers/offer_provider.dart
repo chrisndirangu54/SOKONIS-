@@ -37,7 +37,7 @@ class OfferProvider with ChangeNotifier {
         (snapshot) {
       _offers = snapshot.docs
           .map((doc) =>
-              Offer.fromFirestore(doc.data() as Map<String, dynamic>, doc.id))
+              Offer.fromFirestore(doc.data(), doc.id))
           .toList();
       _offerStreamController.add(_offers);
       notifyListeners();

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
+import 'package:grocerry/models/user.dart';
+import 'package:grocerry/screens/group_buy_page.dart';
 import 'package:latlong2/latlong.dart' as latLng;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:grocerry/models/group_buy_model.dart';
@@ -219,88 +221,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
 
-Widget buildGroupBuyAccessWidget(
-    BuildContext context,
-    GroupBuyService groupBuyService,
-    dynamic user,
-    dynamic userLocation,
-) {
-  return Card(
-    elevation: 4,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-    child: Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Group Buy Access',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          StreamBuilder<List<GroupBuy>>(
-            stream: groupBuyService.fetchActiveGroupBuys(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const CircularProgressIndicator();
-              }
-              
-              if (snapshot.hasError) {
-                return const Text(
-                  'Error loading group buys',
-                  style: TextStyle(fontSize: 16, color: Colors.red),
-                );
-              }
+  Widget buildGroupBuyAccessWidget(BuildContext context,
+      GroupBuyService groupBuyService, User user, latLng.LatLng userLocation) {
+    return StreamBuilder<List<GroupBuy>>(
+      stream: groupBuyService.fetchActiveGroupBuys(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const Text(
-                  'No active group buys available at this time.',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                );
-              }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('No active group buys available.'));
+        }
 
-              final groupBuys = snapshot.data!;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Available Group Buys:',
-                    style: TextStyle(fontSize: 16, color: Colors.green),
-                  ),
-                  const SizedBox(height: 10),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: groupBuys.length,
-                    itemBuilder: (context, index) {
-                      final groupBuy = groupBuys[index];
-                      return ListTile(
-                        title: Text(groupBuy.id),
-                        subtitle: Text(
-                          'Ends: ${groupBuy.endTime.toString()}',
-                        ),
-                        trailing: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pushNamed(
-                              context,
-                              '/group-buy',
-                              arguments: groupBuy,
-                            );
-                          },
-                          child: const Text('Join'),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
+        final activeGroupBuys = snapshot.data!;
+
+        return ListView.builder(
+          itemCount: activeGroupBuys.length,
+          itemBuilder: (context, index) {
+            final groupBuy = activeGroupBuys[index];
+            return _buildGroupBuyCard(
+                context, groupBuy, groupBuyService, user, userLocation);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildGroupBuyCard(BuildContext context, GroupBuy groupBuy,
+      GroupBuyService groupBuyService, User user, latLng.LatLng userLocation) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            Text(
+              'Host: ${groupBuy.hostId}',
+              style: const TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Start Time: ${groupBuy.startTime}',
+              style: const TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'End Time: ${groupBuy.endTime}',
+              style: const TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                _navigateToGroupBuyPage(
+                    context, groupBuy, groupBuyService, user, userLocation);
+              },
+              child: const Text('View Group Buy'),
+            ),
+          ],
+        ),
       ),
-    ));
-  
-}
+    );
+  }
+
+  void _navigateToGroupBuyPage(BuildContext context, GroupBuy groupBuy,
+      GroupBuyService groupBuyService, User user, latLng.LatLng userLocation) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => GroupBuyPage(
+          groupBuyService: groupBuyService,
+          user: user,
+          userLocation: gmaps.LatLng(userLocation.latitude, userLocation.longitude),
+          groupBuyId: groupBuy
+              .id, // Assuming you need this to fetch group details on the page
+        ),
+      ),
+    );
+  }
 
   Widget _buildProfileHeader(BuildContext context, UserProvider userProvider) {
     return Card(

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:grocerry/models/cart_item.dart';
 
 import 'package:grocerry/models/product.dart';
 
 import 'package:grocerry/providers/user_provider.dart';
+import 'package:grocerry/screens/pending_deliveries_screen.dart';
 
 import 'package:provider/provider.dart';
 
@@ -30,7 +32,7 @@ class _CartScreenState extends State<CartScreen> {
 
   late double productDiscounts;
   final Set<String> _selectedItems = {};
-
+static const PendingDeliveriesScreen pendingDeliveriesScreen = PendingDeliveriesScreen();
   late String _couponCode;
 
   void calculateDiscountsAndUpdateUI(BuildContext context) {
@@ -74,7 +76,7 @@ class _CartScreenState extends State<CartScreen> {
     final cart = Provider.of<CartProvider>(context);
     final userProvider = Provider.of<UserProvider>(context);
     final user = userProvider.currentUser;
-
+    final CartItem cartItem = cart.items.values.toList()[0];
     // Calculate total amount for selected items
     final selectedTotalAmount = cart.items.values
         .where((item) => _selectedItems.contains(item.product.id))
@@ -300,29 +302,28 @@ class _CartScreenState extends State<CartScreen> {
                 ),
         ),
       ),
-    floatingActionButton: _selectedItems.isEmpty
-        ? null
-        : FloatingActionButton.extended(
-            onPressed: () {
-              if (cart.items.any((item) => item.notes != null && item.notes!.isNotEmpty)) {
-                cart.sendOrderForConfirmation(context, _selectedItems, (List<Map<String, dynamic>> confirmedItems) {
-                  setState(() {
-                    // Update UI based on confirmation status
-                    for (var item in confirmedItems) {
-                      cart.handleAttendantDecision(item['productId'], item['status']);
-                    }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Items sent for confirmation')),
-                  );
-                });
-              } else {
-                cart.processSelectedItemsCheckout(context, _selectedItems);
+// In CartScreen's build method
+floatingActionButton: _selectedItems.isEmpty
+    ? null
+    : FloatingActionButton.extended(
+        onPressed: () {
+          cart.sendOrderForConfirmation(context, _selectedItems, (List<Map<String, dynamic>> items) {
+            setState(() {
+              // Update UI or trigger confirmation dialog based on items
+              for (var item in items) {
+                if (item['status'] == 'pending_attendant') {
+                  pendingDeliveriesScreen._showAttendantConfirmationDialog(context, item, cart);
+                }
               }
-            },
-            label: const Text('Checkout'),
-            icon: const Icon(Icons.payment),
-          ),
-  );
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Order prepared for confirmation')),
+            );
+          });
+        },
+        label: const Text('Checkout'),
+        icon: const Icon(Icons.payment),
+      ),
+);
 }
 }

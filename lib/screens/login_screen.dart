@@ -72,17 +72,21 @@ class LoginScreenState extends State<LoginScreen>
     );
   }
 
-  void _parseReferralCode(String link) {
-    try {
-      Uri uri = Uri.parse(link);
-      setState(() {
-        _referralCode = uri.queryParameters['ref'];
-      });
-      print('Referral Code: $_referralCode');
-    } catch (e) {
-      print('Error parsing referral link: $e');
-    }
+void _parseReferralCode(String link) {
+  try {
+    Uri uri = Uri.parse(link);
+    setState(() {
+      _referralCode = uri.queryParameters['ref'];
+      if (_referralCode != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Referral code applied: $_referralCode')),
+        );
+      }
+    });
+  } catch (e) {
+    print('Error parsing referral link: $e');
   }
+}
 
   @override
   void dispose() {

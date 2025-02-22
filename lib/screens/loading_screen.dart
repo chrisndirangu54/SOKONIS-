@@ -4,7 +4,7 @@ import 'package:sensors_plus/sensors_plus.dart'; // Correct package for gyroscop
 import 'package:grocerry/screens/home_screen.dart'; // Replace with your actual HomeScreen import
 
 class LoadingScreen extends StatefulWidget {
-  const LoadingScreen({Key? key}) : super(key: key);
+  const LoadingScreen({super.key});
 
   @override
   LoadingScreenState createState() => LoadingScreenState();
@@ -183,7 +183,7 @@ class BorderGradientPainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = pulseWidth + pulseWidth * animation.value * 0.5 // Pulsating effect
-      ..shader = LinearGradient(
+      ..shader = const LinearGradient(
         colors: [Colors.blue, Colors.purple],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
@@ -191,7 +191,7 @@ class BorderGradientPainter extends CustomPainter {
 
     final rect = Rect.fromLTRB(0, 0, size.width, size.height);
     canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, Radius.circular(30.0)),
+      RRect.fromRectAndRadius(rect, const Radius.circular(30.0)),
       paint,
     );
   }

@@ -121,6 +121,8 @@ class OrderItem {
   final bool isReviewed;
   final DateTime date;
 
+  String? notes;
+
   OrderItem({
     required this.user,
     required this.product,

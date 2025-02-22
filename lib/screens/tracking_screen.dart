@@ -11,7 +11,6 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:flutter_sound/public/flutter_sound_recorder.dart';
 import 'package:grocerry/providers/user_provider.dart';
 import 'package:grocerry/services/rider_location_service.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:path_provider/path_provider.dart';
 
 
@@ -38,7 +37,7 @@ class TrackingScreenState extends State<TrackingScreen> {
   StreamSubscription<LatLng>? _locationSubscription;
   LatLng? _currentDeviceLocation;
   LatLng? _userSelectedLocation;
-  bool _isLocationSelectedByUser = false;
+  final bool _isLocationSelectedByUser = false;
   late LatLng pinLocation;
   FlutterSoundRecorder? _recorder;
   bool _isRecording = false;

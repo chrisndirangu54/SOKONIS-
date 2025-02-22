@@ -79,6 +79,8 @@ class HomeScreenState extends State<HomeScreen> {
   List<String> searchSuggestions = [];
   List<Product> seasonallyAvailable = [];
   String? selectedCategory;
+    List<String> subCategories = [];
+
   User? user;
   String? _healthBenefits;
   Product? _selectedHealthBenefitsProduct;
@@ -119,9 +121,10 @@ class HomeScreenState extends State<HomeScreen> {
   Offer? offer;
   Variety? selectedVariety;
 // Initialize in your state class
-  final _searchDebouncer = _Debouncer();
   int _currentHintIndex = 0;
   Timer? _hintTimer;
+  
+  static var _searchDebouncer;
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -159,14 +162,12 @@ class HomeScreenState extends State<HomeScreen> {
       );
 
       // Check if product has varieties before iterating
-      if (widget.product!.varieties != null) {
-        for (var variety in widget.product!.varieties!) {
-          if (variety.discountedPriceStream != null) {
-            _listenToDiscountedPriceStream2(variety.discountedPriceStream!);
-          }
+      for (var variety in widget.product!.varieties) {
+        if (variety.discountedPriceStream != null) {
+          _listenToDiscountedPriceStream2(variety.discountedPriceStream!);
         }
       }
-    } else {
+        } else {
       print("Product is null in HomeScreen initState");
     }
 
@@ -239,7 +240,7 @@ class HomeScreenState extends State<HomeScreen> {
 
     for (Product product in combinedPrediction) {
       final userAnalytics =
-          await _userAnalyticsService.getUserProductAnalytics(user!.id!, product.id!);
+          await _userAnalyticsService.getUserProductAnalytics(user!.id, product.id);
       product.userViews = userAnalytics['userViews'] ?? 0;
       product.userClicks = userAnalytics['userClicks'] ?? 0;
       product.userTimeSpent = userAnalytics['userFavorites'] ?? 0;
@@ -251,9 +252,9 @@ class HomeScreenState extends State<HomeScreen> {
       if (b.userClicks != a.userClicks) {
         return b.userClicks.compareTo(a.userClicks);
       } else if (b.userTimeSpent != a.userTimeSpent) {
-        return b.userTimeSpent!.compareTo(a.userTimeSpent as num);
+        return b.userTimeSpent.compareTo(a.userTimeSpent as num);
       } else {
-        return b.userViews!.compareTo(a.userViews as num);
+        return b.userViews.compareTo(a.userViews as num);
       }
     });
 
@@ -262,21 +263,21 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget buildLists(BuildContext context) {
-      Map<String, List<Product>> categoryProducts = groupBy(products, (Product p) => p.category!);  
+      Map<String, List<Product>> categoryProducts = groupBy(products, (Product p) => p.category);  
 
     return selectedCategory == null
-        ? _buildCategorySelector(categoryProducts!)
-        : _buildProductGrid(selectedCategory, categoryProducts!);
+        ? _buildCategorySelector(categoryProducts)
+        : _buildProductGrid(selectedCategory, categoryProducts);
   }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) {
-      return 'Good morning ${user!.name!}';
+      return 'Good morning ${user!.name}';
     } else if (hour < 17) {
-      return 'Good afternoon ${user!.name!}';
+      return 'Good afternoon ${user!.name}';
     } else {
-      return 'Good evening ${user!.name!}';
+      return 'Good evening ${user!.name}';
     }
   }
 
@@ -315,7 +316,7 @@ class HomeScreenState extends State<HomeScreen> {
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'view',
       'productId': product!.id,
-      'userId': Provider.of<UserProvider>(context, listen: false).user!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
       'timestamp': DateTime.now(),
     });
   }
@@ -327,7 +328,7 @@ class HomeScreenState extends State<HomeScreen> {
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'time_spent',
       'productId': product!.id,
-      'userId': Provider.of<UserProvider>(context, listen: false).user!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
       'timeSpent': timeSpent,
       'timestamp': DateTime.now(),
     });
@@ -337,7 +338,7 @@ class HomeScreenState extends State<HomeScreen> {
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'click',
       'productId': product!.id,
-      'userId': Provider.of<UserProvider>(context, listen: false).user!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
       'timestamp': DateTime.now(),
     });
   }
@@ -380,11 +381,13 @@ class HomeScreenState extends State<HomeScreen> {
       List<Product> predictedProducts = await predictProducts(
         recentlyBought,
         products,
+
         nearbyUsersBought,
         [
           ...seasonallyAvailable,
           ...consumptionTimeProducts,
-          ...weatherProducts
+          ...weatherProducts,
+          ...favorites,
         ], // Combine seasonal, time, and weather products
       );
       // Add the new predicted products to the stream
@@ -402,7 +405,7 @@ class HomeScreenState extends State<HomeScreen> {
     try {
       await Future.delayed(const Duration(seconds: 2));
 
-      if (itemList != null && itemList.isNotEmpty) {
+      if (itemList.isNotEmpty) {
         final validProducts = itemList.whereType<Product>().toList();
 
         // Instead of setState, just return the products
@@ -418,183 +421,108 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _filterProducts() {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
+void _filterProducts() {
+  if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      String query = searchController.text.toLowerCase();
+  _debounce = Timer(const Duration(milliseconds: 500), () {
+    String query = searchController.text.toLowerCase();
 
-      if (query.isNotEmpty) {
-        setState(() {
-          // Create FuzzyOptions for the correct type (Product, Offer, and Category)
-          final fuzzyOptionsForProducts =
-              FuzzyOptions<Product>(shouldSort: true);
-          final fuzzyOptionsForOffers = FuzzyOptions<Offer>(shouldSort: true);
-          final fuzzyOptionsForCategories =
-              FuzzyOptions<String>(shouldSort: true);
+    if (query.isNotEmpty) {
+      setState(() {
+        // Create FuzzyOptions for Product, Offer, Category, and SubCategory
+        final fuzzyOptionsForProducts = FuzzyOptions<Product>(shouldSort: true);
+        final fuzzyOptionsForOffers = FuzzyOptions<Offer>(shouldSort: true);
+        final fuzzyOptionsForCategories = FuzzyOptions<String>(shouldSort: true);
+        final fuzzyOptionsForSubCategories = FuzzyOptions<String>(shouldSort: true);
 
-          // Create Fuzzy objects for products, offers, and categories
-          final fuzzyProducts = Fuzzy<Product>(
-            products,
-            options: FuzzyOptions(
-              keys: [
-                WeightedKey(
-                  name: 'name',
-                  weight: 0.7,
-                  getter: (p) => p.name,
-                ),
-                WeightedKey(
-                  name: 'varieties',
-                  weight: 0.3,
-                  getter: (p) =>
-                      p.varieties?.map((v) => v.name).join(' ') ?? '',
-                ),
-              ],
-            ),
-          );
-          final fuzzyOffers =
-              Fuzzy<Offer>(offers, options: fuzzyOptionsForOffers);
-          final fuzzyCategories =
-              Fuzzy<String>(categories, options: fuzzyOptionsForCategories);
+        // Create Fuzzy objects for products, offers, categories, and subcategories
+        final fuzzyProducts = Fuzzy<Product>(
+          products,
+          options: FuzzyOptions(
+            keys: [
+              WeightedKey(
+                name: 'name',
+                weight: 0.7,
+                getter: (p) => p.name,
+              ),
+              WeightedKey(
+                name: 'varieties',
+                weight: 0.3,
+                getter: (p) => p.varieties.map((v) => v.name).join(' ') ?? '',
+              ),
+            ],
+          ),
+        );
+        final fuzzyOffers = Fuzzy<Offer>(offers, options: fuzzyOptionsForOffers);
+        final fuzzyCategories = Fuzzy<String>(categories, options: fuzzyOptionsForCategories);
+        final fuzzySubCategories = Fuzzy<String>(subCategories, options: fuzzyOptionsForSubCategories);
 
-          // Use fuzzy matching to filter products across different categories, including varieties
-          List<Product> nearbyResults =
-              _searchProductsAndVarieties(fuzzyProducts, query);
-          List<Product> seasonalResults = _searchProductsAndVarieties(
-              Fuzzy<Product>(seasonallyAvailable,
-                  options: fuzzyOptionsForProducts),
-              query);
-          List<Product> favoriteResults = _searchProductsAndVarieties(
-              Fuzzy<Product>(favorites, options: fuzzyOptionsForProducts),
-              query);
-          List<Product> recentlyBoughtResults = _searchProductsAndVarieties(
-              Fuzzy<Product>(recentlyBought, options: fuzzyOptionsForProducts),
-              query);
+        // Similarity check on products (direct name/variety matching)
+        List<Product> similarityResults = products
+            .where((product) =>
+                product.name.similarityTo(query) > 0.5 ||
+                product.varieties.any((variety) => variety.name.similarityTo(query) > 0.5))
+            .toList();
 
-          // Filter products using similarity check, including varieties
-          nearbyResults.addAll(nearbyUsersBought
-              .where((product) =>
-                  product.name.similarityTo(query) > 0.5 ||
-                  product.varieties!
-                      .any((variety) => variety.name.similarityTo(query) > 0.5))
-              .toList());
-          seasonalResults.addAll(seasonallyAvailable
-              .where((product) =>
-                  product.name.similarityTo(query) > 0.5 ||
-                  product.varieties!
-                      .any((variety) => variety.name.similarityTo(query) > 0.5))
-              .toList());
-          favoriteResults.addAll(favorites
-              .where((product) =>
-                  product.name.similarityTo(query) > 0.5 ||
-                  product.varieties!
-                      .any((variety) => variety.name.similarityTo(query) > 0.5))
-              .toList());
-          recentlyBoughtResults.addAll(recentlyBought
-              .where((product) =>
-                  product.name.similarityTo(query) > 0.5 ||
-                  product.varieties!
-                      .any((variety) => variety.name.similarityTo(query) > 0.5))
-              .toList());
+        // Fuzzy matching on products (weighted multi-field search)
+        List<Product> fuzzyProductResults = fuzzyProducts.search(query).map((result) => result.item).toList();
 
-          // Rest of the method remains the same
-          List<Product> complementaryResults = [];
-          for (Product recent in recentlyBought) {
-            complementaryResults.addAll(
-                products.where((product) => recent.isComplementaryTo(product)));
-          }
-          for (Product trending in nearbyUsersBought) {
-            complementaryResults.addAll(products
-                .where((product) => trending.isComplementaryTo(product)));
-          }
-          complementaryResults.addAll(fuzzyProducts
-              .search(query)
-              .map((result) => result.item)
-              .toList());
+        // Use fuzzy matching to filter offers based on offer title
+        List<Offer> offerResults = fuzzyOffers.search(query).map((result) => result.item).toList();
 
-          // Combine all product results
-          List<Product> combinedProductResults = [
-            ...nearbyResults,
-            ...seasonalResults,
-            ...favoriteResults,
-            ...recentlyBoughtResults,
-            ...complementaryResults,
-          ];
+        // Extract products based on offer IDs
+        List<Product> productsFromOffers = offerResults.expand((offer) {
+          return products.where((product) => product.id == offer.productId).toList();
+        }).toList();
 
-          // Use fuzzy matching to filter offers based on offer title
-          List<Offer> offerResults =
-              fuzzyOffers.search(query).map((result) => result.item).toList();
+        // Use fuzzy matching to filter categories based on category name
+        List<String> categoryResults = fuzzyCategories.search(query).map((result) => result.item).toList();
 
-          // Extract products based on offer IDs
-          List<Product> productsFromOffers = offerResults.expand((offer) {
-            return products
-                .where((product) => product.id == offer.productId)
-                .toList();
-          }).toList();
+        // Map categories from product.categories for filtering
+        List<Product> productsFromCategories = categoryResults.expand((category) {
+          return products.where((product) => product.category == category).toList();
+        }).toList();
 
-          // Use fuzzy matching to filter categories based on category name
-          List<String> categoryResults = fuzzyCategories
-              .search(query)
-              .map((result) => result.item)
-              .toList();
+        // Use fuzzy matching to filter subcategories based on subcategory name
+        List<String> subCategoryResults = fuzzySubCategories.search(query).map((result) => result.item).toList();
 
-          // Map categories from product.categories for filtering
-          List<Product> productsFromCategories =
-              categoryResults.expand((category) {
-            return products
-                .where((product) => product.category == category)
-                .toList();
-          }).toList();
+        // Map subcategories from product.subCategory for filtering
+        List<Product> productsFromSubCategories = subCategoryResults.expand((subCategory) {
+          return products.where((product) => product.subcategories == subCategory).toList();
+        }).toList();
 
-          // Merge filtered products, extracted products from offers, and categories into a single list
-          filteredProducts = [
-            ...combinedProductResults,
-            ...productsFromOffers,
-            ...productsFromCategories,
-          ];
+        // Combine all results and remove duplicates using a Set
+        filteredProducts = [
+          ...similarityResults,
+          ...fuzzyProductResults,
+          ...productsFromOffers,
+          ...productsFromCategories,
+          ...productsFromSubCategories,
+        ].toSet().toList(); // toSet() removes duplicates based on Product equality
 
-          // Update searchSuggestions with products, offer titles, and category names
-          searchSuggestions = [
-            ...combinedProductResults.map((product) => product.name),
-            ...combinedProductResults
-                .expand((p) => p.varieties!.map((v) => v.name!)),
-            ...offerResults.map((offer) => offer.title!),
-            ...categoryResults.map((category) => product!.category!),
-          ].toSet().toList();
+        // Update searchSuggestions with products, offer titles, category names, and subcategory names
+        searchSuggestions = [
+          ...filteredProducts.map((product) => product.name),
+          ...filteredProducts.expand((p) => p.varieties.map((v) => v.name)),
+          ...offerResults.map((offer) => offer.title),
+          ...categoryResults,
+          ...subCategoryResults,
+        ].toSet().toList(); // toSet() removes duplicates based on Product equality
 
-          if (!_hasInitialSuggestions) {
-            _hasInitialSuggestions = true;
-          }
-        });
-      } else {
-        setState(() {
-          searchSuggestions = [];
-          filteredProducts = []; // Clear filtered products if query is empty
-        });
-      }
-    });
-  }
+        if (!_hasInitialSuggestions) {
+          _hasInitialSuggestions = true;
+        }
+      });
+    } else {
+      setState(() {
+        searchSuggestions = [];
+        filteredProducts = []; // Clear filtered products if query is empty
+      });
+    }
+  });
+}
 
   // Helper method to search in both product names and varieties
-  List<Product> _searchProductsAndVarieties(
-      Fuzzy<Product> fuzzyProducts, String query) {
-    Set<Product> matchedProducts = {};
-
-    for (var result in fuzzyProducts.search(query)) {
-      matchedProducts.add(result.item);
-    }
-
-    for (var product in fuzzyProducts.list) {
-      if (product.varieties!.any((variety) => Fuzzy<Variety>([variety],
-              options: FuzzyOptions<Variety>(shouldSort: true))
-          .search(query)
-          .isNotEmpty)) {
-        matchedProducts.add(product);
-      }
-    }
-
-    return matchedProducts.toList();
-  }
 
   List<String> _getSearchSuggestions(BuildContext context) {
     const int maxSuggestions = 10;
@@ -612,19 +540,10 @@ class HomeScreenState extends State<HomeScreen> {
     // Filter orders based on the search query
     if (offers.isNotEmpty) {
       suggestions.addAll(offers.map((offer) =>
-          offer.title!)); // Assuming `order.title` is the field to filter
+          offer.title)); // Assuming `order.title` is the field to filter
     }
 
-    // Only filter the other lists if searchSuggestions is empty
-    if (seasonallyAvailable.isNotEmpty) {
-      suggestions.addAll(seasonallyAvailable.map((product) => product.name));
-    }
-    if (nearbyUsersBought.isNotEmpty) {
-      suggestions.addAll(nearbyUsersBought.map((product) => product.name));
-    }
-    if (recentlyBought.isNotEmpty) {
-      suggestions.addAll(recentlyBought.map((product) => product.name));
-    }
+
     if (products.isNotEmpty) {
       suggestions.addAll(products.map((product) => product.name));
     }
@@ -679,7 +598,7 @@ class HomeScreenState extends State<HomeScreen> {
             .cast<NotificationModel>();
     setState(() {
       notifications = notifications;
-      _unreadNotificationsCount = notifications.where((n) => !n.isRead!).length;
+      _unreadNotificationsCount = notifications.where((n) => !n.isRead).length;
     });
   }
 
@@ -692,12 +611,13 @@ class HomeScreenState extends State<HomeScreen> {
   List<Product> _applyFiltersAndSort(List<Product>? products) {
     List<Product>? filteredProducts2 = products!.where((Product? product) {
       // Filter by price
-      if (product!.basePrice == null ||
-          product.basePrice! < minPrice! ||
-          product.basePrice! > maxPrice!) return false;
+      if (product!.basePrice < minPrice! ||
+          product.basePrice > maxPrice!) {
+        return false;
+      }
       // Filter by subcategory
       if (selectedSubcategories.isNotEmpty &&
-          !product.subcategories!
+          !product.subcategories
               .any((subcat) => selectedSubcategories.contains(subcat))) {
         return false;
       }
@@ -708,10 +628,10 @@ class HomeScreenState extends State<HomeScreen> {
     // Apply sorting
     switch (sortBy) {
       case 'priceLow':
-        filteredProducts.sort((a, b) => a.basePrice!.compareTo(b.basePrice!));
+        filteredProducts.sort((a, b) => a.basePrice.compareTo(b.basePrice));
         break;
       case 'priceHigh':
-        filteredProducts.sort((a, b) => b.basePrice!.compareTo(a.basePrice!));
+        filteredProducts.sort((a, b) => b.basePrice.compareTo(a.basePrice));
         break;
       // Add more sorting options here if needed
       default:
@@ -724,11 +644,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   // Widget to display categories as selectable options
   Widget _buildCategorySelector(Map<String, List<Product>>? categoryProducts) {
-    Map<String, List<Product>> categoryProducts = groupBy(products, (Product p) => p.category!);  
-
-    if (categoryProducts == null) {
-      return const Text("Loading or no products available");
-    }
+    Map<String, List<Product>> categoryProducts = groupBy(products, (Product p) => p.category);
 
     List<String> categories = categoryProducts.keys.toList();
 
@@ -891,7 +807,7 @@ class HomeScreenState extends State<HomeScreen> {
         children: [
           // Background image
           Image.network(
-            randomProduct.pictureUrl!,
+            randomProduct.pictureUrl,
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
@@ -965,7 +881,7 @@ class HomeScreenState extends State<HomeScreen> {
               // Background image
               if (product != null)
                 Image.network(
-                  product.pictureUrl!,
+                  product.pictureUrl,
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
@@ -1110,7 +1026,7 @@ class HomeScreenState extends State<HomeScreen> {
         children: [
           // Background image
           Image.network(
-            randomProduct.pictureUrl!,
+            randomProduct.pictureUrl,
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
@@ -1260,7 +1176,7 @@ class HomeScreenState extends State<HomeScreen> {
         children: [
           // Background image
           Image.network(
-            randomProduct.pictureUrl!,
+            randomProduct.pictureUrl,
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
@@ -1318,7 +1234,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   Widget _buildProductGrid(
       String? currentCategory, Map<String, List<Product>> categoryProducts) {
-      Map<String, List<Product>> categoryProducts = groupBy(products, (Product p) => p.category!);  
+      Map<String, List<Product>> categoryProducts = groupBy(products, (Product p) => p.category);  
 
     List<Product> productsToShow =
         currentCategory != null ? categoryProducts[currentCategory] ?? [] : [];
@@ -1466,7 +1382,7 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildProductCard(Product? product, {required bool isGrid}) {
-    final productImageUrl = product!.pictureUrl!.isNotEmpty
+    final productImageUrl = product!.pictureUrl.isNotEmpty
         ? product.pictureUrl
         : 'assets/images/basket.png';
     final productName = product.name.isNotEmpty ? product.name : 'Mystery Item';
@@ -1482,24 +1398,22 @@ class HomeScreenState extends State<HomeScreen> {
     String? couponDiscount;
     // Calculate discount percentage if both prices are available
     String? discountPercentage;
-    if (originalPrice != null) {
-      double? discountedPrice;
+    double? discountedPrice;
 
-      // Check variety's discounted price first
-      if (product.variety != null &&
-          product.variety!.discountedPriceStream != null) {
-        discountedPrice = product.variety!.discountedPriceStream as double?;
-      } else if (product.discountedPriceStream2 != null) {
-        discountedPrice = product.discountedPriceStream2 as double?;
-      }
-
-      if (discountedPrice != null && originalPrice > discountedPrice) {
-        double percentage =
-            ((originalPrice - discountedPrice) / originalPrice) * 100;
-        discountPercentage = '-${percentage.toStringAsFixed(0)}%';
-      }
+    // Check variety's discounted price first
+    if (product.variety != null &&
+        product.variety!.discountedPriceStream != null) {
+      discountedPrice = product.variety!.discountedPriceStream as double?;
+    } else if (product.discountedPriceStream2 != null) {
+      discountedPrice = product.discountedPriceStream2 as double?;
     }
 
+    if (discountedPrice != null && originalPrice > discountedPrice) {
+      double percentage =
+          ((originalPrice - discountedPrice) / originalPrice) * 100;
+      discountPercentage = '-${percentage.toStringAsFixed(0)}%';
+    }
+  
     // Check if the product is in stock
     bool inStock = _productProvider.isInStock(product);
     const int highlyRatedThreshold = 100;
@@ -1512,7 +1426,7 @@ class HomeScreenState extends State<HomeScreen> {
     ];
 
     // Add "Highly Rated" icon if the review count exceeds the threshold
-    if (product != null && product.reviewCount! > highlyRatedThreshold) {
+    if (product.reviewCount > highlyRatedThreshold) {
       dynamicIconsList.add(
         IconDetail(
             image: 'assets/icons/StartOutline.svg', head: 'Highly\nRated'),
@@ -1624,7 +1538,7 @@ class HomeScreenState extends State<HomeScreen> {
           child: _isFlipped!
               ? _buildBackSide(product, dynamicIconsList)
               : _buildFrontSide(
-                  productImageUrl!,
+                  productImageUrl,
                   productName,
                   productPrice,
                   discountPercentage,
@@ -1671,7 +1585,7 @@ class HomeScreenState extends State<HomeScreen> {
     } // Change here from Function? to VoidCallback?
 
     num averageRating = 0;
-    if (product!.reviews!.isNotEmpty) {
+    if (product!.reviews != null && product!.reviews!.isNotEmpty) {
       averageRating = product!.reviews!
               .map((review) => review.rating)
               .reduce((a, b) => a + b) /
@@ -1702,7 +1616,7 @@ class HomeScreenState extends State<HomeScreen> {
                             selectedVariety != null &&
                                     selectedVariety?.imageUrl != null
                                 ? selectedVariety!
-                                    .imageUrl! // Removed incorrect '\$' and unnecessary string interpolation
+                                    .imageUrl // Removed incorrect '\$' and unnecessary string interpolation
                                 : productImageUrl,
                             fit: BoxFit.cover,
                             loadingBuilder: (context, child, progress) =>
@@ -1845,30 +1759,29 @@ class HomeScreenState extends State<HomeScreen> {
                                 },
                                 child: Row(
                                   children: [
-                                    if (variety.imageUrl != null)
-                                      Container(
-                                        width: 25,
-                                        height: 25,
-                                        margin:
-                                            const EdgeInsets.only(right: 8.0),
-                                        child: ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                          child: Image.network(
-                                            variety.imageUrl!,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    const Icon(Icons.error,
-                                                        size: 24),
-                                          ),
+                                    Container(
+                                      width: 25,
+                                      height: 25,
+                                      margin:
+                                          const EdgeInsets.only(right: 8.0),
+                                      child: ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(8.0),
+                                        child: Image.network(
+                                          variety.imageUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  const Icon(Icons.error,
+                                                      size: 24),
                                         ),
                                       ),
+                                    ),
                                     Expanded(
                                       child: ListTile(
                                         dense: true,
                                         contentPadding: EdgeInsets.zero,
-                                        title: Text(variety.name!),
+                                        title: Text(variety.name),
                                         subtitle: Text.rich(
                                           TextSpan(
                                             children: [
@@ -1880,7 +1793,7 @@ class HomeScreenState extends State<HomeScreen> {
                                                       0.0)
                                                 TextSpan(
                                                   text:
-                                                      ' \$${selectedVariety!.price?.toStringAsFixed(2) ?? 'N/A'}',
+                                                      ' \$${selectedVariety!.price.toStringAsFixed(2) ?? 'N/A'}',
                                                   style: const TextStyle(
                                                     decoration: TextDecoration
                                                         .lineThrough,
@@ -1897,7 +1810,7 @@ class HomeScreenState extends State<HomeScreen> {
                                                     ? ' \$${selectedVariety!.discountedPriceStream?.toStringAsFixed(2) ?? 'N/A'}'
                                                     : selectedVariety!.price !=
                                                             null
-                                                        ? ' \$${selectedVariety!.price?.toStringAsFixed(2)}'
+                                                        ? ' \$${selectedVariety!.price.toStringAsFixed(2)}'
                                                         : ' Price not available',
                                               ),
                                             ],
@@ -1974,7 +1887,7 @@ class HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   // Offer title overlay
-                  if (offer != null && product!.id! == offer!.productId!)
+                  if (offer != null && product!.id == offer!.productId)
                     Positioned(
                       bottom: 8,
                       right: 8,
@@ -1986,7 +1899,7 @@ class HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          offer!.title!,
+                          offer!.title,
                           style: const TextStyle(
                               color: Colors.white, fontSize: 12),
                         ),
@@ -2005,7 +1918,7 @@ class HomeScreenState extends State<HomeScreen> {
                           // Request notification when back in stock
                           ElevatedButton(
                             onPressed: () {
-                              _requestStockNotification(product!.id!);
+                              _requestStockNotification(product!.id);
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.orange,
@@ -2036,7 +1949,7 @@ class HomeScreenState extends State<HomeScreen> {
                                 ..._genomicAlternatives.map((alternative) {
                                   return ListTile(
                                     leading: Image.network(
-                                      alternative.pictureUrl!,
+                                      alternative.pictureUrl,
                                       width: 40,
                                       height: 40,
                                       fit: BoxFit.cover,
@@ -2046,22 +1959,20 @@ class HomeScreenState extends State<HomeScreen> {
                                       style: const TextStyle(fontSize: 12),
                                     ),
                                     subtitle: Text(
-                                      'Price: ${alternative.basePrice!}',
+                                      'Price: ${alternative.basePrice}',
                                       style: const TextStyle(fontSize: 10),
                                     ),
                                     onTap: () {
-                                      if (alternative.id != null) {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => ProductScreen(
-                                                productId: alternative.id!),
-                                          ),
-                                        );
-                                      }
-                                    },
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => ProductScreen(
+                                              productId: alternative.id),
+                                        ),
+                                      );
+                                                                        },
                                   );
-                                }).toList(),
+                                }),
                               ],
                             ),
                         ],
@@ -2161,9 +2072,9 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFloatingActionButton(BuildContext context) {
-    if (_userProvider.user!.isAdmin! ||
-        _userProvider.user!.isRider! ||
-        _userProvider.user!.isAttendant!) {
+    if (_userProvider.user.isAdmin ||
+        _userProvider.user.isRider ||
+        _userProvider.user.isAttendant) {
       return StatefulBuilder(
         builder: (BuildContext context, StateSetter setState) {
           return GestureDetector(
@@ -2174,14 +2085,14 @@ class HomeScreenState extends State<HomeScreen> {
             onTapCancel: () => setState(() => _isPressed = false),
             onTap: () {
               // Button action logic here
-              if (_userProvider.user!.isAdmin! &&
-                  !_userProvider.user!.isRider!) {
+              if (_userProvider.user.isAdmin &&
+                  !_userProvider.user.isRider) {
                 Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const AdminDashboardScreen()));
-              } else if (_userProvider.user!.isRider!) {
+              } else if (_userProvider.user.isRider) {
                 Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const PendingDeliveriesScreen()));
-              } else if (_userProvider.user!.isAttendant!) {
+              } else if (_userProvider.user.isAttendant) {
                 showModalBottomSheet(
                   context: context,
                   builder: (BuildContext context) {
@@ -2287,7 +2198,7 @@ class HomeScreenState extends State<HomeScreen> {
     for (var product in products) {
       // Use all products, not filtered ones, for categories
       if (!categoryProducts.containsKey(product.category)) {
-        categoryProducts[product.category!] = [];
+        categoryProducts[product.category] = [];
       }
       categoryProducts[product.category]!.add(product);
     }
@@ -2814,7 +2725,7 @@ class HomeScreenState extends State<HomeScreen> {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (context) => ProductScreen(
-                                          productId: offer.productId!),
+                                          productId: offer.productId),
                                     ),
                                   );
                                 },
@@ -2838,7 +2749,7 @@ class HomeScreenState extends State<HomeScreen> {
                                     child: Stack(
                                       children: [
                                         Image.network(
-                                          offer.imageUrl!,
+                                          offer.imageUrl,
                                           width: double.infinity,
                                           height: double.infinity,
                                           fit: BoxFit.cover,
@@ -2877,7 +2788,7 @@ class HomeScreenState extends State<HomeScreen> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  offer.title!,
+                                                  offer.title,
                                                   style: const TextStyle(
                                                     fontSize: 18,
                                                     color: Colors.white,
@@ -2956,9 +2867,9 @@ class HomeScreenState extends State<HomeScreen> {
             ),
           )),
       // FloatingActionButton logic for Admin, Rider, or Attendant users
-      floatingActionButton: _userProvider.user!.isAdmin! ||
-              _userProvider.user!.isRider! ||
-              _userProvider.user!.isAttendant!
+      floatingActionButton: _userProvider.user.isAdmin ||
+              _userProvider.user.isRider ||
+              _userProvider.user.isAttendant
           ? _buildFloatingActionButton(context)
           : null,
     );
@@ -2977,12 +2888,12 @@ class IconDetail {
   final Icon? icon;
 }
 
-class _Debouncer {
-  final int milliseconds;
+class Debouncer {
+  late final int milliseconds;
   VoidCallback? _action;
   Timer? _timer;
 
-  _Debouncer({this.milliseconds = 500});
+  Debouncer(this.milliseconds);
 
   void run(VoidCallback action) {
     _timer?.cancel();

@@ -80,12 +80,12 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
                 final nextDelivery =
                     _calculateNextDeliveryDate(selectedFrequency, selectedDay);
                 final subscription = Subscription(
-                  product: product.id, // Assuming product has an id field
-                  user: widget.user.id, // Assuming user has an id field
+                  product: product, // Assuming product has an id field
+                  user: widget.user, // Assuming user has an id field
                   quantity: quantity,
                   nextDelivery: nextDelivery,
                   frequency: selectedFrequency,
-                  price: product.basePrice,
+                  price: product.basePrice, variety: product.selectedVariety,
                 );
                 subscriptionService.addSubscription(subscription, context);
                 Navigator.pop(context);

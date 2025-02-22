@@ -11,9 +11,9 @@ class Subscription {
   int frequency;
   Variety variety;
   double price;
+  List<Product>? products; // Added to support additional products in updatePrice
 
   var activationDate;
-
   var name;
 
   Subscription({
@@ -22,30 +22,73 @@ class Subscription {
     required this.quantity,
     required this.nextDelivery,
     required this.frequency,
+    required this.variety,
     this.isActive = true,
-    required this.price, required this.variety,
+    required this.price,
+    this.products, // Optional list of additional products
   });
+
+  // Update the price based on the frequency
+  void updatePrice() {
+    double subPrice = variety.price ?? product.basePrice ?? 0.0;
+
+    // Ensure 'price' is initialized, even if with 0.0
+    double? price = 0.0;
+
+    switch (frequency) {
+      case 1: // Daily
+        price = subPrice * quantity * 30; // Approximate 30 days in a month
+        break;
+      case 7: // Weekly
+        price = subPrice * quantity * 4; // 4 weeks in a month
+        break;
+      case 14: // Bi-weekly
+        price = subPrice * quantity * 2; // 2 bi-weekly periods in a month
+        break;
+      case 30: // Monthly
+        price = subPrice * quantity;
+        break;
+      default:
+        price = subPrice * quantity; // If frequency is not set, use monthly as default
+    }
+
+    // If there are additional products in the list, add their cost
+    if (products != null) {
+      for (var p in products!) {
+        price = (price ?? 0.0) + p.basePrice * quantity;
+            }
+    }
+
+    // Ensure that price is not null after this method
+    this.price = price!; // Update the class field 'price'
+  }
 
   Map<String, dynamic> toMap() {
     return {
-      'productId': product,
-      'user': user,
+      'productId': product.id, // Store product ID instead of the whole object
+      'user': user.id,        // Store user ID instead of the whole object
       'quantity': quantity,
       'nextDelivery': nextDelivery,
       'isActive': isActive,
+      'frequency': frequency,
       'price': price,
+      'variety': variety.toMap(), // Assuming Variety has a toMap method
+      'products': products?.map((p) => p.id).toList(), // Store product IDs if products exist
     };
   }
 
   factory Subscription.fromSnapshot(DocumentSnapshot snapshot) {
+    final data = snapshot.data() as Map<String, dynamic>;
     return Subscription(
-      product: snapshot['productId'],
-      user: snapshot['user'],
-      quantity: snapshot['quantity'],
-      nextDelivery: (snapshot['nextDelivery'] as Timestamp).toDate(),
-      isActive: snapshot['isActive'],
-      frequency: snapshot['frequency'],
-      price: snapshot['price'], variety: snapshot['variety'],
+      product: (data['productId']), // Assume Product has a fromId method
+      user: (data['user']),           // Assume User has a fromId method
+      quantity: data['quantity'] as int,
+      nextDelivery: (data['nextDelivery'] as Timestamp).toDate(),
+      isActive: data['isActive'] as bool,
+      frequency: data['frequency'] as int,
+      price: (data['price'] as num).toDouble(),
+      variety: Variety.fromMap(data['variety']), // Assume Variety has a fromMap method
+      products: data['products'] ,
     );
   }
 
@@ -55,7 +98,8 @@ class Subscription {
     int? quantity,
     int? frequency,
     double? price,
-    required DateTime nextDelivery,
+    DateTime? nextDelivery,
+    List<Product>? products,
   }) {
     return Subscription(
       isActive: isActive ?? this.isActive,
@@ -63,8 +107,10 @@ class Subscription {
       frequency: frequency ?? this.frequency,
       user: user,
       product: product,
-      nextDelivery: nextDelivery, // Default to 7 days from now
-      price: price ?? this.price, variety: variety,
+      nextDelivery: nextDelivery ?? this.nextDelivery,
+      price: price ?? this.price,
+      variety: variety,
+      products: products ?? this.products,
     );
   }
 }

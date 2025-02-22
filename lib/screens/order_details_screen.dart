@@ -334,7 +334,7 @@ class OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       const SizedBox(height: 16),
                     ],
                   );
-                }).toList(),
+                }),
               ],
               const SizedBox(height: 24),
               // Circular Percent Indicators for Category Percentages

@@ -27,223 +27,208 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize with the current state of offers (optional if you have saved state)
+    // Initialize offer states
     _isWeekendOffersEnabled = _offerService.isWeekendOffersEnabled();
     _isHolidayOffersEnabled = _offerService.isHolidayOffersEnabled();
+    // Load products initially (will be updated via Consumer if provider changes)
   }
 
   @override
   Widget build(BuildContext context) {
-    // Access the ProductProvider in the build method
-    final productProvider = Provider.of<ProductProvider>(context);
-
-    // Load the out-of-stock products
-    loadProducts(productProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
-        backgroundColor: Colors.orange, // Match your app theme
+        backgroundColor: Colors.orange,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 20),
-            const Text(
-              'Admin Actions',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            // Manage Users Button
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AdminUserManagementScreen(),
+        child: Consumer<ProductProvider>(
+          builder: (context, productProvider, child) {
+            // Load out-of-stock products when provider updates
+            loadProducts(productProvider);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 20),
+                const Text(
+                  'Admin Actions',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AdminUserManagementScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: Colors.orange,
+                    textStyle: const TextStyle(fontSize: 18),
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: Colors.orange,
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-              child: const Text('Manage Users'),
-            ),
-            const SizedBox(height: 20),
-            // Add Products Button
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AdminAddProductScreen(),
+                  child: const Text('Manage Users'),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AdminAddProductScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: Colors.orange,
+                    textStyle: const TextStyle(fontSize: 18),
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: Colors.orange,
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-              child: const Text('Add Products'),
-            ),
-            const SizedBox(height: 20),
-            // Create Offers Button
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AdminOffersScreen(),
+                  child: const Text('Add Products'),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AdminOffersScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: Colors.orange,
+                    textStyle: const TextStyle(fontSize: 18),
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: Colors.orange,
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-              child: const Text('Create Offers'),
-            ),
-            const SizedBox(height: 20),
-            // Toggle Weekend Offers Button
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _isWeekendOffersEnabled = !_isWeekendOffersEnabled;
-                  if (_isWeekendOffersEnabled) {
-                    _offerService.enableWeekendOffers();
-                  } else {
-                    _offerService.disableWeekendOffers();
-                  }
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: _isWeekendOffersEnabled
-                    ? Colors.green
-                    : Colors.red, // Toggle color based on state
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-              child: Text(_isWeekendOffersEnabled
-                  ? 'Disable Weekend Offers'
-                  : 'Enable Weekend Offers'),
-            ),
-            const SizedBox(height: 20),
-            // Toggle Holiday Offers Button
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _isHolidayOffersEnabled = !_isHolidayOffersEnabled;
-                  if (_isHolidayOffersEnabled) {
-                    _offerService.enableHolidayOffers();
-                  } else {
-                    _offerService.disableHolidayOffers();
-                  }
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: _isHolidayOffersEnabled
-                    ? Colors.green
-                    : Colors.red, // Toggle color based on state
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-              child: Text(_isHolidayOffersEnabled
-                  ? 'Disable Holiday Offers'
-                  : 'Enable Holiday Offers'),
-            ),
-            const SizedBox(height: 20),
-            // Pending Deliveries Button
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const PendingDeliveriesScreen(),
+                  child: const Text('Create Offers'),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _isWeekendOffersEnabled = !_isWeekendOffersEnabled;
+                      if (_isWeekendOffersEnabled) {
+                        _offerService.enableWeekendOffers();
+                      } else {
+                        _offerService.disableWeekendOffers();
+                      }
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: _isWeekendOffersEnabled ? Colors.green : Colors.red,
+                    textStyle: const TextStyle(fontSize: 18),
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: Colors.orange,
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-              child: const Text('Pending Deliveries'),
-            ),
-            const SizedBox(height: 20),
-            // View All Orders Button
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AllOrdersScreen(),
+                  child: Text(_isWeekendOffersEnabled
+                      ? 'Disable Weekend Offers'
+                      : 'Enable Weekend Offers'),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _isHolidayOffersEnabled = !_isHolidayOffersEnabled;
+                      if (_isHolidayOffersEnabled) {
+                        _offerService.enableHolidayOffers();
+                      } else {
+                        _offerService.disableHolidayOffers();
+                      }
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: _isHolidayOffersEnabled ? Colors.green : Colors.red,
+                    textStyle: const TextStyle(fontSize: 18),
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: Colors.orange,
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-              child: const Text('View All Orders'),
-            ),
-            const SizedBox(height: 20),
-            // Coupon Management Button
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CouponManagementScreen(),
+                  child: Text(_isHolidayOffersEnabled
+                      ? 'Disable Holiday Offers'
+                      : 'Enable Holiday Offers'),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PendingDeliveriesScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: Colors.orange,
+                    textStyle: const TextStyle(fontSize: 18),
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: Colors.orange,
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-              child: const Text('Manage Coupons'),
-            ),
-            const SizedBox(height: 20),
-            // View Products Out of Stock Button
-            ElevatedButton(
-              onPressed: () {
-                _showOutOfStockProductsDialog(context);
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: Colors.orange,
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-              child: const Text('View Products Out of Stock'),
-            ),
-            const SizedBox(height: 20),
-          ],
+                  child: const Text('Pending Deliveries'),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AllOrdersScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: Colors.orange,
+                    textStyle: const TextStyle(fontSize: 18),
+                  ),
+                  child: const Text('View All Orders'),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CouponManagementScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: Colors.orange,
+                    textStyle: const TextStyle(fontSize: 18),
+                  ),
+                  child: const Text('Manage Coupons'),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    _showOutOfStockProductsDialog(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: Colors.orange,
+                    textStyle: const TextStyle(fontSize: 18),
+                  ),
+                  child: const Text('View Products Out of Stock'),
+                ),
+                const SizedBox(height: 20),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
   void loadProducts(ProductProvider productProvider) {
-    // Filter out-of-stock products using the provided isInStock method
     outOfStockProducts = productProvider.products
         .where((product) => !isInStock(product))
         .toList();
   }
 
-  // Method to check if a product is in stock based on quantity
   bool isInStock(Product product) {
     return product.itemQuantity > 0;
   }
 
-  // Dialog to display out-of-stock products
   void _showOutOfStockProductsDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -252,7 +237,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: const Text('Out of Stock Products'),
           content: SizedBox(
             width: double.maxFinite,
-            height: 300,
+            height: MediaQuery.of(context).size.height * 0.5, // Dynamic height
             child: ListView.builder(
               itemCount: outOfStockProducts.length,
               itemBuilder: (context, index) {
@@ -284,14 +269,11 @@ class AdminConversationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar:
-          AppBar(title: const Text("Conversations with Sentiment Analysis")),
+      appBar: AppBar(title: const Text("Conversations with Sentiment Analysis")),
       body: StreamBuilder(
-        stream:
-            FirebaseFirestore.instance.collection('conversations').snapshots(),
+        stream: FirebaseFirestore.instance.collection('conversations').snapshots(),
         builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-          if (!snapshot.hasData) return const CircularProgressIndicator();
-
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final conversations = snapshot.data!.docs;
           return ListView.builder(
             itemCount: conversations.length,
@@ -307,6 +289,111 @@ class AdminConversationsScreen extends StatelessWidget {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class AudioAnalysis {
+  final String id;
+  final String audioPath;
+  final String sentimentAnalysis;
+  final String sabotageInsights;
+  final String defamationInsights;
+  final Timestamp timestamp;
+
+  AudioAnalysis({
+    required this.id,
+    required this.audioPath,
+    required this.sentimentAnalysis,
+    required this.sabotageInsights,
+    required this.defamationInsights,
+    required this.timestamp,
+  });
+
+  factory AudioAnalysis.fromMap(String id, Map<String, dynamic> data) {
+    return AudioAnalysis(
+      id: id,
+      audioPath: data['audioPath'] ?? '',
+      sentimentAnalysis: data['sentimentAnalysis'] ?? '',
+      sabotageInsights: data['sabotageInsights'] ?? '',
+      defamationInsights: data['defamationInsights'] ?? '',
+      timestamp: data['timestamp'] ?? Timestamp.now(),
+    );
+  }
+}
+
+class AudioAnalysisScreen extends StatefulWidget {
+  const AudioAnalysisScreen({super.key});
+
+  @override
+  _AudioAnalysisScreenState createState() => _AudioAnalysisScreenState();
+}
+
+class _AudioAnalysisScreenState extends State<AudioAnalysisScreen> {
+  List<AudioAnalysis> analyses = [];
+  bool _isLoading = true; // Add loading state
+
+  Future<void> _fetchAnalyses() async {
+    final firestore = FirebaseFirestore.instance;
+    final snapshot = await firestore.collection('audio_analyses').get();
+    analyses = snapshot.docs.map((doc) => AudioAnalysis.fromMap(doc.id, doc.data())).toList();
+    setState(() {
+      _isLoading = false; // Update loading state
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAnalyses();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Audio Analyses'),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : analyses.isEmpty
+              ? const Center(child: Text('No analyses available'))
+              : ListView.builder(
+                  itemCount: analyses.length,
+                  itemBuilder: (context, index) {
+                    final analysis = analyses[index];
+                    return _buildAnalysisCard(analysis);
+                  },
+                ),
+    );
+  }
+
+  Widget _buildAnalysisCard(AudioAnalysis analysis) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Audio: ${analysis.audioPath}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text('Sentiment: ${analysis.sentimentAnalysis}'),
+            const SizedBox(height: 10),
+            Text('Sabotage Insights: ${analysis.sabotageInsights}'),
+            const SizedBox(height: 10),
+            Text('Defamation Insights: ${analysis.defamationInsights}'),
+            const SizedBox(height: 10),
+            Text(
+              'Timestamp: ${analysis.timestamp.toDate().toString()}',
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
       ),
     );
   }

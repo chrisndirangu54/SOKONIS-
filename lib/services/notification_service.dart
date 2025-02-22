@@ -310,9 +310,11 @@ class NotificationService {
     }
   }
 
-  // **Background Message Handler**
+
+  // Handle background messages (for Firebase notifications)
   Future<void> _backgroundMessageHandler(RemoteMessage message) async {
     final notification = message.notification;
+
     if (notification != null &&
         notification.title != null &&
         notification.body != null) {
@@ -320,20 +322,118 @@ class NotificationService {
     }
   }
 
-  // **Store Notification in Firestore**
+  // Method to show notifications related to orders and store them in Firestore
+  Future<void> showOrderNotification(String title, String body) async {
+    // Check if _userProvider and _productProvider are not null
+    if (_userProvider != null && _productProvider != null) {
+      // Check if the user is an attendant or a rider
+      final user = _userProvider?.user;
+      if (user != null && (user.isAttendant || user.isRider)) {
+        // Show the notification
+        await _showNotification(title, body);
+
+        // Store the notification in Firestore
+        await storeNotification(
+          title: title,
+          body: body,
+          userId: user.id, // Store the notification under the current user's ID
+          orderId: null, // You can pass the orderId if it's relevant
+        );
+      } else {
+        print(
+            'User is neither an attendant nor a rider, or user data is not available. Notification not shown.');
+      }
+    } else {
+      print(
+          'UserProvider and ProductProvider must be provided for order notifications.');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getNotifications() async {
+    try {
+      // Assuming you store notifications in a 'notifications' collection in Firestore
+      final querySnapshot = await _firestore
+          .collection('notifications')
+          .where('userId',
+              isEqualTo: _userProvider?.user.uid) // Optional filter by user ID
+          .orderBy('timestamp',
+              descending: true) // Assuming you store timestamps
+          .get();
+
+      // Map Firestore docs to a list of notifications
+      final List<Map<String, dynamic>> notifications =
+          querySnapshot.docs.map((doc) {
+        return {
+          'title': doc['title'],
+          'body': doc['body'],
+          'timestamp': doc['timestamp'],
+          // Add other fields as needed
+        };
+      }).toList();
+
+      return notifications;
+    } catch (e) {
+      print('Error fetching notifications: $e');
+      return [];
+    }
+  }
+
+    Future<void> showReplenishmentReminder(String title, String body) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails('replenishment_channel', 'Replenishment Notifications',
+            channelDescription: 'Notification channel for replenishment reminders',
+            importance: Importance.max,
+            priority: Priority.high,
+            showWhen: false);
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+    await _flutterLocalNotificationsPlugin.show(0, title, body, platformChannelSpecifics);
+  }
+
+  Future<void> sendNotification({
+    required String to,
+    required String title,
+    required String body,
+    required Map<String, dynamic> data,
+  }) async {
+    try {
+      // Show a local notification
+      const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
+        'your_channel_id', 
+        'your_channel_name', 
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: false,
+      );
+      const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
+
+      await _flutterLocalNotificationsPlugin.show(
+        0, // Notification id, can be any unique integer
+        title,
+        body,
+        platformChannelSpecifics,
+        payload: data.toString(), // Convert map to string for payload
+      );
+      print('Local Notification shown successfully');
+    } catch (e) {
+      print('Error showing local notification: $e');
+      // Handle errors here
+    }
+  }
+
   Future<void> storeNotification({
     required String title,
     required String body,
-    required String userId,
-    String? orderId,
+    required String userId, // Assuming you want to store notifications per user
+    String? orderId, // Optional: can be used for order-related notifications
   }) async {
     try {
       await _firestore.collection('notifications').add({
         'title': title,
         'body': body,
         'userId': userId,
-        'orderId': orderId,
-        'timestamp': FieldValue.serverTimestamp(),
+        'orderId': orderId, // If applicable
+        'timestamp': FieldValue.serverTimestamp(), // Auto-generate timestamp
       });
       print('Notification stored successfully.');
     } catch (e) {

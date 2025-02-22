@@ -83,8 +83,8 @@ Widget build(BuildContext context) {
                   TextButton(
                     child: const Text('Join'),
                     onPressed: () {
-                      String? link = (context.findRenderObject() as EditableText).controller?.text;
-                      if (link != null && link.isNotEmpty) {
+                      String? link = (context.findRenderObject() as EditableText).controller.text;
+                      if (link.isNotEmpty) {
                         Navigator.of(context).pop();
                         _joinGroupBuyWithLink(link);
                       }

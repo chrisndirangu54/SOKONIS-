@@ -1,9 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/subscription_model.dart';
-import 'package:grocerry/providers/product_provider.dart';
+import 'package:grocerry/models/user.dart';
 import 'package:grocerry/providers/user_provider.dart';
-import 'package:grocerry/screens/Product_selection_screen.dart';
+import 'package:grocerry/screens/subscription_suggestion_screeen.dart';
 import 'package:grocerry/services/subscription_service.dart';
 import 'package:provider/provider.dart';
 
@@ -96,7 +97,6 @@ class SubscriptionScreen extends StatelessWidget {
 class SubscriptionTile extends StatefulWidget {
   final Subscription subscription;
   final String user;
-
   final Function(Subscription) onScheduleChange;
 
   const SubscriptionTile({
@@ -112,12 +112,58 @@ class SubscriptionTile extends StatefulWidget {
 
 class SubscriptionTileState extends State<SubscriptionTile> {
   late int quantity;
+  List<Product> _linkedProducts = [];
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearching = false;
 
   @override
   void initState() {
     super.initState();
-    quantity =
-        widget.subscription.quantity; // Initialize quantity from subscription
+    quantity = widget.subscription.quantity;
+    _searchController.text = widget.subscription.product.name; // Default search term
+    _fetchLinkedProducts();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Fetch linked products from Firestore based on search term
+  Future<void> _fetchLinkedProducts() async {
+    setState(() => _isSearching = true);
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final searchTerm = _searchController.text.trim();
+      if (searchTerm.isEmpty) {
+        setState(() {
+          _linkedProducts = [];
+          _isSearching = false;
+        });
+        return;
+      }
+
+      QuerySnapshot querySnapshot = await firestore
+          .collection('products')
+          .where('name', isGreaterThanOrEqualTo: searchTerm)
+          .where('name', isLessThanOrEqualTo: '$searchTerm\uf8ff')
+          .get();
+
+      setState(() {
+        _linkedProducts = querySnapshot.docs
+            .map((doc) => Product.fromFirestore())
+            .toList();
+        _isSearching = false;
+      });
+    } catch (e) {
+      setState(() => _isSearching = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error fetching products: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -128,46 +174,16 @@ class SubscriptionTileState extends State<SubscriptionTile> {
       trailing: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildQuantityControl(),
           _buildSwitch(),
-          _buildCartButton(),
-          _buildAddProductButton(),
+          _buildSearchButton(),
+          _buildSuggestionsButton(), // Added suggestions button
         ],
       ),
       onTap: () => _showSubscriptionOptions(context),
     );
   }
 
-  // Quantity control widget
-  Widget _buildQuantityControl() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.remove, color: Colors.white),
-          onPressed: () {
-            if (quantity > 1) {
-              setState(() {
-                quantity--; // Decrease quantity
-              });
-            }
-          },
-        ),
-        Text('$quantity',
-            style: const TextStyle(color: Colors.white, fontSize: 20)),
-        IconButton(
-          icon: const Icon(Icons.add, color: Colors.white),
-          onPressed: () {
-            setState(() {
-              quantity++; // Increase quantity
-            });
-          },
-        ),
-      ],
-    );
-  }
 
-// Subscription toggle switch
   Widget _buildSwitch() {
     return Switch(
       value: widget.subscription.isActive,
@@ -176,50 +192,237 @@ class SubscriptionTileState extends State<SubscriptionTile> {
           isActive: val,
           nextDelivery: val
               ? _calculateNextDeliveryDate(widget.subscription.frequency,
-                  widget.subscription.nextDelivery!.weekday)
-              : DateTime.now(), // Use current date if inactive
+                  widget.subscription.nextDelivery.weekday)
+              : DateTime.now(),
         ));
       },
     );
   }
 
-  // Add to subscription button
-  Widget _buildCartButton() {
-    return IconButton(
-      icon: const Icon(Icons.add_shopping_cart),
-      onPressed: () {
-        final productProvider =
-            Provider.of<ProductProvider>(context, listen: false);
-        final product =
-            productProvider.getProductById(widget.subscription.product);
-
-        if (product != null) {
-          _askForSubscription(product);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Product not found!')),
-          );
-        }
-      },
+  Widget _buildSearchButton() {
+    return ElevatedButton.icon(
+      onPressed: () => _showSearchDialog(context),
+      icon: const Icon(Icons.search),
+      label: const Text('Search Products'),
     );
   }
 
-  // Add product to subscription button
-  Widget _buildAddProductButton() {
-    final user = Provider.of<UserProvider>(context, listen: false).user;
-    return ElevatedButton(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ProductSelectionScreen(user: user),
-          ),
+  Widget _buildSuggestionsButton() {
+    return ElevatedButton.icon(
+      onPressed: () => _navigateToSuggestions(context),
+      icon: const Icon(Icons.lightbulb_outline),
+      label: const Text('View Suggestions'),
+    );
+  }
+
+  void _navigateToSuggestions(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SubscriptionSuggestionScreen(userId: widget.user),
+      ),
+    );
+  }
+  void _showSearchDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Search Products'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Enter product name',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: () {
+                          _fetchLinkedProducts();
+                          setState(() {}); // Update dialog content
+                        },
+                      ),
+                    ),
+                    onSubmitted: (_) => _fetchLinkedProducts(),
+                  ),
+                  const SizedBox(height: 16),
+                  _isSearching
+                      ? const CircularProgressIndicator()
+                      : _linkedProducts.isEmpty
+                          ? const Text('No products found')
+                          : SizedBox(
+                              height: 300,
+                              width: 300,
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: _linkedProducts.length,
+                                itemBuilder: (context, index) {
+                                  final product = _linkedProducts[index];
+                                  Variety? selectedVariety =
+                                      product.varieties.isNotEmpty ?? false
+                                          ? product.varieties.first
+                                          : null;
+
+                                  return ExpansionTile(
+                                    leading: selectedVariety?.imageUrl != null
+                                        ? Image.network(
+                                            selectedVariety!.imageUrl,
+                                            width: 40,
+                                            height: 40,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    const Icon(
+                                                        Icons.error_outline,
+                                                        size: 40),
+                                          )
+                                        : (product.pictureUrl != null
+                                            ? Image.network(
+                                                product.pictureUrl,
+                                                width: 40,
+                                                height: 40,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error,
+                                                        stackTrace) =>
+                                                    const Icon(
+                                                        Icons.error_outline,
+                                                        size: 40),
+                                              )
+                                            : null),
+                                    title: Text(product.name),
+                                    subtitle: Text(
+                                      'Price: \$${selectedVariety?.price.toStringAsFixed(2) ?? product.basePrice.toStringAsFixed(2) ?? 'N/A'}'),
+                                    children: [
+                                      if (product.varieties.isNotEmpty ?? false)
+                                        SizedBox(
+                                          height: 200,
+                                          child: ListView.builder(
+                                            scrollDirection: Axis.horizontal,
+                                            itemCount: product.varieties.length,
+                                            itemBuilder:
+                                                (context, varietyIndex) {
+                                              var variety =
+                                                  product.varieties[varietyIndex];
+                                              return Padding(
+                                                padding:
+                                                    const EdgeInsets.all(8.0),
+                                                child: GestureDetector(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      selectedVariety = variety;
+                                                    });
+                                                  },
+                                                  child: Container(
+                                                    width: 200,
+                                                    decoration: BoxDecoration(
+                                                      border: Border.all(
+                                                          color: selectedVariety ==
+                                                                  variety
+                                                              ? Colors.green
+                                                              : Colors.grey),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                    ),
+                                                    child: Column(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        variety.imageUrl != null
+                                                            ? ClipRRect(
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            8.0),
+                                                                child: Image
+                                                                    .network(
+                                                                  variety
+                                                                      .imageUrl,
+                                                                  width: 100,
+                                                                  height: 100,
+                                                                  fit: BoxFit
+                                                                      .cover,
+                                                                  errorBuilder: (context,
+                                                                          error,
+                                                                          stackTrace) =>
+                                                                      const Icon(
+                                                                          Icons
+                                                                              .error_outline,
+                                                                          size:
+                                                                              40),
+                                                                ),
+                                                              )
+                                                            : Container(),
+                                                        Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .all(8.0),
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              Text(variety.name ??
+                                                                  ''),
+                                                              Text(
+                                                                '\$${variety.price.toStringAsFixed(2) ?? 'N/A'}',
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            if (selectedVariety != null) {
+                                              _askForSubscription(
+                                                  product, selectedVariety);
+                                              Navigator.pop(context);
+                                            } else {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                const SnackBar(
+                                                    content: Text(
+                                                        'Please select a variety')),
+                                              );
+                                            }
+                                          },
+                                          child: const Text('Subscribe'),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
         );
       },
-      child: const Text('Add Products to Subscription'),
     );
   }
-
   // Show subscription options in a modal
   void _showSubscriptionOptions(BuildContext context) {
     showModalBottomSheet(
@@ -234,13 +437,13 @@ class SubscriptionTileState extends State<SubscriptionTile> {
   }
 
   // Ask for subscription dialog
-  void _askForSubscription(Product product) {
+  void _askForSubscription(Product product, [Variety? selectedVariety]) {
     int selectedFrequency = 7; // Default weekly frequency
     int selectedDay = DateTime.now().weekday; // Default to today’s weekday
     int quantity = 1; // Default quantity
     final SubscriptionService subscriptionService = SubscriptionService();
     final Subscription subscription;
-
+    final User user = Provider.of<UserProvider>(context, listen: false).user;
     final availableFrequencies = [
       1,
       7,
@@ -279,12 +482,12 @@ class SubscriptionTileState extends State<SubscriptionTile> {
                 final nextDelivery =
                     _calculateNextDeliveryDate(selectedFrequency, selectedDay);
                 final subscription = Subscription(
-                  product: product as String,
-                  user: widget.user,
+                  product: product,
+                  user: user,
                   quantity: quantity,
                   nextDelivery: nextDelivery,
                   frequency: selectedFrequency,
-                  price: product.basePrice,
+                  price: product.basePrice, variety: product.selectedVariety,
                 );
                 subscriptionService.addSubscription(subscription, context);
                 Navigator.pop(context);
@@ -431,11 +634,11 @@ class SubscriptionOptionsState extends State<SubscriptionOptions> {
     DateTime? nextDelivery = widget.subscription.nextDelivery;
 
     // Ensure the selected day doesn't result in more deliveries in the same period
-    if (_frequency == 7 && now.difference(nextDelivery!).inDays < 7) {
+    if (_frequency == 7 && now.difference(nextDelivery).inDays < 7) {
       return false;
-    } else if (_frequency == 14 && now.difference(nextDelivery!).inDays < 14) {
+    } else if (_frequency == 14 && now.difference(nextDelivery).inDays < 14) {
       return false;
-    } else if (_frequency == 30 && now.difference(nextDelivery!).inDays < 30) {
+    } else if (_frequency == 30 && now.difference(nextDelivery).inDays < 30) {
       return false;
     }
 
@@ -504,7 +707,7 @@ class SubscriptionOptionsState extends State<SubscriptionOptions> {
                   quantity: _quantity,
                   isActive: widget.subscription.isActive,
                   nextDelivery: widget.subscription
-                      .nextDelivery!, // Update to the next delivery date if necessary
+                      .nextDelivery, // Update to the next delivery date if necessary
                 ),
               );
               Navigator.pop(context);

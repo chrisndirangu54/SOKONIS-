@@ -1,4 +1,5 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:grocerry/models/product.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -8,7 +9,7 @@ class User {
   final String email;
   final String? token;
   final String name;
-  final String address;
+  final Address? address;
   final LatLng? pinLocation;
   final String profilePictureUrl;
   final List<String> favoriteProductIds;
@@ -117,7 +118,7 @@ class User {
       email: 'guest@example.com', // More realistic email for guest
       token: null, // Token typically null for guests
       name: 'Guest',
-      address: 'N/A', // Using N/A instead of 'Guest' for clarity
+      address: null, // Using N/A instead of 'Guest' for clarity
       profilePictureUrl: '', // Empty string for no profile picture
       contact: 'N/A',
       pinLocation: null,
@@ -165,7 +166,7 @@ class User {
     String? email,
     String? token,
     String? name,
-    String? address,
+    Address? address,
     LatLng? pinLocation,
     String? profilePictureUrl,
     List<String>? favoriteProductIds,

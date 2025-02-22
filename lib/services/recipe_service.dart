@@ -22,7 +22,7 @@ class RecipeService {
   }
 
   Future<List<String>> getRandomMeal() async {
-    final prompt = 'Suggest a random meal for dinner.';
+    const prompt = 'Suggest a random meal for dinner.';
 
     return await _fetchRecipes(prompt);
   }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 import 'package:rxdart/rxdart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,7 +6,6 @@ import 'package:google_maps_flutter_platform_interface/src/types/location.dart';
 import 'package:grocerry/models/group_buy_model.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/user.dart';
-import 'package:http/http.dart' as http;
 
 class GroupBuyService {
   final FirebaseFirestore _firestore;
@@ -77,7 +75,7 @@ class GroupBuyService {
     final currentMembers = (groupBuyData['members'] as List<dynamic>?)?.length ?? 0;
 
     double? discountedPrice = basePrice - (basePrice * discountPerMember * currentMembers);
-    return discountedPrice?.clamp(_product?.minPrice ?? 0, basePrice);
+    return discountedPrice.clamp(_product?.minPrice ?? 0, basePrice);
   }
 
   Stream<Map<String, double?>> getVarietiesDiscountStreamByLocation(

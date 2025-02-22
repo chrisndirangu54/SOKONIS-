@@ -42,9 +42,9 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   void initState() {
     super.initState();
     _loadWeeklyMealPlan();
-    _recommendMeals(user!.id!);
+    _recommendMeals(user!.id);
     _loadMealRecommendations();
-    for (var variety in product!.varieties!) {
+    for (var variety in product!.varieties) {
       _listenToDiscountedPriceStream(variety.discountedPriceStream);
     }
   }
@@ -186,7 +186,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
               Product.fromFirestore(); // Use named parameter
           linkedProducts.add(GroceryItem(
             name: product.name,
-            price: product.basePrice!,
+            price: product.basePrice,
             product: product,
           ));
         }
@@ -535,7 +535,7 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                 onTap: () {
                   Navigator.of(context).pop(); // Close the dialog
                   _recommendMeals(
-                      user!.id!); // Your existing method for recommended meals
+                      user!.id); // Your existing method for recommended meals
                 },
               ),
               ListTile(
@@ -686,13 +686,13 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
 
     // Prepare a list of all meals for today
     List<String> mealsToday = [];
-    if (todayMeals.breakfast != null && todayMeals.breakfast.isNotEmpty) {
+    if (todayMeals.breakfast.isNotEmpty) {
       mealsToday.add(todayMeals.breakfast);
     }
-    if (todayMeals.lunch != null && todayMeals.lunch.isNotEmpty) {
+    if (todayMeals.lunch.isNotEmpty) {
       mealsToday.add(todayMeals.lunch);
     }
-    if (todayMeals.dinner != null && todayMeals.dinner.isNotEmpty) {
+    if (todayMeals.dinner.isNotEmpty) {
       mealsToday.add(todayMeals.dinner);
     }
 
@@ -890,7 +890,7 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                           leading: selectedVariety?.imageUrl !=
                                                   null
                                               ? Image.network(
-                                                  selectedVariety!.imageUrl!,
+                                                  selectedVariety!.imageUrl,
                                                   width: 40,
                                                   height: 40,
                                                   fit: BoxFit.cover,
@@ -905,7 +905,7 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                                       null
                                                   ? Image.network(
                                                       groceryItem
-                                                          .product.pictureUrl!,
+                                                          .product.pictureUrl,
                                                       width: 40,
                                                       height: 40,
                                                       fit: BoxFit.cover,
@@ -921,13 +921,13 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                           title: Text(product.name),
                                           subtitle: Text(
                                           'Price: \$${selectedVariety?.discountedPriceStream != null ? 
-                                          selectedVariety!.discountedPriceStream!.firstWhere((value) => value != null, orElse: () => null)?.then((map) => 
-                                            map?.values.first?.toStringAsFixed(2) ?? groceryItem!.product.basePrice!.toStringAsFixed(2)
+                                          selectedVariety!.discountedPriceStream!.firstWhere((value) => value != null, orElse: () => null).then((map) => 
+                                            map?.values.first?.toStringAsFixed(2) ?? groceryItem!.product.basePrice.toStringAsFixed(2)
                                           ) : 
-                                          groceryItem!.product.basePrice!.toStringAsFixed(2)}' ),
+                                          groceryItem!.product.basePrice.toStringAsFixed(2)}' ),
                                           children: [
                                             if (groceryItem!
-                                                .product.varieties!.isNotEmpty)
+                                                .product.varieties.isNotEmpty)
                                               SizedBox(
                                                 height:
                                                     200, // Adjust height as needed
@@ -935,11 +935,11 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                                   scrollDirection:
                                                       Axis.horizontal,
                                                   itemCount: groceryItem.product
-                                                      .varieties!.length,
+                                                      .varieties.length,
                                                   itemBuilder:
                                                       (context, varietyIndex) {
                                                     var variety = groceryItem
-                                                            .product.varieties![
+                                                            .product.varieties[
                                                         varietyIndex];
                                                     return Padding(
                                                       padding:
@@ -985,7 +985,7 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                                                       child: Image
                                                                           .network(
                                                                         variety
-                                                                            .imageUrl!,
+                                                                            .imageUrl,
                                                                         width:
                                                                             100,
                                                                         height:
@@ -1011,14 +1011,14 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                                                           .start,
                                                                   children: [
                                                                     Text(variety
-                                                                        .name!),
+                                                                        .name),
                                                                     Text.rich(
                                                                       TextSpan(
                                                                         children: [
                                                                           if (variety.discountedPriceStream != null &&
                                                                               variety.discountedPriceStream! != 0.0)
                                                                             TextSpan(
-                                                                              text: ' \$${variety.price?.toStringAsFixed(2) ?? 'N/A'}',
+                                                                              text: ' \$${variety.price.toStringAsFixed(2) ?? 'N/A'}',
                                                                               style: const TextStyle(
                                                                                 decoration: TextDecoration.lineThrough,
                                                                                 color: Colors.grey,
@@ -1028,7 +1028,7 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                                                             text: variety.discountedPriceStream != null && variety.discountedPriceStream! != 0.0
                                                                                 ? ' \$${variety.discountedPriceStream?.toStringAsFixed(2) ?? 'N/A'}'
                                                                                 : variety.price != null
-                                                                                    ? ' \$${variety.price?.toStringAsFixed(2)}'
+                                                                                    ? ' \$${variety.price.toStringAsFixed(2)}'
                                                                                     : ' Price not available',
                                                                           ),
                                                                         ],
@@ -1124,7 +1124,7 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                                       if (selectedVariety !=
                                                           null) {
                                                         _askForSubscription(
-                                                          groceryItem!
+                                                          groceryItem
                                                               .product, // assuming product context
                                                           selectedVariety,
                                                         );

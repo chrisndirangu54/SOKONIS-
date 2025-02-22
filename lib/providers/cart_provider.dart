@@ -13,6 +13,7 @@ import 'package:grocerry/providers/wallet_provider.dart';
 import 'package:grocerry/screens/pending_deliveries_screen.dart';
 import 'package:grocerry/services/eta_service.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
+import 'package:grocerry/services/notification_service.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -25,7 +26,7 @@ class CartProvider with ChangeNotifier {
   final _cartStreamController =
       StreamController<Map<String, CartItem>>.broadcast();
 
-  List<Map<String, dynamic>> _pendingOrders = [];
+  final List<Map<String, dynamic>> _pendingOrders = [];
 
   Map<String, CartItem> get items => _items;
 
@@ -172,11 +173,11 @@ class CartProvider with ChangeNotifier {
   User? user;
 
   // Toggle the selection of an item
-  void toggleItemSelection(String productId, [Set<String>? _selectedItems]) {
-    if (_selectedItems!.contains(productId)) {
-      _selectedItems.remove(productId);
+  void toggleItemSelection(String productId, [Set<String>? selectedItems]) {
+    if (selectedItems!.contains(productId)) {
+      selectedItems.remove(productId);
     } else {
-      _selectedItems.add(productId);
+      selectedItems.add(productId);
     }
     notifyListeners(); // Notify listeners about the change
   }
@@ -250,7 +251,68 @@ class CartProvider with ChangeNotifier {
     }
   }
 
-  // Method to show success messages
+  // New method to send order for confirmation with attendant notification
+  void sendOrderForConfirmation(
+      BuildContext context,
+      Set<String> selectedItems,
+      Function(List<Map<String, dynamic>>) onConfirmationReceived) async {
+    final NotificationService notificationService = NotificationService();
+
+    // Prepare items for confirmation
+    final itemsToConfirm = items.values
+        .where((item) => selectedItems.contains(item.product.id))
+        .map((item) => {
+              'productId': item.product.id,
+              'quantity': item.quantity,
+              'notes': item.notes ?? '',
+              'status': item.notes != null && item.notes!.isNotEmpty
+                  ? 'pending_attendant'
+                  : 'confirmed',
+              'price': item.price,
+            })
+        .toList();
+
+    // Notify the attendant
+    try {
+      await notificationService.sendNotification(
+        to: 'attendant_user_id', // Replace with actual attendant ID or fetch dynamically
+        title: 'Order Confirmation Required',
+        body: 'An order with ${itemsToConfirm.length} items needs your review. Check items with notes.',
+        data: {
+          'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+          'action': 'review_order',
+          'itemCount': itemsToConfirm.length.toString(),
+        },
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to notify attendant: $e')),
+      );
+    }
+
+    // Immediately invoke the callback with the prepared items
+    onConfirmationReceived(itemsToConfirm);
+
+    notifyListeners();
+  }
+  // Method to handle attendant's decision (unchanged from previous)
+  void handleAttendantDecision(String productId, String decision) {
+    if (items.containsKey(productId)) {
+      switch (decision) {
+        case 'confirm':
+          items[productId]!.status = 'confirmed';
+          break;
+        case 'decline':
+          items[productId]!.status = 'declined';
+          break;
+        case 'chargeMore':
+          items[productId]!.status = 'price_adjustment';
+          // Optionally, prompt for price adjustment here or elsewhere
+          break;
+      }
+      notifyListeners();
+    }
+  }
 
   // Updated method to show payment methods for selected items
   void _selectPaymentMethod(List<CartItem> selectedItems, dynamic context) {
@@ -466,7 +528,7 @@ Future<String?> _processMpesaPayment(List<CartItem> selectedItems,
 
   String? phoneNumber = await getSavedPhoneNumber() ?? '2547XXXXXXXX';
 
-  if (phoneNumber == '2547XXXXXXXX' || phoneNumber == null) {
+  if (phoneNumber == '2547XXXXXXXX') {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Please enter your phone number'),
@@ -664,30 +726,34 @@ void selectPaymentMethodWithoutCOD(List<CartItem> selectedItems, dynamic context
     },
   );
 }
-  Future<void> calculateDeliveryFee(LatLng origin, LatLng destination) async {
-    try {
-      final activeSubscriptions = await _fetchActiveSubscriptions();
+Future<void> calculateDeliveryFee(LatLng origin, LatLng destination) async {
+  try {
+    final activeSubscriptions = await _fetchActiveSubscriptions();
 
-      if (activeSubscriptions.isNotEmpty) {
-        // If the user has an active subscription, make the delivery free
-        deliveryFee = 0.0;
-        print('Delivery fee: Free (Active subscription)');
-      } else {
-        final etaService = ETAService('YOUR_GOOGLE_MAPS_API_KEY');
-        final etaAndDistance =
-            await etaService.calculateETAAndDistance(origin, destination);
+    // Check if there's any active subscription with a price of 10,000 or more
+    final hasEligibleSubscription = activeSubscriptions.any(
+      (subscription) => subscription.price >= 10000,
+    );
 
-        final distanceInKm = etaAndDistance['distance'] as double;
-        deliveryFee = distanceInKm * 40; // $40 per km
-        print('Delivery fee: \$${deliveryFee.toStringAsFixed(2)}');
-      }
+    if (hasEligibleSubscription) {
+      // If there's an active subscription with a price of 10,000 or more, make delivery free
+      deliveryFee = 0.0;
+      print('Delivery fee: Free (Active subscription with price >= 10000)');
+    } else {
+      final etaService = ETAService('YOUR_GOOGLE_MAPS_API_KEY');
+      final etaAndDistance = await etaService.calculateETAAndDistance(origin, destination);
 
-      // Notify listeners that the delivery fee has changed
-      notifyListeners();
-    } catch (e) {
-      print('Error calculating delivery fee: $e');
+      final distanceInKm = etaAndDistance['distance'] as double;
+      deliveryFee = distanceInKm * 40; // $40 per km
+      print('Delivery fee: \$${deliveryFee.toStringAsFixed(2)}');
     }
+
+    // Notify listeners that the delivery fee has changed
+    notifyListeners();
+  } catch (e) {
+    print('Error calculating delivery fee: $e');
   }
+}
 
   Future<List<Map<String, dynamic>>> fetchQualifiedCoupons(
       List<CartItem> cartItems,
@@ -860,48 +926,6 @@ void selectPaymentMethodWithoutCOD(List<CartItem> selectedItems, dynamic context
     });
   }
 
-  // Handle Attendant's decision to confirm, decline, or charge more
-  void handleAttendantDecision(String product, String decision,
-      {double? newPrice}) {
-    // Find the corresponding item in the pending orders
-    final orderIndex =
-        _pendingOrders.indexWhere((order) => order['productId'] == product);
-
-    if (orderIndex != -1) {
-      final order = _pendingOrders[orderIndex];
-
-      switch (decision) {
-        case 'confirm':
-          // Confirm the item if no price change is needed
-          _pendingOrders[orderIndex]['status'] = 'confirmed';
-          if (newPrice != null) {
-            _pendingOrders[orderIndex]['price'] = newPrice;
-          }
-          break;
-
-        case 'decline':
-          // Decline the item
-          _pendingOrders[orderIndex]['status'] = 'declined';
-          break;
-
-        case 'chargeMore':
-          // Apply a price increase and set status to 'charge_more'
-          if (newPrice != null) {
-            _pendingOrders[orderIndex]['status'] = 'Extra Cost';
-            _pendingOrders[orderIndex]['price'] = newPrice;
-          }
-          break;
-
-        default:
-          // Handle invalid decision or unrecognized action
-          print('Invalid decision: $decision');
-          break;
-      }
-      notifyListeners();
-    } else {
-      print('Product not found in pending orders');
-    }
-  }
 }
 
 class CouponInputField extends StatefulWidget {

@@ -115,7 +115,7 @@ class SubscriptionService {
         });
 
         // Send notification to the customer
-        await _sendNotification(subscription.user,
+        await _sendNotification(subscription.user.id,
             "Your subscription has been deactivated. Please make a payment to reactivate it.");
       }
     }
@@ -143,7 +143,7 @@ class SubscriptionService {
     var subscriptionDoc =
         await _firestore.collection('subscriptions').doc(subscriptionId).get();
     var subscription = Subscription.fromSnapshot(subscriptionDoc);
-    await _sendNotification(subscription.user,
+    await _sendNotification(subscription.user.id,
         "Your subscription has been reactivated. Thank you for your payment.");
   }
 

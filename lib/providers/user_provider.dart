@@ -129,7 +129,7 @@ class UserProvider with ChangeNotifier {
   String get name => _user.name;
   String get email => _user.email;
   String get contact => _user.contact;
-  Address? get address => _user.address as Address?;
+  Address? get address => _user.address;
   LatLng? get pinLocation => _user.pinLocation;
   String get profilePictureUrl => _user.profilePictureUrl;
   DateTime? get lastLoginDate => _user.lastLoginDate;
@@ -269,9 +269,9 @@ class UserProvider with ChangeNotifier {
   }
 
   void addFavoriteProduct(Product product) {
-    if (!_user.favoriteProductIds!.contains(product.id)) {
+    if (!_user.favoriteProductIds.contains(product.id)) {
       _user = _user.copyWith(
-          favoriteProductIds: [...?_user.favoriteProductIds, product.id]);
+          favoriteProductIds: [..._user.favoriteProductIds, product.id]);
       _userStreamController.add(_user);
       notifyListeners();
     }
@@ -280,7 +280,7 @@ class UserProvider with ChangeNotifier {
   void removeFavoriteProduct(Product product) {
     _user = _user.copyWith(
         favoriteProductIds:
-            _user.favoriteProductIds!.where((id) => id != product.id).toList());
+            _user.favoriteProductIds.where((id) => id != product.id).toList());
     _userStreamController.add(_user);
     notifyListeners();
   }
@@ -358,7 +358,7 @@ class UserProvider with ChangeNotifier {
 
   // Fetch methods
   Future<List<Product>> fetchFavorites() async {
-    if (_user.favoriteProductIds!.isEmpty) return [];
+    if (_user.favoriteProductIds.isEmpty) return [];
 
     try {
       final querySnapshot = await _firestore
@@ -438,7 +438,7 @@ class UserProvider with ChangeNotifier {
   }
 
   Stream<List<Product>> get favoritesStream {
-    if (_user.favoriteProductIds?.isEmpty ?? true) {
+    if (_user.favoriteProductIds.isEmpty ?? true) {
       return Stream.value([]);
     }
 

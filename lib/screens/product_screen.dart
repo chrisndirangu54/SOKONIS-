@@ -1,14 +1,21 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:grocerry/models/offer.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/subscription_model.dart';
+import 'package:grocerry/services/notification_service.dart';
 import 'package:grocerry/services/subscription_service.dart';
 import 'package:grocerry/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:grocerry/providers/product_provider.dart';
 import 'package:grocerry/providers/user_provider.dart'; // For adding/removing favorites
 import 'package:grocerry/providers/cart_provider.dart'; // For cart functionality
+import 'package:shimmer/shimmer.dart';
 import 'review_screen.dart'; // Import the review screen
 import 'package:grocerry/services/ai_service.dart';
 
@@ -28,13 +35,20 @@ class ProductScreen extends StatefulWidget {
 
 class ProductScreenState extends State<ProductScreen>
     with SingleTickerProviderStateMixin {
+  final StreamController<List<Product>> _predictedProductsController =
+      StreamController<List<Product>>.broadcast();
+  ProductScreenState();
   DateTime? _viewStartTime;
   Variety? selectedVariety; // Track the selected variety
   late AnimationController _controller;
+  late ScrollController _scrollController;
   late Subscription subscription;
   late SubscriptionService subscriptionService = SubscriptionService();
   Product? product;
-
+  double? discountedPrice;
+  Stream<Map<String, double?>?>? discountedPriceStream;
+  Stream<double?>? discountedPriceStream2;
+  late StreamSubscription<double?>? _discountedPriceSubscription;
   late final Animation<double> _scaleAnimation =
       Tween<double>(begin: 2.3, end: 2.7).animate(
     CurvedAnimation(
@@ -42,7 +56,9 @@ class ProductScreenState extends State<ProductScreen>
       curve: Curves.easeInOut,
     ),
   );
-
+  final List<Product> _genomicAlternatives = [];
+  Stream<List<Product>> get predictedProductsStream =>
+      _predictedProductsController.stream;
   late final Animation<double> _rotationAnimation = Tween<double>(
           begin: 0, end: 3.14) // 3.14 radians for 180 degrees
       .animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
@@ -50,14 +66,22 @@ class ProductScreenState extends State<ProductScreen>
   // Control the state of the selected variety and image index
   int selectedVarietyIndex = 0; // Changed variable name
   int currentImageIndex = 0;
-  
+  Offer? offer;
+
   var notes;
+  
+  late bool _isFlipped;
 
   get quantity => null;
 
   @override
   void initState() {
     super.initState();
+    // Initialize the ScrollController
+    _scrollController = ScrollController();
+   _loadPredictedProducts(); // Load initial data on initialization
+
+    // Initialize the AnimationController
     // Initialize the AnimationController
     _controller = AnimationController(
       vsync: this,
@@ -67,6 +91,28 @@ class ProductScreenState extends State<ProductScreen>
     _logProductView(product);
     _viewStartTime = DateTime.now();
     _fetchProductAnalytics();
+    
+    // Check if widget.product is not null before accessing its properties
+    if (widget.product != null) {
+      _discountedPriceSubscription =
+          widget.product!.discountedPriceStream2?.listen(
+        (price) {
+          setState(() {
+            discountedPriceStream2 = price as Stream<double?>?;
+          });
+        },
+      );
+
+      // Check if product has varieties before iterating
+      for (var variety in widget.product!.varieties) {
+        if (variety.discountedPriceStream != null) {
+          _listenToDiscountedPriceStream2(variety.discountedPriceStream!);
+        }
+      }
+        } else {
+      print("Product is null in HomeScreen initState");
+    }
+
   }
 
   void _selectVariety(Variety variety) {
@@ -77,11 +123,58 @@ class ProductScreenState extends State<ProductScreen>
 
   @override
   void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+      _predictedProductsController.close();
+
     _logTimeSpent(product, _viewStartTime);
     _controller.dispose();
     super.dispose();
   }
 
+    void _listenToDiscountedPriceStream2(Stream<Map<String, double?>?>? stream) {
+    if (stream != null) {
+      stream.listen((newPrice) {
+        setState(() {
+          // Extract the value for the 'variety' key
+          discountedPriceStream =
+              newPrice?['variety'] as Stream<Map<String, double?>?>?;
+        });
+      });
+    }
+  }
+
+  Future<void> _loadPredictedProducts() async {
+    try {
+      await Future.delayed(const Duration(seconds: 2)); // Mock delay
+      final List<Product> predictedProducts = [
+      ];
+      _predictedProductsController.add(predictedProducts);
+    } catch (e) {
+      _predictedProductsController.addError(e);
+    }
+  }
+
+  void _requestStockNotification(String productId) async {
+    NotificationService notificationService = NotificationService();
+    final token = await FirebaseMessaging.instance.getToken();
+
+    // Example data to be sent with the notification
+    Map<String, dynamic> notificationData = {
+      'productId': productId,
+      'action': 'stock_update',
+    };
+
+    // Call NotificationService to send a notification
+    await notificationService.sendNotification(
+      to: token!, // Replace with actual token if using FCM
+      title: 'Stock Alert!',
+      body: 'Your product with ID $productId is back in stock!',
+      data: notificationData,
+    );
+
+    print('Requesting notification for product: $productId');
+  }
   Future<void> _fetchProductAnalytics() async {
     final analyticsService = AnalyticsService();
     final analytics =
@@ -97,7 +190,7 @@ class ProductScreenState extends State<ProductScreen>
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'view',
       'productId': product!.id,
-      'userId': Provider.of<UserProvider>(context, listen: false).user!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
       'timestamp': DateTime.now(),
     });
   }
@@ -109,7 +202,7 @@ class ProductScreenState extends State<ProductScreen>
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'time_spent',
       'productId': product!.id,
-      'userId': Provider.of<UserProvider>(context, listen: false).user!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
       'timeSpent': timeSpent,
       'timestamp': DateTime.now(),
     });
@@ -119,7 +212,7 @@ class ProductScreenState extends State<ProductScreen>
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'click',
       'productId': product!.id,
-      'userId': Provider.of<UserProvider>(context, listen: false).user!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
       'timestamp': DateTime.now(),
     });
   }
@@ -157,7 +250,683 @@ class ProductScreenState extends State<ProductScreen>
           selectedVariety.imageUrls.length) as int; // Cycle through images
     });
   }
+  Widget _buildProductCard(Product? product, {required bool isGrid}) {
+    final productImageUrl = product!.pictureUrl.isNotEmpty
+        ? product.pictureUrl
+        : 'assets/images/basket.png';
+    final productName = product.name.isNotEmpty ? product.name : 'Mystery Item';
+    final productCategory = product.category;
+    final productReviewCount = product.reviewCount;
+    final productUnits = product.units;
+    final productPrice = product.discountedPriceStream2 != null
+        ? '\$${product.discountedPriceStream2}'
+        : 'Discover';
+    double? originalPrice =
+        product.basePrice; // Assuming you have an original price
 
+    String? couponDiscount;
+    // Calculate discount percentage if both prices are available
+    String? discountPercentage;
+    double? discountedPrice;
+
+    // Check variety's discounted price first
+    if (product.variety != null &&
+        product.variety!.discountedPriceStream != null) {
+      discountedPrice = product.variety!.discountedPriceStream as double?;
+    } else if (product.discountedPriceStream2 != null) {
+      discountedPrice = product.discountedPriceStream2 as double?;
+    }
+
+    if (discountedPrice != null && originalPrice > discountedPrice) {
+      double percentage =
+          ((originalPrice - discountedPrice) / originalPrice) * 100;
+      discountPercentage = '-${percentage.toStringAsFixed(0)}%';
+    }
+  
+    // Check if the product is in stock
+    final productProvider = Provider.of<ProductProvider>(context);
+    bool inStock = productProvider.isInStock(product);
+    const int highlyRatedThreshold = 100;
+    // Create a dynamic list of icons
+    List<IconDetail> dynamicIconsList = [
+      IconDetail(
+          image: 'assets/icons/LikeOutline.svg', head: 'Quality\nAssurance'),
+      IconDetail(
+          image: 'assets/icons/SpoonOutline.svg', head: 'Best In\nTaste'),
+    ];
+
+    // Add "Highly Rated" icon if the review count exceeds the threshold
+    if (product.reviewCount > highlyRatedThreshold) {
+      dynamicIconsList.add(
+        IconDetail(
+            image: 'assets/icons/StartOutline.svg', head: 'Highly\nRated'),
+      );
+    }
+
+// Conditionally add icons based on new fields
+    if (product.isFresh ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.water_drop, color: Colors.green, size: 28),
+          head: 'Freshness\nGuaranteed',
+        ),
+      );
+    }
+
+    if (product.isLocallySourced ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.location_on, color: Colors.blue, size: 28),
+          head: 'Locally\nSourced',
+        ),
+      );
+    }
+
+    if (product.isOrganic ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.eco, color: Colors.lightGreen, size: 28),
+          head: 'Organic\nChoice',
+        ),
+      );
+    }
+
+    if (product.hasHealthBenefits ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon:
+              const Icon(Icons.health_and_safety, color: Colors.red, size: 28),
+          head: 'Health\nBenefits',
+        ),
+      );
+    }
+
+    if (product.hasDiscounts ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.percent, color: Colors.orange, size: 28),
+          head: 'Great\nDiscounts',
+        ),
+      );
+    }
+
+    if (product.isSeasonal ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon:
+              const Icon(Icons.calendar_today, color: Colors.purple, size: 28),
+          head: 'Seasonal\nFavorites',
+        ),
+      );
+    }
+
+    if (product.isEcoFriendly ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.recycling, color: Colors.teal, size: 28),
+          head: 'Eco-Friendly',
+        ),
+      );
+    }
+
+    if (product.isSuperfood ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.star, color: Colors.amber, size: 28),
+          head: 'Superfoods',
+          image: '',
+        ),
+      );
+    }
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ProductScreen(productId: product.id ?? ''),
+          ),
+        );
+        _logProductView;
+        _logTimeSpent;
+        _logClick(product);
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isFlipped = true),
+        onExit: (_) => setState(() => _isFlipped = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          transform: _isFlipped
+              ? (Matrix4.identity()..rotateY(3.14))
+              : Matrix4.identity(),
+          curve: Curves.easeInOut,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: const [
+              BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 2),
+            ],
+          ),
+          child: _isFlipped
+              ? _buildBackSide(product, dynamicIconsList)
+              : _buildFrontSide(
+                  productImageUrl,
+                  productName,
+                  productPrice,
+                  discountPercentage,
+                  originalPrice,
+                  inStock,
+                  couponDiscount,
+                  productCategory,
+                  productReviewCount,
+                  productUnits,
+                ),
+        ),
+      ),
+    );
+  }
+
+// Front side of the product card with parallax scrolling, selectable varieties, cart button, and quantity selector
+  Widget _buildFrontSide(
+      String productImageUrl,
+      String productName,
+      String productPrice,
+      String? discountPercentage,
+      double? originalPrice,
+      bool inStock,
+      String? couponDiscount,
+      String? productCategory,
+      int? productReviewCount,
+      String? productUnits,
+      [List<Variety>? varieties]) {
+    Variety? selectedVariety =
+        varieties?.isNotEmpty ?? false ? varieties?.first : null;
+    Function(Variety)? onVarietySelected; // New callback for selecting variety
+    Function(int)? onQuantityChanged; // New callback for changing quantity
+    int? initialQuantity = 1; // Initial quantity for the selector
+
+    onAddToCart() {
+      // Assuming you have a CartProvider or similar for managing cart
+      var notes;
+      Provider.of<CartProvider>(context, listen: false).addItem(
+          product!, Provider.of<UserProvider>(context, listen: false).user, selectedVariety, initialQuantity, notes ?? '');
+      // Optionally show a snackbar or update UI
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${product!.name} added to cart')),
+      );
+    } // Change here from Function? to VoidCallback?
+
+    num averageRating = 0;
+    if (product!.reviews != null && product!.reviews!.isNotEmpty) {
+      averageRating = product!.reviews!
+              .map((review) => review.rating)
+              .reduce((a, b) => a + b) /
+          product!.reviews!.length;
+    }
+
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        final offset = _scrollController.offset;
+        final height = MediaQuery.of(context).size.height;
+        final position = (offset / height) * 2;
+        final scale = max(1.0, 1.0 + position / 3);
+
+        return Transform.translate(
+          offset: Offset(0, position * 30),
+          child: Transform.scale(
+            scale: scale,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          child: Image.network(
+                            selectedVariety != null &&
+                                    selectedVariety?.imageUrl != null
+                                ? selectedVariety!
+                                    .imageUrl // Removed incorrect '\$' and unnecessary string interpolation
+                                : productImageUrl,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, progress) =>
+                                progress == null
+                                    ? child
+                                    : _buildLoadingShimmer(),
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.error),
+                          ),
+                        ),
+                      ),
+
+                      Container(
+                        padding: const EdgeInsets.all(8.0),
+                        height: 120,
+                        width: MediaQuery.of(context).size.width / 2.5,
+                        decoration: BoxDecoration(
+                          color: primaryColor,
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(20),
+                            bottomRight: Radius.circular(20),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            Text(
+                              productCategory!,
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  letterSpacing: 5,
+                                  fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              productName,
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 5),
+                            Row(
+                              children: List.generate(
+                                5,
+                                (starIndex) => Icon(
+                                  Icons.star,
+
+                                  // Then use averageRating for your condition:
+                                  color: starIndex < averageRating
+                                      ? Colors.orange
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              " (${productReviewCount!} reviews)",
+                              style: const TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                if (discountPercentage != null)
+                                  Text(
+                                    '\$$originalPrice',
+                                    style: const TextStyle(
+                                      decoration: TextDecoration.lineThrough,
+                                      fontSize: 16,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                Text(
+                                  selectedVariety != null &&
+                                          selectedVariety?.price != null
+                                      ? '\$${selectedVariety!.price}'
+                                      : productPrice,
+                                  style: TextStyle(
+                                      color: Colors.orange.withOpacity(0.75),
+                                      fontSize: 16),
+                                ),
+                                Text(
+                                  "PER ${productUnits ?? ''}",
+                                  style: const TextStyle(
+                                      color: Colors.grey, fontSize: 16),
+                                )
+                              ],
+                            ),
+                            // Quantity selector
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove),
+                                  onPressed: initialQuantity > 1
+                                      ? () => onQuantityChanged!(
+                                          initialQuantity - 1)
+                                      : null,
+                                ),
+                                Text(initialQuantity.toString()),
+                                IconButton(
+                                  icon: const Icon(Icons.add),
+                                  onPressed: () =>
+                                      onQuantityChanged!(initialQuantity + 1),
+                                ),
+                              ],
+                            ),
+                            // Add to cart button
+                            ElevatedButton(
+                              onPressed: inStock ? onAddToCart : null,
+                              child: Text(
+                                  inStock ? 'Add to Cart' : 'Out of Stock'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Varieties list with images below product info
+                      if (varieties!.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(8.0),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: ListView(
+                            scrollDirection: Axis
+                                .horizontal, // Scroll horizontally instead of vertically
+                            children: varieties.map((variety) {
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    selectedVariety = variety;
+                                    onVarietySelected!(variety);
+                                  });
+                                },
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 25,
+                                      height: 25,
+                                      margin:
+                                          const EdgeInsets.only(right: 8.0),
+                                      child: ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(8.0),
+                                        child: Image.network(
+                                          variety.imageUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  const Icon(Icons.error,
+                                                      size: 24),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: ListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(variety.name),
+                                        subtitle: Text.rich(
+                                          TextSpan(
+                                            children: [
+                                              if (selectedVariety!
+                                                          .discountedPriceStream !=
+                                                      null &&
+                                                  selectedVariety!
+                                                          .discountedPriceStream! !=
+                                                      0.0)
+                                                TextSpan(
+                                                  text:
+                                                      ' \$${selectedVariety!.price.toStringAsFixed(2) ?? 'N/A'}',
+                                                  style: const TextStyle(
+                                                    decoration: TextDecoration
+                                                        .lineThrough,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              TextSpan(
+                                                text: selectedVariety!
+                                                                .discountedPriceStream !=
+                                                            null &&
+                                                        selectedVariety!
+                                                                .discountedPriceStream! !=
+                                                            0.0
+                                                    ? ' \$${selectedVariety!.discountedPriceStream?.toStringAsFixed(2) ?? 'N/A'}'
+                                                    : selectedVariety!.price !=
+                                                            null
+                                                        ? ' \$${selectedVariety!.price.toStringAsFixed(2)}'
+                                                        : ' Price not available',
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        trailing: selectedVariety == variety
+                                            ? const Icon(Icons.check,
+                                                color: Colors.green)
+                                            : null,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                    ],
+                  ),
+                  // Rest of the Stack elements (discounts, out of stock, coupon)
+                  if (discountPercentage != null)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          discountPercentage,
+                          style: const TextStyle(
+                              color: Color.fromARGB(255, 180, 177, 177),
+                              fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  if (!inStock)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.grey,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'Out of Stock',
+                          style: TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  // Coupon badge overlay
+                  if (couponDiscount != null)
+                    Positioned(
+                      bottom: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          'Coupon: $couponDiscount',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  // Offer title overlay
+                  if (offer != null && product!.id == offer!.productId)
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          offer!.title,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
+                        ),
+                      ),
+                    ),
+
+                  // Out of stock options
+                  if (!inStock)
+                    Positioned(
+                      bottom: 40, // Adjust position as needed
+                      left: 8,
+                      right: 8,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Request notification when back in stock
+                          ElevatedButton(
+                            onPressed: () {
+                              _requestStockNotification(product!.id);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                            ),
+                            child: const Text(
+                              'Notify Me When Back in Stock',
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // Recommend genomic alternatives
+                          if (_genomicAlternatives.isNotEmpty)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Recommended Alternatives:',
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                ..._genomicAlternatives.map((alternative) {
+                                  return ListTile(
+                                    leading: Image.network(
+                                      alternative.pictureUrl,
+                                      width: 40,
+                                      height: 40,
+                                      fit: BoxFit.cover,
+                                    ),
+                                    title: Text(
+                                      alternative.name,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    subtitle: Text(
+                                      'Price: ${alternative.basePrice}',
+                                      style: const TextStyle(fontSize: 10),
+                                    ),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => ProductScreen(
+                                              productId: alternative.id),
+                                        ),
+                                      );
+                                                                        },
+                                  );
+                                }),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+// Back side of the product card (e.g., dynamic icons list)
+  Widget _buildBackSide(Product product, List<IconDetail> dynamicIconsList) {
+    return Container(
+      padding: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        color: Colors.blueAccent,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            'Product Highlights',
+            style: TextStyle(color: Colors.white, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            children: dynamicIconsList
+                .map((iconDetail) => Column(
+                      children: [
+                        SvgPicture.asset(iconDetail.image!,
+                            height: 30, width: 30),
+                        const SizedBox(height: 4),
+                        Text(
+                          iconDetail.head,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
+                        ),
+                      ],
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ProductScreen(productId: product.id ?? ''),
+                ),
+              );
+              _logProductView;
+              _logTimeSpent;
+              _logClick(
+                product,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blueAccent,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: const Text(
+              'View Details',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Loading shimmer effect
+  Widget _buildLoadingShimmer() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: Container(color: Colors.white),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -173,6 +942,13 @@ class ProductScreenState extends State<ProductScreen>
     if (product == null) {
       return const Scaffold(body: Center(child: Text("Product not found")));
     }
+    num averageRating = 0;
+    if (product.reviews != null && product.reviews!.isNotEmpty) {
+      averageRating = product.reviews!
+              .map((review) => review.rating)
+              .reduce((a, b) => a + b) /
+          product.reviews!.length;
+    }
 
     // Ensure the variety is initialized
     if (selectedVariety == null && product.varieties.isNotEmpty) {
@@ -183,6 +959,7 @@ class ProductScreenState extends State<ProductScreen>
     final int remainingStock = productProvider.getRemainingStock(product);
     final bool inStock = productProvider.isInStock(product);
 
+    // Create a dynamic list of icons
     List<IconDetail> dynamicIconsList = [
       IconDetail(
           image: 'assets/icons/LikeOutline.svg', head: 'Quality\nAssurance'),
@@ -190,44 +967,90 @@ class ProductScreenState extends State<ProductScreen>
           image: 'assets/icons/SpoonOutline.svg', head: 'Best In\nTaste'),
     ];
 
+    // Add "Highly Rated" icon if the review count exceeds the threshold
     if (product.reviewCount > highlyRatedThreshold) {
-      dynamicIconsList.add(IconDetail(
-          image: 'assets/icons/StartOutline.svg', head: 'Highly\nRated'));
+      dynamicIconsList.add(
+        IconDetail(
+            image: 'assets/icons/StartOutline.svg', head: 'Highly\nRated'),
+      );
     }
-    if (product.isFresh) {
-      dynamicIconsList.add(IconDetail(
-          image: 'assets/icons/FreshOutline.svg',
-          head: 'Freshness\nGuaranteed'));
+
+// Conditionally add icons based on new fields
+    if (product.isFresh ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.water_drop, color: Colors.green, size: 28),
+          head: 'Freshness\nGuaranteed',
+        ),
+      );
     }
-    if (product.isLocallySourced) {
-      dynamicIconsList.add(IconDetail(
-          image: 'assets/icons/LocalOutline.svg', head: 'Locally\nSourced'));
+
+    if (product.isLocallySourced ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.location_on, color: Colors.blue, size: 28),
+          head: 'Locally\nSourced',
+        ),
+      );
     }
-    if (product.isOrganic) {
-      dynamicIconsList.add(IconDetail(
-          image: 'assets/icons/OrganicOutline.svg', head: 'Organic\nChoice'));
+
+    if (product.isOrganic ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.eco, color: Colors.lightGreen, size: 28),
+          head: 'Organic\nChoice',
+        ),
+      );
     }
-    if (product.hasHealthBenefits) {
-      dynamicIconsList.add(IconDetail(
-          image: 'assets/icons/HealthOutline.svg', head: 'Health\nBenefits'));
+
+    if (product.hasHealthBenefits ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon:
+              const Icon(Icons.health_and_safety, color: Colors.red, size: 28),
+          head: 'Health\nBenefits',
+        ),
+      );
     }
-    if (product.hasDiscounts) {
-      dynamicIconsList.add(IconDetail(
-          image: 'assets/icons/DiscountOutline.svg', head: 'Great\nDiscounts'));
+
+    if (product.hasDiscounts ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.percent, color: Colors.orange, size: 28),
+          head: 'Great\nDiscounts',
+        ),
+      );
     }
-    if (product.isSeasonal) {
-      dynamicIconsList.add(IconDetail(
-          image: 'assets/icons/SeasonalOutline.svg',
-          head: 'Seasonal\nFavorites'));
+
+    if (product.isSeasonal ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon:
+              const Icon(Icons.calendar_today, color: Colors.purple, size: 28),
+          head: 'Seasonal\nFavorites',
+        ),
+      );
     }
-    if (product.isEcoFriendly) {
-      dynamicIconsList.add(IconDetail(
-          image: 'assets/icons/GreenOutline.svg', head: 'Eco-Friendly'));
+
+    if (product.isEcoFriendly ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.recycling, color: Colors.teal, size: 28),
+          head: 'Eco-Friendly',
+        ),
+      );
     }
-    if (product.isSuperfood) {
-      dynamicIconsList.add(IconDetail(
-          image: 'assets/icons/SuperfoodOutline.svg', head: 'Superfoods'));
+
+    if (product.isSuperfood ?? false) {
+      dynamicIconsList.add(
+        IconDetail(
+          icon: const Icon(Icons.star, color: Colors.amber, size: 28),
+          head: 'Superfoods',
+          image: '',
+        ),
+      );
     }
+
 
     return Scaffold(
       backgroundColor: primaryColor,
@@ -325,15 +1148,28 @@ class ProductScreenState extends State<ProductScreen>
                       width: 1.0,
                     ),
                   ),
-                  child: Text(
-                    "⭐ (${product.reviewCount} reviews)",
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color: Colors.blueGrey, // To indicate it's clickable
-                      decoration: TextDecoration
-                          .underline, // Underline for clickable text
-                    ),
-                  ),
+                  child: Row(
+  children: [
+    // Star rating
+    ...List.generate(
+      5,
+      (starIndex) => Icon(
+        Icons.star,
+        color: starIndex < (averageRating ?? 0) // Use null-safe default
+            ? Colors.orange
+            : Colors.grey,
+      ),
+    ),
+    // Review count text
+    Text(
+      " (${product.reviewCount} reviews)",
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      maxLines: 1, // Named argument
+      overflow: TextOverflow.ellipsis,
+    ),
+  ],
+),
+                
                 ),
               ),
               const SizedBox(height: 5),
@@ -463,7 +1299,7 @@ class ProductScreenState extends State<ProductScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 if (selectedVariety != null &&
-                                    selectedVariety!.discountedPrice !=
+                                    selectedVariety!.discountedPriceStream !=
                                         null) ...[
                                   Text(
                                     '\$${selectedVariety!.price}',
@@ -475,7 +1311,7 @@ class ProductScreenState extends State<ProductScreen>
                                   ),
                                   const SizedBox(height: 10),
                                   Text(
-                                    '\$${selectedVariety!.discountedPrice!.toStringAsFixed(2)}',
+                                    '\$${selectedVariety!.discountedPriceStream!.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                         color: Colors.green, fontSize: 35),
                                   ),
@@ -497,7 +1333,7 @@ class ProductScreenState extends State<ProductScreen>
                                   ),
                                   const SizedBox(height: 10),
                                   Text(
-                                    '\$${product.discountedPrice.toStringAsFixed(2)}',
+                                    '\$${product.discountedPriceStream2?.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                         color: Colors.green, fontSize: 35),
                                   ),
@@ -518,7 +1354,7 @@ class ProductScreenState extends State<ProductScreen>
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          "PER ${product?.units ?? ''}",
+                                          "PER ${product.units ?? ''}",
                                           style: const TextStyle(
                                               color: Colors.grey, fontSize: 25),
                                         )
@@ -564,7 +1400,8 @@ class ProductScreenState extends State<ProductScreen>
                               children: dynamicIconsList.map((iconDetail) {
                                 return Column(
                                   children: [
-                                    SvgPicture.asset(iconDetail.image),
+                                    if (iconDetail.image != null)
+                                      SvgPicture.asset(iconDetail.image!),
                                     const SizedBox(height: 5),
                                     Text(iconDetail.head,
                                         style: const TextStyle(
@@ -584,6 +1421,48 @@ class ProductScreenState extends State<ProductScreen>
                   ),
                 ),
               ),
+              const SizedBox(height: 20),
+                                        StreamBuilder<List<Product>>(
+        stream: predictedProductsStream, // Use the stream
+        builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return const Center(child: CircularProgressIndicator());
+                              } else if (snapshot.hasError) {
+                                return Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red));
+                              } else {
+                                final recommendedProducts = snapshot.data ?? [];
+                                if (recommendedProducts.isEmpty) {
+                                  return const Text('No recommended products available.', style: TextStyle(color: Colors.grey));
+                                }
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Recommended Products',
+                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      height: 200,
+                                      child: ListView.builder(
+                                        scrollDirection: Axis.horizontal,
+                                        itemCount: recommendedProducts.length,
+                                        itemBuilder: (context, index) {
+                                          return Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            child: SizedBox(
+                                              width: 150,
+                                              child: _buildProductCard(recommendedProducts[index], isGrid: false),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }
+                            },
+                          ),
             ],
           ),
         ),
@@ -884,13 +1763,23 @@ Widget buildQuantityManager(BuildContext context) {
   }
 }
 
+extension on Stream<Map<String, double?>?> {
+  toStringAsFixed(int i) {}
+}
+
+extension on Stream<double?>? {
+  toStringAsFixed(int i) {}
+}
+
 extension on Product {
   get quantity => null;
 }
 
-class IconDetail {
-  final String image;
-  final String head;
 
-  IconDetail({required this.image, required this.head});
+class IconDetail {
+  IconDetail({this.image, required this.head, this.icon});
+
+  final String head;
+  final String? image;
+  final Icon? icon;
 }
