@@ -1,13 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:grocerry/models/product.dart';
+import 'package:grocerry/models/user.dart';
 
 class Subscription {
-  String product;
-  String user;
+  Product product;
+  User user;
   int quantity;
   DateTime nextDelivery;
   bool isActive;
   int frequency;
-
+  Variety variety;
   double price;
 
   var activationDate;
@@ -21,7 +23,7 @@ class Subscription {
     required this.nextDelivery,
     required this.frequency,
     this.isActive = true,
-    required this.price,
+    required this.price, required this.variety,
   });
 
   Map<String, dynamic> toMap() {
@@ -43,7 +45,7 @@ class Subscription {
       nextDelivery: (snapshot['nextDelivery'] as Timestamp).toDate(),
       isActive: snapshot['isActive'],
       frequency: snapshot['frequency'],
-      price: snapshot['price'],
+      price: snapshot['price'], variety: snapshot['variety'],
     );
   }
 
@@ -59,10 +61,10 @@ class Subscription {
       isActive: isActive ?? this.isActive,
       quantity: quantity ?? this.quantity,
       frequency: frequency ?? this.frequency,
-      user: '',
-      product: '',
+      user: user,
+      product: product,
       nextDelivery: nextDelivery, // Default to 7 days from now
-      price: price ?? this.price,
+      price: price ?? this.price, variety: variety,
     );
   }
 }

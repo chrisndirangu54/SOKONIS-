@@ -16,18 +16,20 @@ class OfferProvider with ChangeNotifier {
 
   List<Offer> get offers => [..._offers];
 
-  Future<void> fetchOffers() async {
+  Future<List<Offer>> fetchOffers() async {
     try {
       final snapshot =
           await FirebaseFirestore.instance.collection('offers').get();
       _offers = snapshot.docs
           .map((doc) =>
-              Offer.fromFirestore(doc.data() as Map<String, dynamic>, doc.id))
+              Offer.fromFirestore(doc.data(), doc.id))
           .toList();
       notifyListeners();
     } catch (e) {
       print('Error fetching offers: $e');
+      return _offers;
     }
+    return _offers;
   }
 
   void _listenToOffers() {

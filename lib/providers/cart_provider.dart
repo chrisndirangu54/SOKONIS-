@@ -9,10 +9,12 @@ import 'package:grocerry/models/subscription_model.dart';
 import 'package:grocerry/providers/order_provider.dart' as model;
 import 'package:grocerry/providers/product_provider.dart';
 import 'package:grocerry/providers/user_provider.dart';
+import 'package:grocerry/providers/wallet_provider.dart';
 import 'package:grocerry/screens/pending_deliveries_screen.dart';
 import 'package:grocerry/services/eta_service.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/cart_item.dart';
 import '../models/product.dart';
@@ -23,12 +25,17 @@ class CartProvider with ChangeNotifier {
   final _cartStreamController =
       StreamController<Map<String, CartItem>>.broadcast();
 
+  List<Map<String, dynamic>> _pendingOrders = [];
+
   Map<String, CartItem> get items => _items;
+
+  List<Map<String, dynamic>> get pendingOrders => _pendingOrders;
 
   Stream<Map<String, CartItem>> get cartStream => _cartStreamController.stream;
 
-  void addItem(
-      Product product, model.User user, Variety? selectedVariety, quantity) {
+  void addItem(Product product, model.User user, Variety? selectedVariety,
+      quantity, notes,
+      [status]) {
     String cartKey =
         '${product.id}_${user.id}'; // Key based on product ID and user ID
     double priceToUse;
@@ -52,13 +59,14 @@ class CartProvider with ChangeNotifier {
           product: existingItem.product,
           quantity: existingItem.quantity + 1,
           price: priceToUse,
+          notes: notes,
         ),
       );
     } else {
       _items.putIfAbsent(
         cartKey,
         () => CartItem(
-            user: user, product: product, quantity: 1, price: priceToUse),
+            user: user, product: product, quantity: 1, price: priceToUse, notes: null),
       );
     }
     _cartStreamController.add(_items); // Notify listeners about the cart update
@@ -71,7 +79,15 @@ class CartProvider with ChangeNotifier {
         '${product.id}_${user.id}'; // Key based on product ID and user ID
     _items.remove(cartKey);
     _cartStreamController.add(_items); // Notify listeners about the cart update
+    _pendingOrders.removeWhere((order) => order['productId'] == product.id);
     notifyListeners();
+  }
+
+  void updateItemNotes(Product product, String? notes) {
+    if (items.containsKey(product.id)) {
+      items[product.id]!.notes = notes;
+      notifyListeners();
+    }
   }
 
   // Method to get the total amount of the cart
@@ -92,7 +108,7 @@ class CartProvider with ChangeNotifier {
 
   // Method to update the quantity (increment or decrement)
   void updateQuantity(
-      product, String user, bool increment, Variety? selectedVariety) {
+      product, User user, bool increment, Variety? selectedVariety) {
     double priceToUse;
     if (selectedVariety != null && selectedVariety.discountedPrice != null) {
       priceToUse = selectedVariety.discountedPrice!; // Use the discounted price
@@ -116,7 +132,7 @@ class CartProvider with ChangeNotifier {
           quantity: increment
               ? existingItem.quantity + 1
               : (existingItem.quantity > 1 ? existingItem.quantity - 1 : 1),
-          price: priceToUse,
+          price: priceToUse, notes: null,
         ),
       );
       _cartStreamController
@@ -126,7 +142,7 @@ class CartProvider with ChangeNotifier {
   }
 
   // Method to fetch the quantity of a specific item
-  int getItemQuantity(String product, String user) {
+  int getItemQuantity(Product product, User user) {
     String cartKey = '${product}_$user'; // Key based on product ID and user ID
     if (_items.containsKey(cartKey)) {
       return _items[cartKey]?.quantity ?? 0;
@@ -150,7 +166,10 @@ class CartProvider with ChangeNotifier {
   late double deliveryFee;
   late double totalWithDelivery;
   late double productDiscounts;
+
   Set<String> get selectedItems => _selectedItems;
+  
+  User? user;
 
   // Toggle the selection of an item
   void toggleItemSelection(String productId, [Set<String>? _selectedItems]) {
@@ -163,10 +182,10 @@ class CartProvider with ChangeNotifier {
   }
 
   // Only process the selected items
-  void processSelectedItemsCheckout(BuildContext context, _selectedItems) {
+  void processSelectedItemsCheckout(BuildContext context, selectedItems) {
     final cart = Provider.of<CartProvider>(context, listen: false);
     final selectedCartItems = cart.items.values
-        .where((item) => _selectedItems.contains(item.product.id))
+        .where((item) => selectedItems.contains(item.product.id))
         .toList();
 
     if (selectedCartItems.isEmpty) {
@@ -232,12 +251,7 @@ class CartProvider with ChangeNotifier {
   }
 
   // Method to show success messages
-  void updateItemNotes(Product product, String? notes) {
-    if (items.containsKey(product.id)) {
-      items[product.id]!.notes = notes;
-      notifyListeners();
-    }
-  }
+
   // Updated method to show payment methods for selected items
   void _selectPaymentMethod(List<CartItem> selectedItems, dynamic context) {
     showModalBottomSheet(
@@ -266,12 +280,104 @@ class CartProvider with ChangeNotifier {
                       selectedItems, context, totalWithDelivery);
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.account_balance_wallet),
+                title: const Text('Wallet'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _processWalletPayment(selectedItems, context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.local_shipping),
+              title: const Text('Cash on Delivery'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _processCODPayment(selectedItems, context);
+              },
+            ),
             ],
           ),
         );
       },
     );
   }
+
+
+ Future<String?> _processWalletPayment(List<CartItem> items, BuildContext context) async {
+  final totalCost = items.fold(0.0, (sum, item) => sum + (item.price * item.quantity));
+  final walletProvider = Provider.of<WalletProvider>(context, listen: false);
+  
+  if (walletProvider.balance >= totalCost) {
+    walletProvider.updateBalance(-totalCost); // Deduct from wallet
+    _showSuccessDialog('Wallet Payment Successful', items, context);
+    return 'Wallet Payment Successful';
+  } else {
+    _showErrorSnackBar('Insufficient wallet balance.', context);
+    return null;
+  }
+}
+
+void _processCODPayment(List<CartItem> items, BuildContext context) async {
+  try {
+    // Convert cart items to order items
+    final List<model.OrderItem> orderItems = _convertToOrderItems(items, context);
+    
+    // Get the current user
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.currentUser;
+
+    // Calculate total amount for the order
+    double totalAmount = items.fold(
+      0.0, 
+      (sum, item) => sum + (item.price * item.quantity)
+    );
+
+    // Create and add the order to the backend
+    final orderProvider = Provider.of<model.OrderProvider>(context, listen: false);
+    final newOrder = model.Order(
+      orderId: DateTime.now().millisecondsSinceEpoch.toString(),
+      status: 'Pending Delivery',
+      user: user.id,
+      totalAmount: totalAmount,
+      items: orderItems,
+      date: DateTime.now(),
+      address: user.address,
+      paymentMethod: 'COD',
+    );
+
+    orderProvider.addOrder(newOrder);
+
+    // Remove items from the cart after placing the order
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    for (var item in items) {
+      cartProvider.removeItem(item.product, user);
+    }
+
+    // Show success dialog
+    _showSuccessDialog('Cash on Delivery Order Placed', items, context);
+
+  } catch (e) {
+    // Log the error for debugging purposes
+    print('Error processing COD payment: $e');
+    
+    // Show an error message to the user
+    _showErrorSnackBar('Failed to place COD order. Please try again.', context);
+  }
+}
+
+// Helper method to convert CartItems to OrderItems
+List<model.OrderItem> _convertToOrderItems(List<CartItem> cartItems, BuildContext context) {
+  final userProvider = Provider.of<UserProvider>(context, listen: false);
+  final user = userProvider.currentUser;
+
+  return cartItems.map((cartItem) => model.OrderItem(
+    product: cartItem.product,
+    quantity: cartItem.quantity,
+    price: cartItem.price,
+    notes: cartItem.notes, date: DateTime.now(), user: user!,
+  )).toList();
+}
 
   Future<String?> _processVisaMasterCardPayment(List<CartItem> selectedItems,
       double totalWithDelivery, BuildContext context) async {
@@ -343,42 +449,103 @@ class CartProvider with ChangeNotifier {
     }
   }
 
-  Future<String?> _processMpesaPayment(List<CartItem> selectedItems,
-      BuildContext context, double totalWithDelivery) async {
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final cart = Provider.of<CartProvider>(context, listen: false);
+Future<void> savePhoneNumber(String phoneNumber) async {
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  await prefs.setString('savedPhoneNumber', phoneNumber);
+}
 
-    try {
-      final HttpsCallable callable =
-          FirebaseFunctions.instance.httpsCallable('initiateMpesaPayment');
-      final response = await callable.call({
-        'amount': totalWithDelivery,
-        'phoneNumber': '2547XXXXXXXX',
-        'paybillNumber': '123456',
-        'accountNumber': 'YourAccountNumber',
-      });
+Future<String?> getSavedPhoneNumber() async {
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  return prefs.getString('savedPhoneNumber');
+}
 
-      if (!context.mounted) return null;
+Future<String?> _processMpesaPayment(List<CartItem> selectedItems,
+    BuildContext context, double totalWithDelivery) async {
+  final userProvider = Provider.of<UserProvider>(context, listen: false);
+  final cart = Provider.of<CartProvider>(context, listen: false);
 
-      if (response.data['status'] == 'success') {
-        _showSuccessDialog('M-Pesa Payment Initiated', selectedItems, context);
+  String? phoneNumber = await getSavedPhoneNumber() ?? '2547XXXXXXXX';
 
-        for (var item in selectedItems) {
-          cart.removeItem(
-              item.product.id as Product, userProvider.currentUser.id);
-        }
+  if (phoneNumber == '2547XXXXXXXX' || phoneNumber == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Please enter your phone number'),
+        action: SnackBarAction(
+          label: 'ADD NUMBER',
+          onPressed: () async {
+            String? enteredNumber = await showDialog<String>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Enter Phone Number'),
+                content: TextField(
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(hintText: "07XXXXXXXX"),
+                  onChanged: (value) => phoneNumber = value,
+                ),
+                actions: [
+                  TextButton(
+                    child: const Text('CANCEL'),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  TextButton(
+                    child: const Text('SAVE & OK'),
+                    onPressed: () {
+                      if (phoneNumber != null && phoneNumber!.length == 10) {
+                        Navigator.of(context).pop(phoneNumber);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please enter a valid 10-digit number')),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
+            );
 
-        return 'M-Pesa Payment Successful';
-      } else {
-        _showErrorSnackBar('M-Pesa Payment Failed', context);
-        return null; // Return null on failure
-      }
-    } catch (e) {
-      if (!context.mounted) return null;
-      _showErrorSnackBar('M-Pesa Payment Failed', context);
-      return null; // Return null on failure
-    }
+            if (enteredNumber != null) {
+              phoneNumber = enteredNumber;
+              await savePhoneNumber(phoneNumber!);
+              // Recursively call to process payment with new number
+              await _processMpesaPayment(selectedItems, context, totalWithDelivery);
+            }
+          },
+        ),
+      ),
+    );
+    return null;
   }
+
+  try {
+    final HttpsCallable callable =
+        FirebaseFunctions.instance.httpsCallable('initiateMpesaPayment');
+    final response = await callable.call({
+      'amount': totalWithDelivery,
+      'phoneNumber': phoneNumber,
+      'paybillNumber': '123456',
+      'accountNumber': 'YourAccountNumber',
+    });
+
+    if (!context.mounted) return null;
+
+    if (response.data['status'] == 'success') {
+      _showSuccessDialog('M-Pesa Payment Initiated', selectedItems, context);
+
+      for (var item in selectedItems) {
+        cart.removeItem(item.product, userProvider.currentUser.id);
+      }
+
+      return 'M-Pesa Payment Successful';
+    } else {
+      _showErrorSnackBar('M-Pesa Payment Failed', context);
+      return null;
+    }
+  } catch (e) {
+    if (!context.mounted) return null;
+    _showErrorSnackBar('M-Pesa Payment Failed', context);
+    return null;
+  }
+}
 
   // Updated success dialog to process only selected items
   void _showSuccessDialog(
@@ -399,7 +566,7 @@ class CartProvider with ChangeNotifier {
     final List<model.OrderItem> orderItems = _convertToOrderItems(cart
         .items.values
         .where((item) => _selectedItems.contains(item.product.id))
-        .toList()) as List<model.OrderItem>;
+        .toList(), context);
 
     showDialog(
       context: context,
@@ -420,16 +587,16 @@ class CartProvider with ChangeNotifier {
                   ),
                   items: orderItems,
                   date: DateTime.now(),
-                  address: user.address,
+                  address: user.address, paymentMethod: '',
                 ),
               );
 
               for (var product in orderedProducts) {
                 productProvider.updatePurchaseCount(
-                  product.id,
+                  product,
                   product.purchaseCount + cart.items[product.id]!.quantity,
                 );
-                userProvider.addRecentlyBoughtProduct(product.id);
+                userProvider.addRecentlyBoughtProduct(product);
               }
 
               Navigator.of(ctx).pop();
@@ -457,37 +624,70 @@ class CartProvider with ChangeNotifier {
         .get();
     return snapshot.docs.map((doc) => Subscription.fromSnapshot(doc)).toList();
   }
-
-Future<double> calculateDeliveryFee(LatLng origin, LatLng destination) async {
-  try {
-    final activeSubscriptions = await _fetchActiveSubscriptions();
-
-    // Check if the total price of all active subscriptions is more than 10,000
-    final totalSubscriptionPrice = activeSubscriptions.fold<double>(
-      0,
-      (sum, subscription) => sum + (subscription.price ?? 0),
-    );
-
-    if (totalSubscriptionPrice > 10000) {
-      print('Delivery fee: Free (Total subscription price > 10000)');
-      return 0.0; // If the total price of subscriptions exceeds 10,000, make delivery free
-    } else {
-      // Proceed with calculating delivery fee based on distance
-      final etaService = ETAService('YOUR_GOOGLE_MAPS_API_KEY');
-      final etaAndDistance = await etaService.calculateETAAndDistance(origin, destination);
-
-      final distanceInKm = etaAndDistance['distance'] as double;
-      final calculatedDeliveryFee = distanceInKm * 40; // $40 per km
-      return calculatedDeliveryFee;
-    }
-  } catch (e) {
-    print('Error calculating delivery fee: $e');
-    // Return a default value in case of an error
-    return 0.0; // Or you could return a different default value or throw an exception
-  }
+// In your OrderProvider or wherever you have this method:
+void selectPaymentMethodWithoutCOD(List<CartItem> selectedItems, dynamic context) {
+  showModalBottomSheet(
+    context: context,
+    builder: (_) {
+      return Container(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.credit_card),
+              title: const Text('Visa/MasterCard'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _processVisaMasterCardPayment(selectedItems, totalWithDelivery, context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.phone_android),
+              title: const Text('M-Pesa Paybill'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _processMpesaPayment(selectedItems, context, totalWithDelivery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_balance_wallet),
+              title: const Text('Wallet'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _processWalletPayment(selectedItems, context);
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }
+  Future<void> calculateDeliveryFee(LatLng origin, LatLng destination) async {
+    try {
+      final activeSubscriptions = await _fetchActiveSubscriptions();
 
+      if (activeSubscriptions.isNotEmpty) {
+        // If the user has an active subscription, make the delivery free
+        deliveryFee = 0.0;
+        print('Delivery fee: Free (Active subscription)');
+      } else {
+        final etaService = ETAService('YOUR_GOOGLE_MAPS_API_KEY');
+        final etaAndDistance =
+            await etaService.calculateETAAndDistance(origin, destination);
 
+        final distanceInKm = etaAndDistance['distance'] as double;
+        deliveryFee = distanceInKm * 40; // $40 per km
+        print('Delivery fee: \$${deliveryFee.toStringAsFixed(2)}');
+      }
+
+      // Notify listeners that the delivery fee has changed
+      notifyListeners();
+    } catch (e) {
+      print('Error calculating delivery fee: $e');
+    }
+  }
 
   Future<List<Map<String, dynamic>>> fetchQualifiedCoupons(
       List<CartItem> cartItems,
@@ -660,72 +860,50 @@ Future<double> calculateDeliveryFee(LatLng origin, LatLng destination) async {
     });
   }
 
-    // New method to send order for confirmation
-  void sendOrderForConfirmation(BuildContext context, Set<String> selectedItems, Function onConfirmationReceived) {
-    final itemsToConfirm = cart.items.values
-        .where((item) => selectedItems.contains(item.product.id))
-        .map((item) => {
-              'productId': item.product.id,
-              'quantity': item.quantity,
-              'notes': item.notes,
-              'status': 'pending',
-              // Add any other necessary data here...
-            })
-        .toList();
+  // Handle Attendant's decision to confirm, decline, or charge more
+  void handleAttendantDecision(String product, String decision,
+      {double? newPrice}) {
+    // Find the corresponding item in the pending orders
+    final orderIndex =
+        _pendingOrders.indexWhere((order) => order['productId'] == product);
 
-    // Here you'd typically interact with a backend service to send the data.
-    // For simplicity, we're simulating this with a local function:
-    _simulateBackendConfirmation(itemsToConfirm, onConfirmationReceived);
-  }
+    if (orderIndex != -1) {
+      final order = _pendingOrders[orderIndex];
 
-  // Simulated backend confirmation (replace with actual API call)
-  void _simulateBackendConfirmation(List<Map<String, dynamic>> items, Function onConfirmationReceived) {
-    Future.delayed(const Duration(seconds: 3), () {
-      // Simulated confirmation response from backend
-      List<Map<String, dynamic>> confirmedItems = items.map((item) {
-        if (item['notes'] != null && item['notes'].isNotEmpty) {
-          item['status'] = 'pending_attendant'; // Needs attendant check
-        } else {
-          item['status'] = 'confirmed'; // No notes, auto-confirm
-        }
-        return item;
-      }).toList();
-      onConfirmationReceived(confirmedItems);
-    });
-  }
-
-  // Method to handle attendant's decision
-  void handleAttendantDecision(String productId, String decision) {
-    if (items.containsKey(productId)) {
       switch (decision) {
         case 'confirm':
-          items[productId]!.status = 'confirmed';
+          // Confirm the item if no price change is needed
+          _pendingOrders[orderIndex]['status'] = 'confirmed';
+          if (newPrice != null) {
+            _pendingOrders[orderIndex]['price'] = newPrice;
+          }
           break;
+
         case 'decline':
-          items[productId]!.status = 'declined';
+          // Decline the item
+          _pendingOrders[orderIndex]['status'] = 'declined';
           break;
+
         case 'chargeMore':
-          // Here you would typically update the price or show a dialog for price adjustment
-          items[productId]!.status = 'price_adjustment';
+          // Apply a price increase and set status to 'charge_more'
+          if (newPrice != null) {
+            _pendingOrders[orderIndex]['status'] = 'Extra Cost';
+            _pendingOrders[orderIndex]['price'] = newPrice;
+          }
+          break;
+
+        default:
+          // Handle invalid decision or unrecognized action
+          print('Invalid decision: $decision');
           break;
       }
       notifyListeners();
+    } else {
+      print('Product not found in pending orders');
     }
   }
+}
 
-  // Update processSelectedItemsCheckout method
-  void processSelectedItemsCheckout(BuildContext context, Set<String> selectedItems) {
-    final itemsToCheckout = cart.items.values
-        .where((item) => selectedItems.contains(item.product.id) && item.status == 'confirmed')
-        .map((item) => {
-              'productId': item.product.id,
-              'quantity': item.quantity,
-              'notes': item.notes,
-              // other necessary data...
-            })
-        .toList();
-}
-}
 class CouponInputField extends StatefulWidget {
   final Function(String) onCouponApplied;
 
@@ -789,3 +967,5 @@ class CouponList extends StatelessWidget {
 class _convertToOrderItems {
   _convertToOrderItems(List<CartItem> list);
 }
+
+

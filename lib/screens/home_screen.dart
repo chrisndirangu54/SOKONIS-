@@ -239,7 +239,7 @@ class HomeScreenState extends State<HomeScreen> {
 
     for (Product product in combinedPrediction) {
       final userAnalytics =
-          await _userAnalyticsService.getUserProductAnalytics(user, product);
+          await _userAnalyticsService.getUserProductAnalytics(user!.id!, product.id!);
       product.userViews = userAnalytics['userViews'] ?? 0;
       product.userClicks = userAnalytics['userClicks'] ?? 0;
       product.userTimeSpent = userAnalytics['userFavorites'] ?? 0;
@@ -949,12 +949,13 @@ class HomeScreenState extends State<HomeScreen> {
                 id: '0',
                 name: 'No Products',
                 pictureUrl: 'assets/images/basket.png',
-                basePrice: null,
+                basePrice: 0.0,
                 description: '',
                 category: '',
                 categoryImageUrl: '',
                 units: '',
-                discountedPrice: null)
+                discountedPrice: 0.0,
+                varietyImageUrls: [])
             : null;
 
         return Card(
@@ -1083,12 +1084,13 @@ class HomeScreenState extends State<HomeScreen> {
           id: '0',
           name: 'No Products',
           pictureUrl: 'assets/images/basket.png',
-          basePrice: null,
+          basePrice: 0.0,
           description: '',
           category: '',
           categoryImageUrl: '',
           units: '',
-          discountedPrice: null);
+          discountedPrice: 0.0,
+          varietyImageUrls: []);
     }
     final random = Random();
     return products[random.nextInt(products.length)];
@@ -2398,7 +2400,7 @@ class HomeScreenState extends State<HomeScreen> {
                             setState(() {
                               // Code to modify the background color, if necessary.
                             });
-                            if (_userProvider.isLoggedIn) {
+                            if (_userProvider.isLoggedIn == true) {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                     builder: (context) =>
@@ -2578,7 +2580,7 @@ class HomeScreenState extends State<HomeScreen> {
                             setState(() {
                               // Code to modify the background color if required.
                             });
-                            if (_userProvider.isLoggedIn) {
+                            if (_userProvider.isLoggedIn == true) {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                     builder: (_) => const CartScreen()),

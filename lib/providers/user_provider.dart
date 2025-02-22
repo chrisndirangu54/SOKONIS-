@@ -19,6 +19,7 @@ class UserProvider with ChangeNotifier {
 
   // User-related fields
   late User _user;
+  late String _referralCode;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Cart provider
@@ -38,9 +39,7 @@ class UserProvider with ChangeNotifier {
 
   // Constructor
   UserProvider({
-    this.id = '',
-    required String name,
-    required String email,
+
     String contact = '',
     Address? address,
     LatLng? pinLocation = const LatLng(0, 0),
@@ -49,7 +48,8 @@ class UserProvider with ChangeNotifier {
     String? referralCode,
     String? referredBy,
     bool? hasUsedReferral,
-  }) : super() {
+  })  : hasUsedReferral = hasUsedReferral ?? false,
+        super() {
     _referralCode = referralCode ?? UserProvider.generateStaticReferralCode();
     _referredBy = referredBy;
     if (hasUsedReferral != null) {
@@ -88,7 +88,7 @@ class UserProvider with ChangeNotifier {
           }
 
           // Update referred user's document to set the referredBy field
-          await _firestore.collection('users').doc(id).update({
+          await _firestore.collection('users').doc(_user.id).update({
             'referredBy': referralData['createdBy'],
             'hasUsedReferral': true,
           });
@@ -96,7 +96,7 @@ class UserProvider with ChangeNotifier {
           // Update the usage count in the referral codes document
           await _firestore.collection('referralCodes').doc(code).update({
             'usageCount': FieldValue.increment(1),
-            'usedBy': FieldValue.arrayUnion([id]), // Add this user to the usedBy list
+            'usedBy': FieldValue.arrayUnion([_user.id]), // Add this user to the usedBy list
           });
 
           // Update local fields
@@ -129,7 +129,7 @@ class UserProvider with ChangeNotifier {
   String get name => _user.name;
   String get email => _user.email;
   String get contact => _user.contact;
-  Address? get address => _user.address;
+  Address? get address => _user.address as Address?;
   LatLng? get pinLocation => _user.pinLocation;
   String get profilePictureUrl => _user.profilePictureUrl;
   DateTime? get lastLoginDate => _user.lastLoginDate;
@@ -501,6 +501,10 @@ class UserProvider with ChangeNotifier {
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
   static var addressList;
+  
+  String? _referredBy;
+  
+  bool hasUsedReferral;
 
   // Method to select and upload a profile picture
   Future<void> selectAndUploadProfilePicture() async {

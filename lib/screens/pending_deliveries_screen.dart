@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grocerry/services/notification_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/order_provider.dart';
 import '../providers/user_provider.dart';
@@ -7,11 +8,27 @@ import '../screens/order_details_screen.dart';
 class PendingDeliveriesScreen extends StatelessWidget {
   const PendingDeliveriesScreen({super.key});
 
+Future<void> _sendPaymentNotification(String orderId, String customerId) async {
+  // Assuming you have a notification service
+  final NotificationService notificationService = NotificationService();
+  
+  await notificationService.sendNotification(
+    to: customerId,
+    title: 'Payment Required',
+    body: 'Please confirm payment for order $orderId.',
+    data: {
+      'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+      'orderId': orderId,
+      'action': 'confirm_payment', // Additional data to handle specific action
+    },
+  );
+}
+
   @override
   Widget build(BuildContext context) {
     final orderProvider = Provider.of<OrderProvider>(context);
     final userProvider = Provider.of<UserProvider>(context);
-    final user = userProvider.user; // Use the correct provider to get the user
+    final user = userProvider.user;
 
     return Scaffold(
       appBar: AppBar(
@@ -31,29 +48,81 @@ class PendingDeliveriesScreen extends StatelessWidget {
                       Text('Status: ${order.status}'),
                       const SizedBox(height: 4),
                       Text('Customer Address: ${order.user.address}'),
-                      if (order.user.liveLocation !=
-                          null) // Check if the location is available
+                      if (order.user.liveLocation != null)
                         Text('Customer Location: ${order.user.liveLocation}'),
-                      if (order.riderLocation != null &&
-                          order.status == 'On the way')
+                      if (order.riderLocation != null && order.status == 'On the way')
                         Text('Rider Location: ${order.riderLocation}'),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           if (user.isRider) ...[
                             if (order.status == 'Ready for Delivery') ...[
-                              ElevatedButton(
-                                onPressed: () {
-                                  orderProvider.updateOrderStatus(
-                                      order.orderId, 'Delivered');
-                                },
-                                child: const Text('Confirm Delivery'),
-                              ),
+                              if (order.paymentMethod == 'COD') ...[
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Payment Method'),
+                                        content: const Text('How was the payment handled?'),
+                                        actions: [
+                                          TextButton(
+                                            child: const Text('Customer Paid Cash'),
+                                            onPressed: () async {
+                                              Navigator.of(context).pop();
+                                              orderProvider.updateOrderStatus(
+                                                  order.orderId, 'Delivered');
+                                            },
+                                          ),
+                                          TextButton(
+                                            child: const Text('Prompt Customer to Pay'),
+                                            onPressed: () async {
+                                              Navigator.of(context).pop();
+                                              await _sendPaymentNotification(order.orderId, order.user.id);
+                                              orderProvider.updateOrderStatus(
+                                                  order.orderId, 'Payment Confirmation Pending');
+                                              showDialog(
+                                                context: context,
+                                                builder: (context) => AlertDialog(
+                                                  title: const Text('Payment Confirmation'),
+                                                  content: const Text(
+                                                      'Please confirm payment has been received from the customer.'),
+                                                  actions: [
+                                                    TextButton(
+                                                      child: const Text('Payment Received'),
+                                                      onPressed: () async {
+                                                        orderProvider.updateOrderStatus(
+                                                            order.orderId, 'Delivered');
+                                                        Navigator.of(context).pop();
+                                                      },
+                                                    ),
+                                                    TextButton(
+                                                      child: const Text('Cancel'),
+                                                      onPressed: () => Navigator.of(context).pop(),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                  child: const Text('Handle Payment'),
+                                ),
+                              ] else ...[
+                                ElevatedButton(
+                                  onPressed: () {
+                                    orderProvider.updateOrderStatus(order.orderId, 'Delivered');
+                                  },
+                                  child: const Text('Confirm Delivery'),
+                                ),
+                              ],
                               const SizedBox(width: 8),
                               ElevatedButton(
                                 onPressed: () {
-                                  // Handle was not delivered logic
-                                  orderProvider.updateOrderStatus(
-                                      order.orderId, 'Not Delivered');
+                                  orderProvider.updateOrderStatus(order.orderId, 'Not Delivered');
                                 },
                                 child: const Text('Was Not Delivered'),
                               ),
@@ -70,21 +139,18 @@ class PendingDeliveriesScreen extends StatelessWidget {
                                           'Are you sure you want to mark this order as preparing?'),
                                       actions: [
                                         TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(false),
+                                          onPressed: () => Navigator.of(context).pop(false),
                                           child: const Text('Cancel'),
                                         ),
                                         TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(true),
+                                          onPressed: () => Navigator.of(context).pop(true),
                                           child: const Text('Confirm'),
                                         ),
                                       ],
                                     ),
                                   );
                                   if (confirm == true) {
-                                    orderProvider.updateOrderStatus(
-                                        order.orderId, 'Preparing');
+                                    orderProvider.updateOrderStatus(order.orderId, 'Preparing');
                                   }
                                 },
                                 child: const Text('Confirm Preparing'),
@@ -100,13 +166,11 @@ class PendingDeliveriesScreen extends StatelessWidget {
                                           'Are you sure you want to mark this order as ready for delivery?'),
                                       actions: [
                                         TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(false),
+                                          onPressed: () => Navigator.of(context).pop(false),
                                           child: const Text('Cancel'),
                                         ),
                                         TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(true),
+                                          onPressed: () => Navigator.of(context).pop(true),
                                           child: const Text('Confirm'),
                                         ),
                                       ],
@@ -127,9 +191,7 @@ class PendingDeliveriesScreen extends StatelessWidget {
                   ),
                   onTap: () {
                     Navigator.of(context).push(MaterialPageRoute(
-                      builder: (context) => OrderDetailsScreen(
-                        orderId: order.orderId,
-                      ),
+                      builder: (context) => OrderDetailsScreen(orderId: order.orderId),
                     ));
                   },
                 );

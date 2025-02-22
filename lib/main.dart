@@ -2,8 +2,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:grocerry/models/user.dart';
 import 'package:grocerry/providers/auth_provider.dart';
 import 'package:grocerry/screens/group_buy_page.dart';
+import 'package:grocerry/screens/order_details_screen.dart';
 import 'package:grocerry/screens/product_screen.dart';
 import 'package:grocerry/utils.dart';
 import 'package:provider/provider.dart';
@@ -52,6 +55,8 @@ class MyApp extends StatefulWidget {
 }
 
 class MyAppState extends State<MyApp> {
+
+  late User user;
   @override
   void initState() {
     super.initState();
@@ -109,7 +114,7 @@ class MyAppState extends State<MyApp> {
       // Navigate to group buy join page or handle join directly
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => GroupBuyPage(groupBuyId: groupId, userLocation: '', userId: '',),
+          builder: (context) => GroupBuyPage(groupBuyId: groupId, userLocation: const LatLng(0.0, 0.0), user: user,),
         ),
       );
     }
@@ -152,7 +157,7 @@ class MyAppState extends State<MyApp> {
       providers: [
         ChangeNotifierProvider<UserProvider>(
             create: (_) =>
-                UserProvider(id: '', name: '', email: '')),
+                UserProvider( )),
         ChangeNotifierProvider<ProductProvider>(
             create: (_) => ProductProvider()),
         ChangeNotifierProvider<AuthProvider>(

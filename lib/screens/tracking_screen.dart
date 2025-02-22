@@ -1,11 +1,19 @@
 import 'dart:async';
-
+import 'dart:convert';
+import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_sound/flutter_sound.dart';
+import 'package:flutter_sound/public/flutter_sound_recorder.dart';
 import 'package:grocerry/providers/user_provider.dart';
-import '../services/rider_location_service.dart';
+import 'package:grocerry/services/rider_location_service.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:path_provider/path_provider.dart';
+
 
 class TrackingScreen extends StatefulWidget {
   final String orderId;
@@ -31,18 +39,23 @@ class TrackingScreenState extends State<TrackingScreen> {
   LatLng? _currentDeviceLocation;
   LatLng? _userSelectedLocation;
   bool _isLocationSelectedByUser = false;
-  late String pinLocation; // Default user location address
+  late LatLng pinLocation;
+  FlutterSoundRecorder? _recorder;
+  bool _isRecording = false;
 
   @override
   void initState() {
     super.initState();
-    pinLocation = widget.userProvider.pinLocation; // Get default user address
+    pinLocation = widget.userProvider.pinLocation!;
+    _recorder = FlutterSoundRecorder();
     _initLocationService();
   }
 
   @override
   void dispose() {
     _locationSubscription?.cancel();
+    _recorder?.closeRecorder();
+    _recorder = null;
     super.dispose();
   }
 
@@ -50,9 +63,8 @@ class TrackingScreenState extends State<TrackingScreen> {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        // Prompt user to enable location services
         _promptEnableLocationServices();
-        return; // Exit the method
+        return;
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
@@ -64,8 +76,7 @@ class TrackingScreenState extends State<TrackingScreen> {
       }
 
       if (permission == LocationPermission.deniedForever) {
-        throw Exception(
-            'Location permissions are permanently denied, we cannot request permissions.');
+        throw Exception('Location permissions are permanently denied.');
       }
 
       _currentDeviceLocation = await _getCurrentLocation();
@@ -77,35 +88,6 @@ class TrackingScreenState extends State<TrackingScreen> {
     }
   }
 
-  void _promptEnableLocationServices() {
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Enable Location Services'),
-          content: const Text(
-              'Location services are disabled. Please enable them in your device settings.'),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Settings'),
-              onPressed: () {
-                // Close the dialog and open device settings
-                Navigator.of(context).pop();
-                Geolocator.openLocationSettings();
-              },
-            ),
-            TextButton(
-              child: const Text('CANCEL'),
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Future<LatLng> _getCurrentLocation() async {
     Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high);
@@ -114,19 +96,20 @@ class TrackingScreenState extends State<TrackingScreen> {
 
   void _startLocationStream() {
     _riderLocationStream = widget.riderLocationService
-        .getRiderLocationStream(widget.orderId as LocationAccuracy)
+        .getRiderLocationStream(LocationAccuracy.high)
         .map((Position position) =>
             LatLng(position.latitude, position.longitude));
 
     _locationSubscription = _riderLocationStream?.listen((location) {
       _updatePolyline(location);
+      _checkProximityAndRecord(location);
     });
   }
 
   void _updatePolyline(LatLng newPoint) {
     setState(() {
       if (_polylinePoints.length > 100) {
-        _polylinePoints.removeAt(0); // Performance consideration
+        _polylinePoints.removeAt(0);
       }
       _polylinePoints.add(newPoint);
       _polylines = {
@@ -140,128 +123,207 @@ class TrackingScreenState extends State<TrackingScreen> {
     });
   }
 
-  void _promptLocationChange() async {
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Change Location'),
-          content: const Text(
-              'Would you like to select a location on the map or search for an address?'),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Map'),
-              onPressed: () {
-                // Allow the user to select a location on the map
-                Navigator.of(context).pop(); // Close the dialog
-                _enableMapTapSelection(); // Enable map tap functionality
-              },
-            ),
-            TextButton(
-              child: const Text('Search Address'),
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                _searchAddress(); // Trigger the address search functionality
-              },
-            ),
-            TextButton(
-              child: const Text('CANCEL'),
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-            ),
-          ],
-        );
-      },
+  void _checkProximityAndRecord(LatLng riderLocation) async {
+    LatLng targetLocation =
+        _isLocationSelectedByUser ? _userSelectedLocation! : _currentDeviceLocation!;
+    double distance = Geolocator.distanceBetween(
+      targetLocation.latitude,
+      targetLocation.longitude,
+      riderLocation.latitude,
+      riderLocation.longitude,
     );
-  }
 
-  bool _isMapTapEnabled = false;
-
-  void _enableMapTapSelection() {
-    setState(() {
-      _isMapTapEnabled = true;
-    });
-  }
-
-  void _onMapTap(LatLng point) {
-    if (_isMapTapEnabled) {
-      setState(() {
-        _userSelectedLocation = point;
-        _isLocationSelectedByUser = true;
-        _isMapTapEnabled = false; // Disable map tap after selecting a location
-      });
+    if (distance <= 10 && !_isRecording && widget.userProvider.currentUser?.isRider == true) {
+      _startRecording();
+    } else if (distance > 10 && _isRecording) {
+      _stopRecordingAndAnalyze();
     }
   }
 
-  void _onClearUserSelection() {
-    setState(() {
-      _userSelectedLocation = null;
-      _isLocationSelectedByUser = false;
+  Future<void> _startRecording() async {
+    try {
+      await _recorder?.openRecorder();
+      await _recorder?.startRecorder(toFile: 'rider_audio.mp3');
+      setState(() {
+        _isRecording = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recording started...')),
+      );
+    } catch (e) {
+      print('Error starting recording: $e');
+    }
+  }
+
+  Future<void> _stopRecordingAndAnalyze() async {
+    try {
+      String? localPath = await _recorder?.stopRecorder();
+      await _recorder?.closeRecorder();
+      if (localPath != null) {
+        String downloadURL = await _getRecordingFilePath(widget.userProvider.currentUser?.id ?? 'anonymous');
+        await _performSentimentAnalysis(downloadURL);
+      }
+      setState(() {
+        _isRecording = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recording stopped and analysis started.')),
+      );
+    } catch (e) {
+      print('Error stopping recording: $e');
+    }
+  }
+
+  Future<String> _getRecordingFilePath(String userId) async {
+    final storage = firebase_storage.FirebaseStorage.instance;
+    final firestore = FirebaseFirestore.instance;
+
+    String fileName = '${DateTime.now().millisecondsSinceEpoch}.mp3';
+    firebase_storage.Reference ref = storage.ref().child('rider_audio/$userId/$fileName');
+
+    String localFilePath = await getApplicationDocumentsDirectory()
+        .then((value) => '${value.path}/rider_audio.mp3');
+    firebase_storage.UploadTask uploadTask = ref.putFile(File(localFilePath));
+
+    firebase_storage.TaskSnapshot uploadSnapshot = await uploadTask;
+
+    if (uploadSnapshot.state == firebase_storage.TaskState.success) {
+      String downloadURL = await uploadSnapshot.ref.getDownloadURL();
+      await firestore.collection('rider_audio').add({
+        'userId': userId,
+        'fileName': fileName,
+        'downloadURL': downloadURL,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      await File(localFilePath).delete();
+      return downloadURL;
+    } else {
+      throw Exception('Failed to upload audio file');
+    }
+  }
+
+  Future<void> _performSentimentAnalysis(String audioUrl) async {
+    String text = await _convertAudioToText(audioUrl);
+    if (text.isNotEmpty) {
+      var sentimentAnalysis = await _analyzeSentimentWithChatGPT(text);
+      var sabotageInsights = await _getInsightsWithChatGPT(text, 'sabotage');
+      var defamationInsights = await _getInsightsWithChatGPT(text, 'defamation');
+      await _storeAnalysisInFirebase(audioUrl, sentimentAnalysis, sabotageInsights, defamationInsights);
+    }
+  }
+
+  Future<String> _convertAudioToText(String audioUrl) async {
+    String apiKey = 'YOUR_API_KEY'; // Replace with your Google API key
+    String url = 'https://speech.googleapis.com/v1/speech:recognize?key=$apiKey';
+
+    var audioBytes = await http.get(Uri.parse(audioUrl)).then((response) => response.bodyBytes);
+    var audioBase64 = base64Encode(audioBytes);
+
+    var requestBody = jsonEncode({
+      'config': {
+        'encoding': 'LINEAR16',
+
+        'sampleRateHertz': 16000,
+        'languageCode': 'en-US',
+        'enableAutomaticPunctuation': true,
+        'maxAlternatives': 3,
+      },
+      'audio': {'content': audioBase64}
+    });
+
+    var response = await http.post(Uri.parse(url),
+        headers: {"Content-Type": "application/json"}, body: requestBody);
+
+    if (response.statusCode == 200) {
+      Map<String, dynamic> data = jsonDecode(response.body);
+      if (data['results'] != null && data['results'].isNotEmpty) {
+        var firstResult = data['results'][0];
+        if (firstResult['alternatives'] != null && firstResult['alternatives'].isNotEmpty) {
+          return firstResult['alternatives'][0]['transcript'] as String;
+        }
+      }
+      return '';
+    } else {
+      print('Failed to recognize speech: ${response.body}');
+      return '';
+    }
+  }
+
+  Future<String> _analyzeSentimentWithChatGPT(String text) async {
+    const url = 'YOUR_CHATGPT_API_ENDPOINT'; // Replace with actual endpoint
+    final headers = {'Content-Type': 'application/json'};
+    final body = jsonEncode({
+      'model': 'gpt-4',
+      'messages': [
+        {'role': 'system', 'content': 'You are an AI that performs sentiment analysis.'},
+        {'role': 'user', 'content': 'Analyze the sentiment of this text: $text'}
+      ]
+    });
+
+    final response = await http.post(Uri.parse(url), headers: headers, body: body);
+    if (response.statusCode == 200) {
+      var jsonResponse = jsonDecode(response.body);
+      return jsonResponse['choices'][0]['message']['content'];
+    } else {
+      throw Exception('Failed to analyze sentiment: ${response.reasonPhrase}');
+    }
+  }
+
+  Future<String> _getInsightsWithChatGPT(String text, String topic) async {
+    const url = 'YOUR_CHATGPT_API_ENDPOINT'; // Replace with actual endpoint
+    final headers = {'Content-Type': 'application/json'};
+    final body = jsonEncode({
+      'model': 'gpt-4',
+      'messages': [
+        {'role': 'system', 'content': 'You are an AI that provides insights on $topic.'},
+        {'role': 'user', 'content': 'Provide insights on possible cases of $topic from this text: $text'}
+      ]
+    });
+
+    final response = await http.post(Uri.parse(url), headers: headers, body: body);
+    if (response.statusCode == 200) {
+      var jsonResponse = jsonDecode(response.body);
+      return jsonResponse['choices'][0]['message']['content'];
+    } else {
+      throw Exception('Failed to get insights on $topic: ${response.reasonPhrase}');
+    }
+  }
+
+  Future<void> _storeAnalysisInFirebase(
+      String audioPath, String sentimentAnalysis, String sabotageInsights, String defamationInsights) async {
+    final firestore = FirebaseFirestore.instance;
+    await firestore.collection('audio_analyses').add({
+      'audioPath': audioPath,
+      'sentimentAnalysis': sentimentAnalysis,
+      'sabotageInsights': sabotageInsights,
+      'defamationInsights': defamationInsights,
+      'timestamp': FieldValue.serverTimestamp(),
     });
   }
 
-  void _searchAddress() async {
-    String? address = await showDialog<String>(
+  void _promptEnableLocationServices() {
+    showDialog<void>(
       context: context,
       builder: (BuildContext context) {
-        String enteredAddress = '';
         return AlertDialog(
-          title: const Text('Enter Address'),
-          content: TextField(
-            autofocus: true,
-            onChanged: (value) => enteredAddress = value,
-            decoration: const InputDecoration(hintText: "Type an address"),
-          ),
+          title: const Text('Enable Location Services'),
+          content: const Text('Location services are disabled. Please enable them.'),
           actions: <Widget>[
             TextButton(
-              child: const Text('CANCEL'),
+              child: const Text('Settings'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                Geolocator.openLocationSettings();
+              },
+            ),
+            TextButton(
+              child: const Text('Cancel'),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            TextButton(
-              child: const Text('SEARCH'),
-              onPressed: () {
-                Navigator.of(context).pop(enteredAddress);
-              },
-            ),
           ],
         );
       },
     );
-
-    if (address != null && address.isNotEmpty) {
-      try {
-        LatLng? location = await geocodeAddress(address);
-        if (location != null) {
-          _onMapTap(location); // Simulate map tap with geocoded location
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Address not found.')),
-          );
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error geocoding address: $e')),
-        );
-      }
-    }
-  }
-
-  Future<LatLng?> geocodeAddress(String address) async {
-    try {
-      List<Location> locations = await locationFromAddress(address);
-      if (locations.isNotEmpty) {
-        return LatLng(locations.first.latitude, locations.first.longitude);
-      }
-      return null;
-    } catch (e) {
-      print(e);
-      return null;
-    }
-  }
-
-  void changeLocation() async {
-    _searchAddress(); // Calls search address dialog
   }
 
   @override
@@ -269,17 +331,6 @@ class TrackingScreenState extends State<TrackingScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Track Rider'),
-        actions: [
-          if (_isLocationSelectedByUser)
-            IconButton(
-              icon: const Icon(Icons.clear),
-              onPressed: _onClearUserSelection,
-            ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: _searchAddress,
-          ),
-        ],
       ),
       body: (_currentDeviceLocation == null)
           ? const Center(child: CircularProgressIndicator())
@@ -287,7 +338,6 @@ class TrackingScreenState extends State<TrackingScreen> {
               children: [
                 Expanded(
                   child: GoogleMap(
-                    onTap: _onMapTap,
                     initialCameraPosition: CameraPosition(
                       target: _isLocationSelectedByUser
                           ? _userSelectedLocation!
@@ -296,13 +346,6 @@ class TrackingScreenState extends State<TrackingScreen> {
                     ),
                     polylines: _polylines,
                     markers: _buildMarkers(),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: ElevatedButton(
-                    onPressed: _promptLocationChange,
-                    child: const Text('Change Location'),
                   ),
                 ),
               ],

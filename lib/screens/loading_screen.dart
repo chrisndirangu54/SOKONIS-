@@ -1,6 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:gyroscope/gyroscope.dart'; // Assuming this is the correct package for gyroscope events
+import 'package:sensors_plus/sensors_plus.dart'; // Correct package for gyroscope events
 import 'package:grocerry/screens/home_screen.dart'; // Replace with your actual HomeScreen import
 
 class LoadingScreen extends StatefulWidget {
@@ -35,7 +35,7 @@ class LoadingScreenState extends State<LoadingScreen>
     _simulateLoading();
 
     // Initialize gyroscope stream
-    gyroscopeEventStream().listen((GyroscopeEvent event) {
+    gyroscopeEvents.listen((GyroscopeEvent event) {
       setState(() {
         _rotationY += event.y * 0.01;
         _rotationX += event.x * 0.01;

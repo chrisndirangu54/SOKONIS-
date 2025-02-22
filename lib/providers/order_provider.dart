@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:grocerry/models/order.dart';
+import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/subscription_model.dart';
 import 'package:grocerry/services/notification_service.dart';
 import 'dart:math'; // For generating random coupon codes
@@ -116,7 +117,7 @@ class OrderProvider with ChangeNotifier {
           orderId: doc.id,
           items: data['items'] ?? [],
           user: data['User'] ?? 'Unknown user',
-          address: data['Address'] ?? 'Unknown Address',
+          address: data['Address'] ?? 'Unknown Address', paymentMethod: '',
         );
         _allOrders.add(order);
       }
@@ -222,8 +223,8 @@ class OrderProvider with ChangeNotifier {
   }
 
   Future<void> updateNextDelivery(
-      String subscriptionId, DateTime nextDate) async {
-    await _firestore.collection('subscriptions').doc(subscriptionId).update({
+      Product product, DateTime nextDate) async {
+    await _firestore.collection('subscriptions').doc(product.id).update({
       'nextDelivery': nextDate,
     });
   }
@@ -259,7 +260,7 @@ class OrderProvider with ChangeNotifier {
   }
 
   Future<void> _placeReplenishmentOrder(
-      Subscription subscription, dynamic product, dynamic user) async {
+      Subscription subscription, Product product, dynamic user) async {
     // Retrieve the subscription document from Firestore to check its status
     final subscriptionDoc = await _firestore
         .collection('subscriptions')
@@ -271,8 +272,8 @@ class OrderProvider with ChangeNotifier {
       // Logic to create a list of items for the order
       List<OrderItem> orderItems = [
         OrderItem(
-          product: product.id,
-          price: product.price,
+          product: product,
+          price: product.basePrice,
           quantity: subscription.quantity,
           user: user.id,
           isReviewed: false,
@@ -291,7 +292,7 @@ class OrderProvider with ChangeNotifier {
         ),
         items: orderItems,
         date: DateTime.now(),
-        address: user.address,
+        address: user.address, paymentMethod: '',
       );
 
       // Save the order to Firestore

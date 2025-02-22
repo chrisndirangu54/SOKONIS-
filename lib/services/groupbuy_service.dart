@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:rxdart/rxdart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter_platform_interface/src/types/location.dart';
@@ -170,7 +171,7 @@ class GroupBuyService {
     await groupRef.delete();
   }
 
-  Future<String> createGroupBuy(String hostId, LatLng userLocation) async {
+  Future<String> createGroupBuy(User hostId, LatLng userLocation) async {
     final groupId = _firestore.collection('GroupBuy').doc().id;
     final now = DateTime.now();
     final groupBuy = GroupBuy(

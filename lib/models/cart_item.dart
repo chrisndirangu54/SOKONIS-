@@ -7,7 +7,9 @@ class CartItem {
   int quantity;
   String? selectedVariety;
   double price;
-  String? notes; // New field for notes
+  String? notes;
+
+  User? user; // New field for notes
 
   CartItem({
     required this.product,
@@ -15,5 +17,6 @@ class CartItem {
     this.selectedVariety,
     required this.price,
     this.notes,
+    this.user, // Initialize user field
   });
 }

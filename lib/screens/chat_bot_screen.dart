@@ -230,9 +230,12 @@ class ChatbotScreenState extends State<ChatbotScreen> {
     if (englishProductName != null) {
       var match = await _compareWithFirestore(englishProductName);
       if (match != null) {
+        // Define the notes variable
+        String notes = "Default notes"; // You can customize this as needed
+
         // Call to add the item to the cart
         cartProvider.addItem(
-            match as Product, user, selectedVariety as Variety?, quantity);
+            match as Product, user, selectedVariety as Variety?, quantity, notes);
 
         // Send message and show toast
         await _sendMessage("Added $match to your cart.");

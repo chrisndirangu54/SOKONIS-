@@ -1,63 +1,306 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
+import 'package:latlong2/latlong.dart' as latLng;
+import 'package:flutter_map/flutter_map.dart';
+import 'package:grocerry/models/group_buy_model.dart';
+import 'package:grocerry/models/product.dart';
+import 'package:grocerry/providers/wallet_provider.dart';
 import 'package:grocerry/screens/meal_planing_screen.dart';
 import 'package:grocerry/screens/order_details_screen.dart';
 import 'package:grocerry/screens/subscription_screen.dart';
+import 'package:grocerry/screens/topup_form.dart';
+import 'package:grocerry/services/groupbuy_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import '../providers/order_provider.dart';
-import 'package:flutter/services.dart'; // For copying to clipboard
+import 'package:flutter/services.dart';
 import 'package:share/share.dart';
 import 'package:grocerry/screens/health_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
-  get user => null;
+  @override
+  _ProfileScreenState createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final List<String> userBadges = ["Moran", "Warrior", "Shujaa", "Mfalme"];
+    late UserProvider userProvider;
+    late OrderProvider orderProvider;
+    late WalletProvider walletProvider;
+    late GroupBuyService groupBuyService;
+  // Usage tracking map (could be stored in a provider or database)
+  final Map<String, int> _sectionUsageCount = {
+    '_buildProfileHeader': 10,
+    '_buildProfileUpdateSection': 8,
+    '_buildProfilePictureSection': 7,
+    '_buildReferralSection': 6,
+    '_buildOrdersSection': 9,
+    'buildSubscriptionScreen': 5,
+    'buildMealPlanScreen': 4,
+    'buildHealthScreen': 3,
+    'RiderSection': 2,
+    'redeemPointsWidget': 5,
+    'buildGroupBuyAccessWidget': 4,
+    '_buildTopUpSection': 6,
+  };
+
+  late Map<String, Function> _sectionWidgets;
+  
+
+  @override
+  void initState() {
+    super.initState();
+    userProvider = Provider.of<UserProvider>(context, listen: false);
+    orderProvider = Provider.of<OrderProvider>(context, listen: false);
+    walletProvider = Provider.of<WalletProvider>(context, listen: false);
+    groupBuyService = GroupBuyService(FirebaseFirestore.instance, null);
+
+    _sectionWidgets = {
+      'displayBadges': (BuildContext context, List<String> userBadges) =>
+          displayBadges(userBadges),
+      '_buildProfileHeader': (BuildContext context, UserProvider userProvider) =>
+          _buildProfileHeader(context, userProvider),
+      '_buildProfileUpdateSection': (BuildContext context, UserProvider userProvider) =>
+          _buildProfileUpdateSection(context, userProvider),
+      '_buildProfilePictureSection': (BuildContext context, UserProvider userProvider) =>
+          _buildProfilePictureSection(context, userProvider),
+      '_buildReferralSection': (BuildContext context, UserProvider userProvider) =>
+          _buildReferralSection(context, userProvider),
+      '_buildOrdersSection': (BuildContext context, OrderProvider orderProvider) =>
+          _buildOrdersSection(context, orderProvider),
+      'buildSubscriptionScreen': (BuildContext context) =>
+          buildSubscriptionScreen(context),
+      'buildMealPlanScreen': (BuildContext context) =>
+          buildMealPlanScreen(context),
+      'buildHealthScreen': (BuildContext context) =>
+          buildHealthScreen(context),
+      'RiderSection': (BuildContext context) => const RiderSection(),
+      'redeemPointsWidget': (BuildContext context, dynamic user, OrderProvider orderProvider) =>
+          redeemPointsWidget(context, user, orderProvider),
+      'buildGroupBuyAccessWidget': (BuildContext context, GroupBuyService groupBuyService, 
+          dynamic user, dynamic userLocation) =>
+          buildGroupBuyAccessWidget(context, groupBuyService, user, userLocation),
+      '_buildTopUpSection': (BuildContext context, WalletProvider walletProvider) =>
+          _buildTopUpSection(context, walletProvider),
+    };
+  }
+
+  Widget _buildSectionWidget(String methodName, BuildContext context,
+      [List<dynamic>? extraArgs]) {
+    try {
+      final Function? builder = _sectionWidgets[methodName];
+      if (builder != null) {
+        // Increment usage count when section is built
+        setState(() {
+          _sectionUsageCount[methodName] = (_sectionUsageCount[methodName] ?? 0) + 1;
+        });
+        return Function.apply(builder, [context, ...?extraArgs]);
+      }
+    } catch (e) {
+      debugPrint('Error invoking method $methodName: $e');
+    }
+    return const Text('Section not implemented');
+  }
+
+  Widget _buildFrequentlyUsedSection(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
+    final orderProvider = Provider.of<OrderProvider>(context);
+    final walletProvider = Provider.of<WalletProvider>(context);
+    final groupBuyService = GroupBuyService(FirebaseFirestore.instance, null); // Initialize your service with a null Product
+    
+    // Sort sections by usage count
+    final sortedSections = _sectionUsageCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Frequently Used',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            ...sortedSections.map((entry) {
+              final methodName = entry.key;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  children: [
+                    _buildSectionWidget(
+                      methodName,
+                      context,
+                      _getSectionArgs(methodName, userProvider, orderProvider, 
+                        walletProvider, groupBuyService),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+                );
+              }
+            )])));
+  
+  }
+
+  List<dynamic> _getSectionArgs(String methodName, UserProvider userProvider,
+      OrderProvider orderProvider, WalletProvider walletProvider, 
+      GroupBuyService groupBuyService) {
+    switch (methodName) {
+      case 'displayBadges':
+        return [userBadges];
+      case '_buildProfileHeader':
+      case '_buildProfileUpdateSection':
+      case '_buildProfilePictureSection':
+      case '_buildReferralSection':
+        return [userProvider];
+      case '_buildOrdersSection':
+        return [orderProvider];
+      case 'redeemPointsWidget':
+        return [userProvider.user, orderProvider];
+      case 'buildGroupBuyAccessWidget':
+        return [groupBuyService, userProvider.user, userProvider.pinLocation];
+      case '_buildTopUpSection':
+        return [walletProvider];
+      default:
+        return [];
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final userProvider = Provider.of<UserProvider>(context);
-    final orderProvider = Provider.of<OrderProvider>(context);
-
-    final List<String> userBadges = ["Moran", "Warrior", "Shujaa", "Mfalme"];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
       ),
       body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              displayBadges(userBadges),
-              _buildProfileHeader(context, userProvider),
-              const SizedBox(height: 20),
-              _buildProfileUpdateSection(context, userProvider),
-              const SizedBox(height: 10),
-              _buildProfilePictureSection(context, userProvider),
-              const SizedBox(height: 20),
-              _buildReferralSection(
-                  context, userProvider), // New Referral Section
-              const SizedBox(height: 20),
-              _buildOrdersSection(context, orderProvider),
-              const SizedBox(height: 20),
-              buildSubscriptionScreen(context),
-              const SizedBox(height: 20),
-              buildMealPlanScreen(context),
-              const SizedBox(height: 20),
-              buildHealthScreen(context),
-              const SizedBox(height: 20),
-              const RiderSection(),
-              redeemPointsWidget(context, user, orderProvider),
-              const SizedBox(height: 20),
-            ],
-          ),
+        child: Column(
+          children: [
+            _buildSectionWidget('_buildFrequentlyUsedSection', context),
+            const SizedBox(height: 20),
+            _buildSectionWidget('displayBadges', context, [userBadges]),
+            const SizedBox(height: 20),
+            _buildSectionWidget('_buildProfileHeader', context, [userProvider]),
+            const SizedBox(height: 20),
+            _buildSectionWidget('_buildProfileUpdateSection', context, [userProvider]),
+            const SizedBox(height: 10),
+            _buildSectionWidget('_buildProfilePictureSection', context, [userProvider]),
+            const SizedBox(height: 20),
+            _buildSectionWidget('_buildReferralSection', context, [userProvider]),
+            const SizedBox(height: 20),
+            _buildSectionWidget('_buildOrdersSection', context, [orderProvider]),
+            const SizedBox(height: 20),
+            _buildSectionWidget('buildSubscriptionScreen', context),
+            const SizedBox(height: 20),
+            _buildSectionWidget('buildMealPlanScreen', context),
+            const SizedBox(height: 20),
+            _buildSectionWidget('buildHealthScreen', context),
+            const SizedBox(height: 20),
+            _buildSectionWidget('RiderSection', context),
+            const SizedBox(height: 20),
+            _buildSectionWidget('redeemPointsWidget', context, [userProvider.user, orderProvider]),
+            const SizedBox(height: 20),
+            _buildSectionWidget('buildGroupBuyAccessWidget', context,
+                [groupBuyService, userProvider.user, userProvider.pinLocation]),
+            const SizedBox(height: 20),
+            _buildSectionWidget('_buildTopUpSection', context, [walletProvider]),
+          ],
         ),
       ),
     );
   }
+
+
+Widget buildGroupBuyAccessWidget(
+    BuildContext context,
+    GroupBuyService groupBuyService,
+    dynamic user,
+    dynamic userLocation,
+) {
+  return Card(
+    elevation: 4,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Group Buy Access',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          StreamBuilder<List<GroupBuy>>(
+            stream: groupBuyService.fetchActiveGroupBuys(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const CircularProgressIndicator();
+              }
+              
+              if (snapshot.hasError) {
+                return const Text(
+                  'Error loading group buys',
+                  style: TextStyle(fontSize: 16, color: Colors.red),
+                );
+              }
+
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return const Text(
+                  'No active group buys available at this time.',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                );
+              }
+
+              final groupBuys = snapshot.data!;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Available Group Buys:',
+                    style: TextStyle(fontSize: 16, color: Colors.green),
+                  ),
+                  const SizedBox(height: 10),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: groupBuys.length,
+                    itemBuilder: (context, index) {
+                      final groupBuy = groupBuys[index];
+                      return ListTile(
+                        title: Text(groupBuy.id),
+                        subtitle: Text(
+                          'Ends: ${groupBuy.endTime.toString()}',
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushNamed(
+                              context,
+                              '/group-buy',
+                              arguments: groupBuy,
+                            );
+                          },
+                          child: const Text('Join'),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    ));
+  
+}
 
   Widget _buildProfileHeader(BuildContext context, UserProvider userProvider) {
     return Card(
@@ -144,7 +387,7 @@ class ProfileScreen extends StatelessWidget {
           children: [
             ElevatedButton(
               onPressed: () {
-                userProvider.selectAndUploadProfilePicture(user);
+                userProvider.selectAndUploadProfilePicture();
               },
               child: const Text('Change Profile Picture'),
             ),
@@ -172,17 +415,17 @@ Widget _buildTopUpSection(BuildContext context, WalletProvider walletProvider) {
           MaterialPageRoute(builder: (context) => const TopUpForm()),
         );
       },
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
+      child: const Padding(
+        padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Top Up Your Wallet',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 10),
-            const Text(
+            SizedBox(height: 10),
+            Text(
               'Add money to your wallet for easy purchases.',
               style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
@@ -253,7 +496,7 @@ Widget _buildTopUpSection(BuildContext context, WalletProvider walletProvider) {
     // Filter orders to only show those of the current user
     final userOrders = orderProvider.pendingOrders
         .where((order) =>
-            order.user == userProvider.id && order.status == 'pending')
+            order.user == userProvider.user && order.status == 'pending')
         .toList();
 
     return Card(
@@ -488,7 +731,7 @@ Widget _buildTopUpSection(BuildContext context, WalletProvider walletProvider) {
                         onPressed: () {
                           Navigator.of(context).push(MaterialPageRoute(
                             builder: (context) =>
-                                SubscriptionScreen(user: user),
+                                SubscriptionScreen(user: userProvider.user.id),
                           ));
                         },
                         child: const Text('Go to Subscription'),
@@ -500,72 +743,368 @@ Widget _buildTopUpSection(BuildContext context, WalletProvider walletProvider) {
             )));
   }
 
-  void _showUpdateProfileDialog(
-      BuildContext context, UserProvider userProvider) {
-    final nameController = TextEditingController(text: userProvider.name);
-    final emailController = TextEditingController(text: userProvider.email);
-    final addressController = TextEditingController(text: userProvider.address);
-    final contactController = TextEditingController(text: userProvider.contact);
-    final pinLocationController =
-        TextEditingController(text: userProvider.pinLocation);
+void _showUpdateProfileDialog(BuildContext context, UserProvider userProvider) {
+  final formKey = GlobalKey<FormState>();
+  final nameController = TextEditingController(text: userProvider.name);
+  final emailController = TextEditingController(text: userProvider.email);
+  final contactController = TextEditingController(text: userProvider.contact);
+  
+  final cityController = TextEditingController(text: userProvider.address?.city);
+  final townController = TextEditingController(text: userProvider.address?.town);
+  final estateController = TextEditingController(text: userProvider.address?.estate);
+  final buildingController = TextEditingController(text: userProvider.address?.buildingName);
+  final houseNumberController = TextEditingController(text: userProvider.address?.houseNumber);
+  
+  latLng.LatLng? selectedLocation = userProvider.address?.pinLocation != null
+      ? latLng.LatLng(
+          userProvider.address!.pinLocation!.latitude,
+          userProvider.address!.pinLocation!.longitude,
+        )
+      : null;
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Update Profile'),
-          content: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Name'),
+  showDialog(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Update Profile'),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Name'),
+                      validator: (value) => value!.isEmpty ? 'Name is required' : null,
+                    ),
+                    TextFormField(
+                      controller: emailController,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                      validator: (value) {
+                        if (value!.isEmpty) return 'Email is required';
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                          return 'Enter a valid email';
+                        }
+                        return null;
+                      },
+                    ),
+                    TextFormField(
+                      controller: contactController,
+                      decoration: const InputDecoration(labelText: 'Contact'),
+                      validator: (value) => value!.isEmpty ? 'Contact is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Address Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                    TextFormField(
+                      controller: cityController,
+                      decoration: const InputDecoration(labelText: 'City'),
+                      validator: (value) => value!.isEmpty ? 'City is required' : null,
+                    ),
+                    TextFormField(
+                      controller: townController,
+                      decoration: const InputDecoration(labelText: 'Town'),
+                    ),
+                    TextFormField(
+                      controller: estateController,
+                      decoration: const InputDecoration(labelText: 'Estate'),
+                    ),
+                    TextFormField(
+                      controller: buildingController,
+                      decoration: const InputDecoration(labelText: 'Building Name'),
+                    ),
+                    TextFormField(
+                      controller: houseNumberController,
+                      decoration: const InputDecoration(labelText: 'House Number'),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Pin Location'),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final latLng.LatLng? result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MapPickerScreen(
+                                  initialPosition: selectedLocation ??
+                                      const latLng.LatLng(0.0, 0.0),
+                                  onLocationSelected: (latLng, placemarks) {
+                                    setState(() {
+                                      selectedLocation = latLng;
+                                      if (placemarks.isNotEmpty) {
+                                        final placemark = placemarks.first;
+                                        cityController.text = placemark.locality ?? '';
+                                        townController.text = placemark.subLocality ?? '';
+                                        estateController.text = placemark.subAdministrativeArea ?? '';
+                                        houseNumberController.text = placemark.street ?? '';
+                                      }
+                                    });
+                                  },
+                                ),
+                              ),
+                            );
+                            if (result != null) {
+                              setState(() {
+                                selectedLocation = result;
+                              });
+                            }
+                          },
+                          child: const Text('Select on Map'),
+                        ),
+                      ],
+                    ),
+                    if (selectedLocation != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          'Selected: ${selectedLocation!.latitude}, ${selectedLocation!.longitude}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                  ],
                 ),
-                TextField(
-                  controller: emailController,
-                  decoration: const InputDecoration(labelText: 'Email'),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  if (formKey.currentState!.validate()) {
+                    final newAddress = Address(
+                      city: cityController.text,
+                      town: townController.text,
+                      estate: estateController.text,
+                      buildingName: buildingController.text,
+                      houseNumber: houseNumberController.text,
+                      pinLocation: selectedLocation != null
+                          ? gmaps.LatLng(selectedLocation!.latitude, selectedLocation!.longitude)
+                          : userProvider.address?.pinLocation,
+                    );
+                    
+                    userProvider.updateProfile(
+                      name: nameController.text,
+                      email: emailController.text,
+                      contact: contactController.text,
+address: newAddress,
+pinLocation: gmaps.LatLng(
+    selectedLocation?.latitude ?? userProvider.address!.pinLocation!.latitude,
+    selectedLocation?.longitude ?? userProvider.address!.pinLocation!.longitude,
+),
+                    );
+                    Navigator.of(context).pop();
+                  }
+                },
+                child: const Text('Update'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+}
+class MapPickerScreen extends StatefulWidget {
+  final latLng.LatLng initialPosition;
+  final Function(latLng.LatLng, List<Placemark>)? onLocationSelected;
+
+  const MapPickerScreen({
+    super.key,
+    required this.initialPosition,
+    this.onLocationSelected,
+  });
+
+  @override
+  State<MapPickerScreen> createState() => _MapPickerScreenState();
+}
+
+class _MapPickerScreenState extends State<MapPickerScreen> {
+  late latLng.LatLng _selectedPosition;
+  final MapController _mapController = MapController();
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedPosition = widget.initialPosition;
+  }
+
+  Future<void> _getCurrentLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location services are disabled')),
+      );
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permissions are denied')),
+        );
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location permissions are permanently denied')),
+      );
+      return;
+    }
+
+    Position position = await Geolocator.getCurrentPosition();
+    setState(() {
+      _selectedPosition = latLng.LatLng(position.latitude, position.longitude);
+    });
+    _mapController.move(_selectedPosition, 15);
+    _updateAddressFromLocation();
+  }
+
+  Future<void> _updateAddressFromLocation() async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        _selectedPosition.latitude,
+        _selectedPosition.longitude,
+      );
+      if (widget.onLocationSelected != null && placemarks.isNotEmpty) {
+        widget.onLocationSelected!(_selectedPosition, placemarks);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error getting address: $e')),
+      );
+    }
+  }
+
+  Future<void> _searchLocation(String query) async {
+    try {
+      List<Location> locations = await locationFromAddress(query);
+      if (locations.isNotEmpty) {
+        setState(() {
+          _selectedPosition = latLng.LatLng(
+            locations.first.latitude,
+            locations.first.longitude,
+          );
+        });
+        _mapController.move(_selectedPosition, 15);
+        _updateAddressFromLocation();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error searching location: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select Location'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.check),
+            onPressed: () {
+              _updateAddressFromLocation();
+              Navigator.pop(context, _selectedPosition);
+            },
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _selectedPosition,
+              minZoom: 15,
+              onTap: (tapPosition, point) {
+                setState(() {
+                  _selectedPosition = latLng.LatLng(point.latitude, point.longitude);
+                });
+                _updateAddressFromLocation();
+              },
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                subdomains: const ['a', 'b', 'c'],
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    width: 80.0,
+                    height: 80.0,
+                    point: latLng.LatLng(_selectedPosition.latitude, _selectedPosition.longitude),
+                    child: const Icon(
+                      Icons.location_pin,
+                      color: Colors.red,
+                      size: 40,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Positioned(
+            top: 10,
+            left: 15,
+            right: 15,
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: "Search location",
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
                 ),
-                TextField(
-                  controller: addressController,
-                  decoration: const InputDecoration(labelText: 'Address'),
-                ),
-                TextField(
-                  controller: pinLocationController,
-                  decoration: const InputDecoration(labelText: 'Pin Location'),
-                  onSubmitted: (pinLocation) {
-                    final userProvider =
-                        Provider.of<UserProvider>(context, listen: false);
-                    userProvider.fetchpinLocation(pinLocation);
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () {
+                    if (_searchController.text.isNotEmpty) {
+                      _searchLocation(_searchController.text);
+                    }
                   },
                 ),
-              ],
+              ),
+              onSubmitted: (value) {
+                if (value.isNotEmpty) {
+                  _searchLocation(value);
+                }
+              },
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                userProvider.updateProfile(
-                    name: '', email: '', contact: '', address: '');
-                Navigator.of(context).pop();
-              },
-              child: const Text('Update'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _getCurrentLocation,
+        child: const Icon(Icons.my_location),
+      ),
     );
   }
+}
+
 
   void _shareReferralLink(BuildContext context, String referralLink) {
     Share.share('Join me on this app using my referral link: $referralLink');
   }
-}
+
 
 class RiderSection extends StatelessWidget {
   const RiderSection({super.key});

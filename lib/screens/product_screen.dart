@@ -15,11 +15,11 @@ import 'package:grocerry/services/ai_service.dart';
 class ProductScreen extends StatefulWidget {
   final String productId;
 
-  final dynamic product;
+  Product? product;
 
   final dynamic varieties;
 
-  const ProductScreen(
+  ProductScreen(
       {super.key, required this.productId, this.product, this.varieties});
 
   @override
@@ -33,6 +33,7 @@ class ProductScreenState extends State<ProductScreen>
   late AnimationController _controller;
   late Subscription subscription;
   late SubscriptionService subscriptionService = SubscriptionService();
+  Product? product;
 
   late final Animation<double> _scaleAnimation =
       Tween<double>(begin: 2.3, end: 2.7).animate(
@@ -49,6 +50,8 @@ class ProductScreenState extends State<ProductScreen>
   // Control the state of the selected variety and image index
   int selectedVarietyIndex = 0; // Changed variable name
   int currentImageIndex = 0;
+  
+  var notes;
 
   get quantity => null;
 
@@ -61,7 +64,7 @@ class ProductScreenState extends State<ProductScreen>
       duration: const Duration(seconds: 1), // Adjust the duration as needed
     );
     // Fetch product and set default selected variety
-    _logProductView();
+    _logProductView(product);
     _viewStartTime = DateTime.now();
     _fetchProductAnalytics();
   }
@@ -74,7 +77,7 @@ class ProductScreenState extends State<ProductScreen>
 
   @override
   void dispose() {
-    _logTimeSpent();
+    _logTimeSpent(product, _viewStartTime);
     _controller.dispose();
     super.dispose();
   }
@@ -90,43 +93,41 @@ class ProductScreenState extends State<ProductScreen>
     });
   }
 
-  void _logProductView() {
+  void _logProductView(Product? product) {
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'view',
-      'productId': widget.productId,
-      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
+      'productId': product!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user!.id,
       'timestamp': DateTime.now(),
     });
   }
 
-  void _logTimeSpent() {
+  void _logTimeSpent(Product? product, dynamic viewStartTime) {
     final viewEndTime = DateTime.now();
-    final timeSpent = viewEndTime.difference(_viewStartTime!).inSeconds;
+    final timeSpent = viewEndTime.difference(viewStartTime!).inSeconds;
 
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'time_spent',
-      'productId': widget.productId,
-      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
+      'productId': product!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user!.id,
       'timeSpent': timeSpent,
       'timestamp': DateTime.now(),
     });
   }
 
-  void _logClick(String action) {
+  void _logClick(Product? product) {
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'click',
-      'productId': widget.productId,
-      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
-      'action': action,
+      'productId': product!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user!.id,
       'timestamp': DateTime.now(),
     });
   }
-
-  String getCurrentImageUrl() {
+  String? getCurrentImageUrl() {
     // Returns the image URL for the selected variety and image
-    if (widget.varieties.isEmpty) {
-      return widget.product.pictureUrl.isNotEmpty
-          ? widget.product.pictureUrl
+    if (product!.varieties.isEmpty) {
+      return product!.pictureUrl.isNotEmpty
+          ? widget.product?.pictureUrl
           : 'https://example.com/default_image.png';
     }
 
@@ -240,7 +241,7 @@ class ProductScreenState extends State<ProductScreen>
             padding: const EdgeInsets.only(right: 40),
             child: GestureDetector(
               onTap: () {
-                _logClick('cart_icon');
+                _logClick(product);
                 Navigator.pushNamed(context, '/cart');
               },
               child: CircleAvatar(
@@ -293,7 +294,7 @@ class ProductScreenState extends State<ProductScreen>
                 ),
                 onPressed: () {
                   // Call _askForSubscription with the product ID
-                  _askForSubscription(product.id);
+                  _askForSubscription(product);
                   // Toggle subscription status
 
                   setState(() {}); // Update UI
@@ -305,7 +306,7 @@ class ProductScreenState extends State<ProductScreen>
               const SizedBox(height: 10),
               GestureDetector(
                 onTap: () {
-                  _logClick('view_reviews');
+                  _logClick(product);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                         builder: (context) =>
@@ -377,7 +378,7 @@ class ProductScreenState extends State<ProductScreen>
                                             ..scale(_scaleAnimation
                                                 .value), // Animated zoom effect
                                           child: Image.network(
-                                            getCurrentImageUrl(),
+                                            getCurrentImageUrl() ?? 'https://example.com/default_image.png',
                                             height: 100,
                                             width: 100,
                                             color: Colors.black.withOpacity(
@@ -405,7 +406,7 @@ class ProductScreenState extends State<ProductScreen>
                                             ..scale(_scaleAnimation.value +
                                                 0.2), // Slightly larger scale
                                           child: Image.network(
-                                            getCurrentImageUrl(),
+                                            getCurrentImageUrl() ?? 'https://example.com/default_image.png',
                                             height: 100,
                                             width: 100,
                                             color: Colors.black.withOpacity(
@@ -433,7 +434,7 @@ class ProductScreenState extends State<ProductScreen>
                                             ..scale(_scaleAnimation.value +
                                                 0.4), // Main scale effect
                                           child: Image.network(
-                                            getCurrentImageUrl(),
+                                            getCurrentImageUrl() ?? 'https://example.com/default_image.png',
                                             height: 100,
                                             width: 100,
                                           ),
@@ -543,12 +544,12 @@ class ProductScreenState extends State<ProductScreen>
                                     if (user.favoriteProductIds
                                         .contains(product.id)) {
                                       userProvider
-                                          .removeFavoriteProduct(product.id);
+                                          .removeFavoriteProduct(product);
                                     } else {
                                       userProvider
-                                          .addFavoriteProduct(product.id);
+                                          .addFavoriteProduct(product);
                                     }
-                                    _logClick('toggle_favorite');
+                                    _logClick(product);
                                   },
                                 ),
                               ],
@@ -668,14 +669,14 @@ Widget buildQuantityManager(BuildContext context) {
               quantity, // Using the local quantity state
               notes,
             );
-            _logClick(product, 'add to cart');
+            _logClick(product);
           }
         },
       ),
     ],
   );
 }
-  void _askForSubscription(product) {
+  void _askForSubscription(Product product) {
     int selectedFrequency = 7; // Default to weekly
     int selectedDay = DateTime.now().weekday; // Default to today’s weekday
     final List<int> availableFrequencies = [
@@ -795,11 +796,11 @@ Widget buildQuantityManager(BuildContext context) {
                     _calculateNextDeliveryDate(selectedFrequency, selectedDay);
                 final subscription = Subscription(
                   product: product,
-                  user: user as String,
+                  user: user,
                   quantity: quantity, // Adjusted quantity
                   nextDelivery: nextDeliveryDate,
-                  frequency: selectedFrequency, // User-selected frequency
-                  price: product.basePrice,
+                  frequency: selectedFrequency, // Usnuller-selected frequency
+                  price: product.basePrice, variety: selectedVariety!,
                 );
                 subscriptionService.addSubscription(subscription, context);
                 Navigator.pop(context);

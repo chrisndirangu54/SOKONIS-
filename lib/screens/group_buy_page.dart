@@ -1,23 +1,55 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:grocerry/models/group_buy_model.dart';
-import 'package:grocerry/services/group_buy_service.dart';
+import 'package:grocerry/models/user.dart';
+import 'package:grocerry/services/groupbuy_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 class GroupBuyPage extends StatelessWidget {
   GroupBuyService? groupBuyService;
-  final String userId;
-  final String userLocation;
+  final User user;
+  final LatLng userLocation;
 
   late BuildContext context;
 
   GroupBuyPage({
     super.key,
     this.groupBuyService,
-    required this.userId,
+    required this.user,
     required this.userLocation,
     required String groupBuyId,
   });
-
+                      void _joinGroupBuyWithLink(String link) {
+                        // Implement the logic to join a group buy using the provided link
+                        // For example, you might parse the link to get the group buy ID and then join the group buy
+                        final groupBuyId = _parseGroupBuyIdFromLink(link);
+                        if (groupBuyId != null) {
+                          groupBuyService?.joinGroupBuy(groupBuyId, user).then((_) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Successfully joined the group buy!')),
+                            );
+                          }).catchError((e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to join the group buy: $e')),
+                            );
+                          });
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Invalid group buy link')),
+                          );
+                        }
+                      }
+                      
+                      String? _parseGroupBuyIdFromLink(String link) {
+                        // Implement the logic to parse the group buy ID from the link
+                        // For example, you might use a regular expression to extract the ID from the link
+                        final uri = Uri.tryParse(link);
+                        if (uri != null && uri.pathSegments.isNotEmpty) {
+                          return uri.pathSegments.last;
+                        }
+                        return null;
+                      }
 @override
 Widget build(BuildContext context) {
   return Scaffold(
@@ -56,6 +88,8 @@ Widget build(BuildContext context) {
                         Navigator.of(context).pop();
                         _joinGroupBuyWithLink(link);
                       }
+                      
+
                     },
                   ),
                 ],
@@ -66,7 +100,7 @@ Widget build(BuildContext context) {
       ],
     ),
       body: StreamBuilder<List<GroupBuy>>(
-        stream: groupBuyService.fetchActiveGroupBuys(),
+        stream: groupBuyService?.fetchActiveGroupBuys(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -134,7 +168,7 @@ Widget build(BuildContext context) {
   }
 
   void _joinGroupBuy(BuildContext context, GroupBuy groupBuy) {
-    groupBuyService.joinGroupBuy(groupBuy.groupId, userId).then((_) {
+    groupBuyService?.joinGroupBuy(groupBuy.id, user).then((_) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Successfully joined the group buy!')),
       );
@@ -178,16 +212,15 @@ void _showCreateGroupBuyDialog() {
           TextButton(
             onPressed: () async {
               if (productId != null && basePrice != null) {
-                String newGroupId = await createGroupBuy(productId!, userId, basePrice!);
+                String newGroupId = await createGroupBuy(productId!, user, basePrice!);
                 Navigator.of(context).pop(); // Close dialog
                 _shareGroupBuy(GroupBuy(
-                  groupId: newGroupId,
-                  productId: productId!,
-                  hostId: userId,
+                  id: newGroupId,
+                  hostId: user,
                   currentPrice: basePrice!,
-                  basePrice: basePrice!,
+                  minPrice: basePrice!,
                   startTime: DateTime.now(),
-                  endTime: DateTime.now().add(const Duration(minutes: 5)),
+                  endTime: DateTime.now().add(const Duration(minutes: 5)), userLocation: userLocation,
                 ));
               }
             },
@@ -199,28 +232,27 @@ void _showCreateGroupBuyDialog() {
   );
 }
 
-Future<String> createGroupBuy(String productId, String hostId, double basePrice) async {
+Future<String> createGroupBuy(String productId, User hostId, double basePrice) async {
   final groupId = FirebaseFirestore.instance.collection('GroupBuy').doc().id;
   final startTime = DateTime.now();
   final endTime = startTime.add(const Duration(minutes: 5));
 
   final groupBuy = GroupBuy(
-    groupId: groupId,
-    productId: productId,
+    id: groupId,
     hostId: hostId,
     currentPrice: basePrice,
-    basePrice: basePrice,
+    minPrice: basePrice,
     startTime: startTime,
-    endTime: endTime,
+    endTime: endTime, userLocation: userLocation,
   );
 
   // Assuming groupBuyService.createGroupBuy takes three arguments
-  await groupBuyService.createGroupBuy(productId, hostId, basePrice);
+  await groupBuyService?.createGroupBuy(hostId, userLocation);
   return groupId;
 }
 
 void _shareGroupBuy(GroupBuy groupBuy) {
-  final shareText = 'Join my Group Buy! Use this link: ${Uri.base.toString()}groupbuy/${groupBuy.groupId}';
+  final shareText = 'Join my Group Buy! Use this link: ${Uri.base.toString()}groupbuy/${groupBuy.id}';
   Share.share(shareText);
 }
 }

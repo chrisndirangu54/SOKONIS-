@@ -36,6 +36,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   List<String> recipeSuggestions = []; // List to store the recipe suggestions
   Product? product;
   var quantity;
+  final HealthConditionService healthConditionService = HealthConditionService();
 
   @override
   void initState() {
@@ -182,7 +183,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
       if (querySnapshot.docs.isNotEmpty) {
         for (var doc in querySnapshot.docs) {
           Product product =
-              Product.fromFirestore(doc: doc); // Use named parameter
+              Product.fromFirestore(); // Use named parameter
           linkedProducts.add(GroceryItem(
             name: product.name,
             price: product.basePrice!,
@@ -373,7 +374,6 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
 
 Future<void> _recommendMeals(String userId) async {
   final orderProvider = Provider.of<OrderProvider>(context, listen: false);
-  final HealthConditionService healthConditionService = HealthConditionService();
 
   // Check if a health condition is already selected
   bool hasHealthCondition = await _checkHealthConditionSelected(userId);
@@ -382,12 +382,12 @@ Future<void> _recommendMeals(String userId) async {
     // Show a dialog asking if they want to select a health condition
     bool? wantsToSelectCondition = await _askToSelectHealthCondition();
     if (wantsToSelectCondition == true) {
-      List<String> conditions = await fetchHealthConditions(userId);
+      List<String> conditions = await healthConditionService.fetchHealthConditions(userId);
       if (conditions.isNotEmpty) {
         String? selectedCondition = await _showHealthConditionSelectionDialog(conditions);
         if (selectedCondition != null) {
           // Update the condition in the service or state management
-          healthConditionService.updateHealthCondition(selectedCondition);
+          healthConditionService.updateSelectedHealthCondition(selectedCondition);
           
           // Now proceed with recommendations using the new condition
           _proceedWithMealRecommendations(userId, selectedCondition);
@@ -412,7 +412,7 @@ Future<void> _recommendMeals(String userId) async {
 }
 
 Future<bool> _checkHealthConditionSelected(String userId) async {
-  return await healthConditionService.healthConditionStream.firstWhere((condition) => condition != null, orElse: () => null) != null;
+  return await healthConditionService.healthConditionStream.firstWhere((condition) => condition != null, orElse: () => '') != '';
 }
 
 Future<bool?> _askToSelectHealthCondition() async {

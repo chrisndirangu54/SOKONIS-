@@ -1,15 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter_platform_interface/src/types/location.dart';
+import 'package:grocerry/models/user.dart';
 
 class GroupBuy {
   late String id;
   late LatLng userLocation;
-  late String hostId;
+  late User hostId;
   late double currentPrice;
   late double minPrice;
   late DateTime startTime;
   late DateTime endTime;
-  bool isActive = true;
+  bool _isActive = true;
   List<String> members = [];
   double basePrice = 0.0;
   double discountPerMember = 0.0;
@@ -39,7 +40,7 @@ class GroupBuy {
       minPrice = data['minPrice']?.toDouble() ?? 0.0;
       startTime = (data['startTime'] as Timestamp).toDate();
       endTime = (data['endTime'] as Timestamp).toDate();
-      isActive = data['isActive'] ?? true;
+      _isActive = data['isActive'] ?? true;
       members = List<String>.from(data['members'] ?? []);
       basePrice = data['basePrice']?.toDouble() ?? 0.0;
       discountPerMember = data['discountPerMember']?.toDouble() ?? 0.0;
@@ -66,10 +67,10 @@ class GroupBuy {
   }
 
   // Check if the group buy is still active
-  bool get isActive => DateTime.now().isBefore(endTime);
+  bool get isActive => DateTime.now().isBefore(endTime) && _isActive;
 
   // Optional method to update the group buy's status
   void updateStatus() {
-    isActive = DateTime.now().isBefore(endTime);
+    _isActive = DateTime.now().isBefore(endTime);
   }
 }

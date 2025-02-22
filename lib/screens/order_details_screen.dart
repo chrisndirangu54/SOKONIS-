@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grocerry/providers/cart_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -365,6 +366,33 @@ class OrderDetailsScreenState extends State<OrderDetailsScreen> {
               buildMonthlySpendingGraph(orderProvider),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+class PaymentConfirmationScreen extends StatelessWidget {
+  final String orderId;
+
+  const PaymentConfirmationScreen({super.key, required this.orderId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Confirm Payment for Order $orderId')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Please select your payment method for order $orderId:'),
+            ElevatedButton(
+              onPressed: () {
+                final cartItems = context.read<CartProvider>().items.values.toList();
+                context.read<CartProvider>().selectPaymentMethodWithoutCOD(cartItems, context);
+              },
+              child: const Text('Select Payment Method'), // Here you can use const
+            ),
+          ],
         ),
       ),
     );

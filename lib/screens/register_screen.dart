@@ -445,7 +445,7 @@ class RegisterScreenState extends State<RegisterScreen>
                         .signInWithGoogle(_referralCode); // Pass referral code
 
                     if (Provider.of<AuthProvider>(context, listen: false)
-                        .isLoggedIn()) {
+                        .isLoggedIn) {
                       if (context.mounted) {
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -562,7 +562,7 @@ class RegisterScreenState extends State<RegisterScreen>
             email, password, name, contact, referralCode);
 
         // Check if the user is logged in after registration
-        if (authProvider.isLoggedIn()) {
+        if (authProvider.isLoggedIn) {
           // Registration successful, handle post-registration actions here
           // Navigate to the HomeScreen if the user is logged in
           if (context.mounted) {

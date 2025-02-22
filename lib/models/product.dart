@@ -23,7 +23,7 @@ class Product {
   final bool isSeasonal;
   final DateTime? seasonStart;
   final DateTime? seasonEnd;
-  final Stream<double?>? discountedPriceStream;
+  final Stream<double?>? discountedPriceStream2;
   int purchaseCount;
   int recentPurchaseCount;
   int reviewCount;
@@ -48,7 +48,7 @@ class Product {
   int? groupSize = 0;
   int? currentGroupMembers = 0;
   double? minPrice = 0.0; // Buying price
-
+  Review? reviews;
   late int userViews;
   late int userTimeSpent;
   List<String>? weather;
@@ -92,10 +92,10 @@ class Product {
     this.minPrice,
     this.groupDiscount,
     this.isGroupActive,
-    this.discountedPriceStream,
+    this.discountedPriceStream2,
     this.consumptionTime = const [],
     this.weather = const [],
-    this.rating,
+    this.rating, required List<String> varietyImageUrls,
   });
 
 // Factory constructor to create a Product instance from Firestore data
@@ -190,12 +190,12 @@ class Product {
       minPrice: null,
       groupDiscount: null,
       isGroupActive: null,
-      discountedPriceStream: groupBuyService != null && userLocation != null
+      discountedPriceStream2: groupBuyService != null && userLocation != null
           ? groupBuyService.getProductDiscountStreamByLocation(userLocation)
           : null,
       consumptionTime: consumptionTime,
       weather: weather,
-      rating: rating,
+      rating: rating, varietyImageUrls: [],
     );
   }
 
@@ -223,6 +223,7 @@ class Product {
   User? user;
   Variety? variety;
 
+
   get userLocation => user?.pinLocation;
 
   //get selectedVariety => variety;
@@ -247,7 +248,7 @@ class Product {
       minPrice: null,
       groupDiscount: null,
       isGroupActive: null,
-      discountedPriceStream: const Stream<double?>.empty(),
+      discountedPriceStream2: const Stream<double?>.empty(), varietyImageUrls: [],
     );
   }
 
@@ -302,10 +303,10 @@ class Product {
       currentGroupMembers: data['currentGroupMembers'] ?? 0,
       minPrice: data['minPrice'] ?? 0.0,
       units: '',
-      discountedPriceStream: data['discountedPriceStream'] ?? 0.0,
+      discountedPriceStream2: data['discountedPriceStream'] ?? 0.0,
       consumptionTime: List<String>.from(data['consumptionTime'] ?? []),
       weather: List<String>.from(data['weather'] ?? []),
-      rating: data['rating'] ?? 0,
+      rating: data['rating'] ?? 0, varietyImageUrls: [],
     );
   }
 
@@ -350,7 +351,7 @@ class Product {
       'groupSize': groupSize,
       'currentGroupMembers': currentGroupMembers,
       'minPrice': minPrice,
-      'discountedPriceStream': discountedPriceStream,
+      'discountedPriceStream': discountedPriceStream2,
       'consumptionTime': consumptionTime,
       'weather': weather,
       'rating': rating,
@@ -585,6 +586,78 @@ class Review {
       reviewText: reviewText ?? this.reviewText,
       rating: rating ?? this.rating,
       reviewDate: reviewDate ?? this.reviewDate,
+    );
+  }
+}
+
+
+class Address {
+  final String? city;
+  final String? town;
+  final String? estate;
+  final String? buildingName;
+  final String? houseNumber;
+  final LatLng? pinLocation;
+
+  Address({
+    this.city,
+    this.town,
+    this.estate,
+    this.buildingName,
+    this.houseNumber,
+    this.pinLocation,
+  });
+
+  // Factory constructor to create from JSON (if needed for Firestore)
+  factory Address.fromJson(Map<String, dynamic> json) {
+    return Address(
+      city: json['city'] as String?,
+      town: json['town'] as String?,
+      estate: json['estate'] as String?,
+      buildingName: json['buildingName'] as String?,
+      houseNumber: json['houseNumber'] as String?,
+      pinLocation: json['pinLocation'] != null
+          ? LatLng(
+              json['pinLocation']['latitude'] as double,
+              json['pinLocation']['longitude'] as double,
+            )
+          : null,
+    );
+  }
+
+  // Method to convert to JSON (if needed for Firestore)
+  Map<String, dynamic> toJson() {
+    return {
+      'city': city,
+      'town': town,
+      'estate': estate,
+      'buildingName': buildingName,
+      'houseNumber': houseNumber,
+      'pinLocation': pinLocation != null
+          ? {
+              'latitude': pinLocation!.latitude,
+              'longitude': pinLocation!.longitude,
+            }
+          : null,
+    };
+  }
+
+  // Create a copy with updated values
+  Address copyWith({
+    String? city,
+    String? town,
+    String? estate,
+    String? buildingName,
+    String? houseNumber,
+    LatLng? pinLocation,
+  }) {
+    return Address(
+      city: city ?? this.city,
+      town: town ?? this.town,
+      estate: estate ?? this.estate,
+      buildingName: buildingName ?? this.buildingName,
+      houseNumber: houseNumber ?? this.houseNumber,
+      pinLocation: pinLocation ?? this.pinLocation,
     );
   }
 }
