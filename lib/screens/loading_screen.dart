@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:sensors_plus/sensors_plus.dart'; // Correct package for gyroscope events
+import 'package:sensors_plus/sensors_plus.dart';
 import 'package:grocerry/screens/home_screen.dart'; // Replace with your actual HomeScreen import
 
 class LoadingScreen extends StatefulWidget {
@@ -11,13 +12,14 @@ class LoadingScreen extends StatefulWidget {
 }
 
 class LoadingScreenState extends State<LoadingScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin { // Changed to TickerProviderStateMixin
   bool loadingComplete = false;
   double _rotationY = 0.0;
   double _rotationX = 0.0;
   final double _scale = 1.0;
   late AnimationController _controller;
   late AnimationController _pulseController;
+  late StreamSubscription<GyroscopeEvent> _gyroSubscription; // Added subscription
 
   @override
   void initState() {
@@ -35,16 +37,18 @@ class LoadingScreenState extends State<LoadingScreen>
     _simulateLoading();
 
     // Initialize gyroscope stream
-    gyroscopeEvents.listen((GyroscopeEvent event) {
+    _gyroSubscription = gyroscopeEvents.listen((GyroscopeEvent event) {
       setState(() {
         _rotationY += event.y * 0.01;
         _rotationX += event.x * 0.01;
+        _rotationX = _rotationX.clamp(-0.5, 0.5); // Clamp rotation
+        _rotationY = _rotationY.clamp(-0.5, 0.5); // Clamp rotation
       });
     });
   }
 
   void _simulateLoading() async {
-    await Future.delayed(const Duration(seconds: 7));
+    await Future.delayed(const Duration(seconds: 3)); // Reduced loading time
     _onLoadingComplete();
   }
 
@@ -92,7 +96,7 @@ class LoadingScreenState extends State<LoadingScreen>
                           animation: _pulseController,
                           builder: (context, child) {
                             return CustomPaint(
-                              painter: BorderGradientPainter(_pulseController),
+                              painter: BorderGradientPainter(_pulseController, pulseWidth: 2.0), // Reduced pulse width
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(30.0),
                                 child: Container(
@@ -106,7 +110,7 @@ class LoadingScreenState extends State<LoadingScreen>
                                     alignment: Alignment.center,
                                     children: [
                                       BackdropFilter(
-                                        filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                                        filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0), // Reduced blur
                                         child: Container(),
                                       ),
                                       const Image(
@@ -144,6 +148,7 @@ class LoadingScreenState extends State<LoadingScreen>
 
   @override
   void dispose() {
+    _gyroSubscription.cancel(); // Cancel subscription
     _controller.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -160,7 +165,7 @@ class WaterRipplePainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
-      ..color = Colors.blue.withOpacity(0.5 - animation.value * 0.5);
+      ..color = Colors.blue.withOpacity(0.1 + animation.value * 0.2); // Adjusted opacity
 
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width * 0.5 * animation.value;
@@ -182,7 +187,7 @@ class BorderGradientPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = pulseWidth + pulseWidth * animation.value * 0.5 // Pulsating effect
+      ..strokeWidth = pulseWidth + pulseWidth * animation.value * 0.5
       ..shader = const LinearGradient(
         colors: [Colors.blue, Colors.purple],
         begin: Alignment.topLeft,
