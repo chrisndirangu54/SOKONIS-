@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 import 'package:grocerry/screens/home_screen.dart'; // Replace with your actual HomeScreen import
 
 class LoadingScreen extends StatefulWidget {
@@ -12,14 +10,11 @@ class LoadingScreen extends StatefulWidget {
 }
 
 class LoadingScreenState extends State<LoadingScreen>
-    with TickerProviderStateMixin { // Changed to TickerProviderStateMixin
+    with TickerProviderStateMixin {
   bool loadingComplete = false;
-  double _rotationY = 0.0;
-  double _rotationX = 0.0;
   final double _scale = 1.0;
   late AnimationController _controller;
   late AnimationController _pulseController;
-  late StreamSubscription<GyroscopeEvent> _gyroSubscription; // Added subscription
 
   @override
   void initState() {
@@ -35,20 +30,10 @@ class LoadingScreenState extends State<LoadingScreen>
     )..repeat(reverse: true);
 
     _simulateLoading();
-
-    // Initialize gyroscope stream
-    _gyroSubscription = gyroscopeEvents.listen((GyroscopeEvent event) {
-      setState(() {
-        _rotationY += event.y * 0.01;
-        _rotationX += event.x * 0.01;
-        _rotationX = _rotationX.clamp(-0.5, 0.5); // Clamp rotation
-        _rotationY = _rotationY.clamp(-0.5, 0.5); // Clamp rotation
-      });
-    });
   }
 
   void _simulateLoading() async {
-    await Future.delayed(const Duration(seconds: 3)); // Reduced loading time
+    await Future.delayed(const Duration(seconds: 3));
     _onLoadingComplete();
   }
 
@@ -57,7 +42,6 @@ class LoadingScreenState extends State<LoadingScreen>
       loadingComplete = true;
     });
 
-    // Delay navigation by 3 seconds
     Future.delayed(const Duration(seconds: 3), () {
       Navigator.pushReplacement(
         context,
@@ -76,56 +60,49 @@ class LoadingScreenState extends State<LoadingScreen>
               child: AnimatedBuilder(
                 animation: _controller,
                 builder: (context, child) {
-                  return Transform(
+                  return Stack(
                     alignment: Alignment.center,
-                    transform: Matrix4.identity()
-                      ..rotateX(_rotationX + _controller.value * 0.1)
-                      ..rotateY(_rotationY + _controller.value * 0.1)
-                      ..scale(_scale),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CustomPaint(
-                          size: Size(
-                            MediaQuery.of(context).size.width * 0.5,
-                            MediaQuery.of(context).size.height * 0.5,
-                          ),
-                          painter: WaterRipplePainter(_controller),
+                    children: [
+                      CustomPaint(
+                        size: Size(
+                          MediaQuery.of(context).size.width * 0.5,
+                          MediaQuery.of(context).size.height * 0.5,
                         ),
-                        AnimatedBuilder(
-                          animation: _pulseController,
-                          builder: (context, child) {
-                            return CustomPaint(
-                              painter: BorderGradientPainter(_pulseController, pulseWidth: 2.0), // Reduced pulse width
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(30.0),
-                                child: Container(
-                                  width: MediaQuery.of(context).size.width * 0.5,
-                                  height: MediaQuery.of(context).size.height * 0.5,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.9),
-                                    borderRadius: BorderRadius.circular(30.0),
-                                  ),
-                                  child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      BackdropFilter(
-                                        filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0), // Reduced blur
-                                        child: Container(),
-                                      ),
-                                      const Image(
-                                        image: AssetImage("assets/images/basket.png"),
-                                        fit: BoxFit.contain,
-                                      ),
-                                    ],
-                                  ),
+                        painter: WaterRipplePainter(_controller),
+                      ),
+                      AnimatedBuilder(
+                        animation: _pulseController,
+                        builder: (context, child) {
+                          return CustomPaint(
+                            painter: BorderGradientPainter(_pulseController, pulseWidth: 3.0),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(30.0),
+                              child: Container(
+                                width: MediaQuery.of(context).size.width * 0.5,
+                                height: MediaQuery.of(context).size.height * 0.5,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(30.0),
+                                ),
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    BackdropFilter(
+                                      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                                      child: Container(),
+                                    ),
+                                    const Image(
+                                      image: AssetImage("assets/images/basket.png"),
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ],
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   );
                 },
               ),
@@ -148,7 +125,6 @@ class LoadingScreenState extends State<LoadingScreen>
 
   @override
   void dispose() {
-    _gyroSubscription.cancel(); // Cancel subscription
     _controller.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -165,7 +141,7 @@ class WaterRipplePainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
-      ..color = Colors.blue.withOpacity(0.1 + animation.value * 0.2); // Adjusted opacity
+      ..color = Colors.blue.withOpacity(0.3 + animation.value * 0.2);
 
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width * 0.5 * animation.value;
