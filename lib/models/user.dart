@@ -1,16 +1,17 @@
+import 'package:flutter/material.dart'; // Required for ChangeNotifier
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-class User {
+class User with ChangeNotifier {
   final String id; // Firebase Auth uid
   final String uid;
   final String email;
   final String? token;
   final String name;
   final Address? address;
-  final LatLng? pinLocation;
+  LatLng? pinLocation; // Public field
   final String profilePictureUrl;
   final List<String> favoriteProductIds;
   final List<String> recentlyBoughtProductIds;
@@ -27,9 +28,9 @@ class User {
   final bool canEditSettings;
 
   // Rider-specific fields
-  final bool isRider;
+  bool isRider; // Public field
   final bool isAvailableForDelivery;
-  final LatLng? liveLocation;
+  LatLng? liveLocation;
 
   // Attendant-specific fields
   final bool isAttendant;
@@ -42,7 +43,7 @@ class User {
     required this.email,
     this.token,
     required this.name,
-    required this.address,
+    this.address,
     this.pinLocation,
     required this.profilePictureUrl,
     this.favoriteProductIds = const [],
@@ -62,17 +63,31 @@ class User {
     required this.contact,
     this.referralCode,
     this.referredBy,
-  });
+  }) {
+    updateRiderLocation(); // Initial update
+  }
+
+  // Method to update riderLocation and notify listeners
+  void updateRiderLocation({LatLng? newPinLocation, bool? newIsRider}) {
+    if (newPinLocation != null) pinLocation = newPinLocation;
+    if (newIsRider != null) isRider = newIsRider;
+    if (isRider && pinLocation != null) {
+      liveLocation = pinLocation;
+    } else {
+      liveLocation = null; // or some default value
+    }
+    notifyListeners();
+  }
 
   // Factory constructor to create a User instance from JSON data
   factory User.fromJson(Map<String, dynamic> json) {
-    return User(
+    final user = User(
       id: json['id'] ?? '',
       uid: json['uid'] ?? '',
       email: json['email'] ?? '',
       token: json['token'],
       name: json['name'] ?? '',
-      address: json['address'] ?? '',
+      address: json['address'],
       profilePictureUrl: json['profilePictureUrl'] ?? '',
       favoriteProductIds: List<String>.from(json['favoriteProductIds'] ?? []),
       recentlyBoughtProductIds:
@@ -100,28 +115,27 @@ class User {
       referralCode: json['referralCode'],
       referredBy: json['referredBy'],
     );
+    return user;
   }
 
   // Static method to create a guest user with a persistent ID
   static Future<User> guest() async {
     final prefs = await SharedPreferences.getInstance();
     String? guestId = prefs.getString('guestId');
-    
+
     if (guestId == null) {
       guestId = const Uuid().v4();
       await prefs.setString('guestId', guestId);
     }
-    
+
     return User(
       id: guestId,
       uid: guestId,
-      email: 'guest@example.com', // More realistic email for guest
-      token: null, // Token typically null for guests
+      email: 'guest@example.com',
       name: 'Guest',
-      address: null, // Using N/A instead of 'Guest' for clarity
-      profilePictureUrl: '', // Empty string for no profile picture
+      address: null,
+      profilePictureUrl: '',
       contact: 'N/A',
-      pinLocation: null,
     );
   }
 
@@ -188,12 +202,14 @@ class User {
     String? referralCode,
     String? referredBy,
   }) {
-    return User(
+    final newUser = User(
       id: id ?? this.id,
+      uid: uid ?? this.uid,
       email: email ?? this.email,
       token: token ?? this.token,
       name: name ?? this.name,
       address: address ?? this.address,
+      pinLocation: pinLocation ?? this.pinLocation,
       profilePictureUrl: profilePictureUrl ?? this.profilePictureUrl,
       favoriteProductIds: favoriteProductIds ?? this.favoriteProductIds,
       recentlyBoughtProductIds:
@@ -212,12 +228,11 @@ class User {
       canConfirmPreparing: canConfirmPreparing ?? this.canConfirmPreparing,
       canConfirmReadyForDelivery:
           canConfirmReadyForDelivery ?? this.canConfirmReadyForDelivery,
-      uid: uid ?? this.uid,
       contact: contact ?? this.contact,
       referralCode: referralCode ?? this.referralCode,
       referredBy: referredBy ?? this.referredBy,
-      pinLocation: pinLocation ?? this.pinLocation,
     );
+    return newUser;
   }
 
   // Method to convert User instance to a Map (for Firestore or other map-based storage)
@@ -229,6 +244,9 @@ class User {
       'token': token,
       'name': name,
       'address': address,
+      'pinLocation': pinLocation != null
+          ? {'lat': pinLocation!.latitude, 'lng': pinLocation!.longitude}
+          : null,
       'profilePictureUrl': profilePictureUrl,
       'favoriteProductIds': favoriteProductIds,
       'recentlyBoughtProductIds': recentlyBoughtProductIds,
@@ -247,9 +265,6 @@ class User {
       'canConfirmPreparing': canConfirmPreparing,
       'canConfirmReadyForDelivery': canConfirmReadyForDelivery,
       'contact': contact,
-      'pinLocation': pinLocation != null
-          ? {'lat': pinLocation!.latitude, 'lng': pinLocation!.longitude}
-          : null, // Fixed typo: was using liveLocation instead of pinLocation
       'referralCode': referralCode,
       'referredBy': referredBy,
     };

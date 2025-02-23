@@ -4,7 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class RiderLocationService {
   // Stream to continuously track rider location
-  Stream<Position> getRiderLocationStream(LocationAccuracy locationAccuracy) {
+  Stream<Position> getRiderLocationStream(LocationAccuracy locationAccuracy, String orderId) {
     return Geolocator.getPositionStream(
       locationSettings: LocationSettings(
         accuracy: locationAccuracy,

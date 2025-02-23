@@ -533,4 +533,6 @@ class UserProvider with ChangeNotifier {
       print('Error selecting/uploading profile picture: $error');
     }
   }
+
+
 }

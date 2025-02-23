@@ -60,14 +60,14 @@ class CartProvider with ChangeNotifier {
           product: existingItem.product,
           quantity: existingItem.quantity + 1,
           price: priceToUse,
-          notes: notes,
+          notes: notes, status: '',
         ),
       );
     } else {
       _items.putIfAbsent(
         cartKey,
         () => CartItem(
-            user: user, product: product, quantity: 1, price: priceToUse, notes: null),
+            user: user, product: product, quantity: 1, price: priceToUse, notes: null, status: ''),
       );
     }
     _cartStreamController.add(_items); // Notify listeners about the cart update
@@ -133,7 +133,7 @@ class CartProvider with ChangeNotifier {
           quantity: increment
               ? existingItem.quantity + 1
               : (existingItem.quantity > 1 ? existingItem.quantity - 1 : 1),
-          price: priceToUse, notes: null,
+          price: priceToUse, notes: null, status: '',
         ),
       );
       _cartStreamController
@@ -437,7 +437,7 @@ List<model.OrderItem> _convertToOrderItems(List<CartItem> cartItems, BuildContex
     product: cartItem.product,
     quantity: cartItem.quantity,
     price: cartItem.price,
-    notes: cartItem.notes, date: DateTime.now(), user: user!,
+    notes: cartItem.notes, date: DateTime.now(), user: user!, status: cartItem.status,
   )).toList();
 }
 

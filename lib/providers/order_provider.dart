@@ -272,12 +272,12 @@ class OrderProvider with ChangeNotifier {
       // Logic to create a list of items for the order
       List<OrderItem> orderItems = [
         OrderItem(
-          product: product,
-          price: product.basePrice,
+          product: subscription.product,
+          price: subscription.product.basePrice,
           quantity: subscription.quantity,
-          user: user.id,
+          user: subscription.user,
           isReviewed: false,
-          date: DateTime.now(),
+          date: DateTime.now(), status: subscription.status,
         )
       ];
 

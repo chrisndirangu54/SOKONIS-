@@ -36,7 +36,7 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
   final _minPriceController = TextEditingController();
   final _groupDiscountController = TextEditingController();
   final _groupSizeController = TextEditingController();
-
+final _genomicAlternativesController = TextEditingController();
   // Variety fields
   final List<Map<String, TextEditingController>> _varietyControllers = [];
 
@@ -50,7 +50,10 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
   bool _isComplementary = false;
   bool _isSeasonal = false;
   bool _isGroupActive = false;
+  final List<Product> _availableProducts = [
 
+  ]; // Replace with your actual product list
+  final List<Product> _selectedProducts = [];
   bool _isLoading = false;
 
   final ProductService _productService = ProductService();
@@ -107,12 +110,12 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
         _isComplementary = data?['isComplementary'] ?? false;
         _isSeasonal = data?['isSeasonal'] ?? false;
         _isGroupActive = data?['isGroupActive'] ?? false;
-
+_genomicAlternativesController.text = (data?['genomicAlterations'] ?? []).join(', ');
         // Load varieties
-        final varieties = data?['varieties'] as List<dynamic>? ?? [];
+        final varieties = data?['varieties'] as List<Variety>? ?? [];
         _varietyControllers.clear();
         for (var varietyData in varieties) {
-          final variety = Variety.fromMap(varietyData);
+          final variety = Variety.fromMap(varietyData as Map<String, Variety>);
           _addVarietyField(
             name: variety.name,
             color: variety.color,
@@ -216,6 +219,7 @@ Future<void> _determineProductUsingAI() async {
       'groupDiscount': double.tryParse(_groupDiscountController.text) ?? 0.0,
       'groupSize': int.tryParse(_groupSizeController.text) ?? 0,
       'isGroupActive': _isGroupActive,
+      'genomicAlterations': _genomicAlternativesController.text.split(', '),
     };
 
     // Step 2: Pick multiple files
@@ -330,6 +334,7 @@ Future<List<Product>> _determineProductsUsingAIImplementation(
         '- **Consumption Time**: [List<String>] // Possible values: lunch, breakfast, supper\n'
         '- **Weather**: [List<String>] // Possible values: rainy, cloudy, sunny, other\n'
         '- **Min Price**: [double?]\n\n'
+        '- **Genomic Alternatives**: [List<Product>]\n'
         'Respond in JSON format matching this structure.';
 
     final body = jsonEncode({
@@ -420,7 +425,8 @@ Future<List<Product>> _determineProductsUsingAIImplementation(
         groupDiscount: double.tryParse(_groupDiscountController.text) ?? 0.0,
         groupSize: int.tryParse(_groupSizeController.text) ?? 0,
         isGroupActive: _isGroupActive,
-        rating: 0, varietyImageUrls: [],
+        rating: 0, 
+        genomicAlternatives:    _getGenomicAlternatives()
       );
 
       if (widget.productId == null) {
@@ -479,8 +485,17 @@ Future<List<Product>> _determineProductsUsingAIImplementation(
     _isComplementary = false;
     _isSeasonal = false;
     _isGroupActive = false;
+    _genomicAlternativesController.clear();
   }
-
+List<Product> _getGenomicAlternatives() {
+    final productNames = _genomicAlternativesController.text.split(', ');
+    return productNames
+        .map((name) => _availableProducts.firstWhere(
+              (product) => product.name == name,
+              orElse: () => Product(name: name, id: '', units: '', basePrice: 0.0, description: '', category: '', categoryImageUrl: '', pictureUrl: '', discountedPrice: 0.0), // Fallback if not found
+            ))
+        .toList();
+  }
   void _showAddOptionsDialog() {
     showDialog(
       context: context,
@@ -678,6 +693,18 @@ Widget build(BuildContext context) {
                     onPressed: () => _addVarietyField(),
                     child: const Text('Add Another Variety'),
                   ),
+TextField(
+          controller: _genomicAlternativesController,
+          decoration: InputDecoration(
+            labelText: 'Genomic Alternatives (comma-separated)',
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _showProductSelectionDialog,
+            ),
+          ),
+          readOnly: true, // Prevents manual editing
+          onTap: _showProductSelectionDialog, // Opens dialog on tap
+        ),
 
                   const SizedBox(height: 20),
                   _buildCheckbox('Is Fresh', _isFresh, (value) => setState(() => _isFresh = value ?? false)),
@@ -715,6 +742,52 @@ Future<void> _selectDate(BuildContext context, TextEditingController controller)
     });
   }
 }
+  void _showProductSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Select Products'),
+              content: SingleChildScrollView(
+                child: Wrap(
+                  spacing: 8.0,
+                  children: _availableProducts.map((product) {
+                    final isSelected = _selectedProducts.contains(product);
+                    return FilterChip(
+                      label: Text(product.name),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setDialogState(() {
+                          if (selected) {
+                            _selectedProducts.add(product);
+                          } else {
+                            _selectedProducts.remove(product);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      _genomicAlternativesController.text = _selectedProducts.join(', ');
+                    });
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
 Widget _buildCheckbox(String label, bool value, Function(bool?)? onChanged) {
   return CheckboxListTile(

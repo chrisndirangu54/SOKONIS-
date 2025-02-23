@@ -18,8 +18,7 @@ class TrackingScreen extends StatefulWidget {
   final String orderId;
   final RiderLocationService riderLocationService;
   final UserProvider userProvider;
-
-  const TrackingScreen({
+  TrackingScreen({
     super.key,
     required this.orderId,
     required this.riderLocationService,
@@ -89,13 +88,13 @@ class TrackingScreenState extends State<TrackingScreen> {
 
   Future<LatLng> _getCurrentLocation() async {
     Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
+ desiredAccuracy: LocationAccuracy.high);
     return LatLng(position.latitude, position.longitude);
   }
 
   void _startLocationStream() {
     _riderLocationStream = widget.riderLocationService
-        .getRiderLocationStream(LocationAccuracy.high)
+        .getRiderLocationStream(LocationAccuracy.high , widget.orderId)
         .map((Position position) =>
             LatLng(position.latitude, position.longitude));
 

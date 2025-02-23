@@ -716,7 +716,7 @@ void dispose() {
                           ),
                           const SizedBox(height: 8),
                           // Recommend genomic alternatives
-                          if (_genomicAlternatives.isNotEmpty)
+                          if (product!.genomicAlternatives.isNotEmpty)
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -729,7 +729,7 @@ void dispose() {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                ..._genomicAlternatives.map((alternative) {
+                                ...product!.genomicAlternatives.map((alternative) {
                                   return ListTile(
                                     leading: Image.network(
                                       alternative.pictureUrl,

@@ -35,7 +35,7 @@ class Order {
 
   void updateRiderDetails() {
     riderLocation = user.liveLocation;
-    isRiderAvailableForDelivery = user.isAvailableForDelivery ?? false;
+    isRiderAvailableForDelivery = user.isAvailableForDelivery;
   }
 
   // If you need to update or set the user after construction:
@@ -122,14 +122,16 @@ class OrderItem {
   final DateTime date;
 
   String? notes;
-
+String status; // New field for notes
   OrderItem({
     required this.user,
     required this.product,
     required this.quantity,
     required this.price,
     this.isReviewed = false,
-    required this.date, String? notes,
+    required this.date, 
+    this.notes,
+    required this.status, // Initialize status field
   });
 
   factory OrderItem.fromMap(Map<String, dynamic> data) {
@@ -139,7 +141,7 @@ class OrderItem {
       quantity: data['quantity'] ?? 0,
       price: data['price'] ?? 0.0,
       isReviewed: data['isReviewed'] ?? false,
-      date: (data['date'] as Timestamp).toDate(),
+      date: (data['date'] as Timestamp).toDate(), status: '',
     );
   }
 

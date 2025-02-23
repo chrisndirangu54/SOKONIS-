@@ -871,7 +871,7 @@ void _filterProducts() {
                 categoryImageUrl: '',
                 units: '',
                 discountedPrice: 0.0,
-                varietyImageUrls: [])
+)
             : null;
 
         return Card(
@@ -1006,7 +1006,7 @@ void _filterProducts() {
           categoryImageUrl: '',
           units: '',
           discountedPrice: 0.0,
-          varietyImageUrls: []);
+);
     }
     final random = Random();
     return products[random.nextInt(products.length)];
@@ -1933,7 +1933,7 @@ void _filterProducts() {
                           ),
                           const SizedBox(height: 8),
                           // Recommend genomic alternatives
-                          if (_genomicAlternatives.isNotEmpty)
+                          if (product!.genomicAlternatives.isNotEmpty)
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1946,7 +1946,7 @@ void _filterProducts() {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                ..._genomicAlternatives.map((alternative) {
+                                ...product!.genomicAlternatives.map((alternative) {
                                   return ListTile(
                                     leading: Image.network(
                                       alternative.pictureUrl,

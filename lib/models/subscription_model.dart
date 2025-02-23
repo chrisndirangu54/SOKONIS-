@@ -16,6 +16,8 @@ class Subscription {
   var activationDate;
   var name;
 
+  var status;
+
   Subscription({
     required this.product,
     required this.user,

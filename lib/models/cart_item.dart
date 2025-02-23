@@ -11,7 +11,7 @@ class CartItem {
 
   User? user;
 
-  String? status; // New field for notes
+  String status; // New field for notes
 
   CartItem({
     required this.product,
@@ -20,6 +20,6 @@ class CartItem {
     required this.price,
     this.notes,
     this.user, // Initialize user field
-    this.status, // Initialize status field
+    required this.status, // Initialize status field
   });
 }

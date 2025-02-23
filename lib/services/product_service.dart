@@ -264,7 +264,6 @@ class ProductService {
           consumptionTime: consumptionTime,
           weather: weather,
           rating: rating,
-          varietyImageUrls: varietyImageUrls, // Required by constructor
         );
 
         // Upload the product to Firestore

@@ -160,7 +160,7 @@ class Product {
   late int userViews;
   late int userTimeSpent;
   List<String>? weather;
-
+  List<Product> genomicAlternatives;
   Product({
     required this.id,
     required this.name,
@@ -203,7 +203,10 @@ class Product {
     this.discountedPriceStream2,
     this.consumptionTime = const [],
     this.weather = const [],
-    this.rating, required List<String> varietyImageUrls,
+    this.rating,
+    this.reviews, 
+    this.genomicAlternatives = const [],
+
   });
 
 // Factory constructor to create a Product instance from Firestore data
@@ -303,7 +306,8 @@ class Product {
           : null,
       consumptionTime: consumptionTime,
       weather: weather,
-      rating: rating, varietyImageUrls: [],
+      rating: rating,
+      genomicAlternatives: const [],
     );
   }
 
@@ -356,7 +360,7 @@ class Product {
       minPrice: null,
       groupDiscount: null,
       isGroupActive: null,
-      discountedPriceStream2: const Stream<double?>.empty(), varietyImageUrls: [],
+      discountedPriceStream2: const Stream<double?>.empty(), 
     );
   }
 
@@ -414,7 +418,7 @@ class Product {
       discountedPriceStream2: data['discountedPriceStream'] ?? 0.0,
       consumptionTime: List<String>.from(data['consumptionTime'] ?? []),
       weather: List<String>.from(data['weather'] ?? []),
-      rating: data['rating'] ?? 0, varietyImageUrls: [],
+      rating: data['rating'] ?? 0, 
     );
   }
 
