@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:grocerry/models/cart_item.dart';
@@ -35,41 +36,33 @@ class _CartScreenState extends State<CartScreen> {
 static const PendingDeliveriesScreen pendingDeliveriesScreen = PendingDeliveriesScreen();
   late String _couponCode;
 
-  void calculateDiscountsAndUpdateUI(BuildContext context) {
-    final cart = Provider.of<CartProvider>(context, listen: false);
-
-    // Calculate product discounts
-    productDiscounts = cart.items.values
-        .where((item) =>
-            _selectedItems.contains(item.product.id)) // Only for selected items
-        .fold(0.0, (totalDiscount, item) {
-      double priceToUse;
-
-      // Check for variety-specific discount
-      if (item.product.selectedVariety != null &&
-          item.product.selectedVariety!.discountedPrice != null) {
-        priceToUse = item.product.selectedVariety!
-            .discountedPrice!; // Use the variety's discounted price
-      } else if (item.product.selectedVariety != null) {
-        priceToUse = item
-            .product.selectedVariety!.price; // Use the variety's regular price
-      }
-      // Check for product-wide discount
-      else if (item.product.hasDiscounts) {
-        priceToUse =
-            item.product.discountedPrice; // Use the product's discounted price
-      } else {
-        priceToUse = item.product.basePrice; // Use the product's base price
-      }
-
-      // Calculate discount: (Base Price - Price to Use) * Quantity
-      double itemDiscount =
-          (item.product.basePrice - priceToUse) * item.quantity;
-
-      // Accumulate the total discount
-      return totalDiscount + itemDiscount;
+  void _logClick(Product? product, String action) {
+    FirebaseFirestore.instance.collection('user_logs').add({
+      'event': 'click',
+      'productId': product!.id,
+      'userId': Provider.of<UserProvider>(context, listen: false).user.id,
+      'action': '',
+      'timestamp': DateTime.now(),
     });
   }
+Stream<double?>? _getPriceStream(CartItem cartItem) {
+  Variety? selectedVariety = cartItem.selectedVariety != null
+      ? cartItem.product.varieties.firstWhere(
+          (v) => v.name == cartItem.selectedVariety,
+        )
+      : cartItem.product.selectedVariety;
+
+  if (selectedVariety != null && selectedVariety.discountedPriceStream != null) {
+    // Transform Stream<Map<String, double?>?>? to Stream<double?>?
+    return selectedVariety.discountedPriceStream!.map(
+      (map) => map != null ? map['discountedPrice'] : null, // Extract double? from map
+    );
+  } else if (cartItem.product.hasDiscounts && cartItem.product.discountedPriceStream2 != null) {
+    // Assuming discountedPriceStream2 is also Stream<Map<String, double?>?>?
+    return cartItem.product.discountedPriceStream2!;
+  }
+  return null; // No stream, use static priceToUse
+}
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +79,7 @@ static const PendingDeliveriesScreen pendingDeliveriesScreen = PendingDeliveries
     final discountAmount = cart.calculateDiscount(_couponCode, context);
     final totalAfterDiscount = selectedTotalAmount - discountAmount;
     final totalSavings = productDiscounts + discountAmount;
-
+    Product product = cartItem.product;
     // Delivery fee calculation
     LatLng origin = const LatLng(37.7749, -122.4194);
     LatLng destination = user.pinLocation;
@@ -157,12 +150,17 @@ static const PendingDeliveriesScreen pendingDeliveriesScreen = PendingDeliveries
                                             style:
                                                 const TextStyle(fontSize: 16)),
                                         const SizedBox(height: 8),
-                                        Text(
-                                          'Total: \$${(cartItem.price * cartItem.quantity).toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                              fontSize: 16,
-                                              color: Colors.black54),
-                                        ),
+                StreamBuilder<double?>(
+                  stream: _getPriceStream(cartItem), // Select appropriate stream
+                  initialData: cartItem.priceToUse, // Start with provider’s default
+                  builder: (context, snapshot) {
+                    final price = snapshot.data ?? cartItem.priceToUse;
+                    return Text(
+                      'Total: \$${(price! * cartItem.quantity).toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 16, color: Colors.black54),
+                    );
+                  },
+                ),
                                       ],
                                     ),
                                   ),
@@ -262,6 +260,41 @@ static const PendingDeliveriesScreen pendingDeliveriesScreen = PendingDeliveries
                     cart.updateItemNotes(cartItem.product, value);
                   },
                 ),
+                // Add confirmation/rejection buttons if status is 'chargeMore'
+                if (cartItem.status == 'price_adjustment') ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () {
+                          // Confirm the adjusted price
+                          cart.handleAttendantDecision(cartItem.product.id, 'confirmed');
+                          setState(() {}); // Update UI
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Price adjustment confirmed')),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                        child: const Text('Confirm'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {
+                          // Reject the adjustment, reset price, and set status to 'declined'
+                          cart.items[cartItem.product.id]!.price = cart.calculatePriceToUse(product, cartItem.product.selectedVariety) as double;
+                          cart.handleAttendantDecision(cartItem.product.id, 'declined');
+                          setState(() {}); // Update UI
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Price adjustment rejected, price reset')),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        child: const Text('Reject'),
+                      ),
+                    ],
+                  ),
+                ],
+
                     // Coupon Input Field
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -302,28 +335,32 @@ static const PendingDeliveriesScreen pendingDeliveriesScreen = PendingDeliveries
                 ),
         ),
       ),
-// In CartScreen's build method
-floatingActionButton: _selectedItems.isEmpty
-    ? null
-    : FloatingActionButton.extended(
-        onPressed: () {
-          cart.sendOrderForConfirmation(context, _selectedItems, (List<Map<String, dynamic>> items) {
-            setState(() {
-              // Update UI or trigger confirmation dialog based on items
-              for (var item in items) {
-                if (item['status'] == 'pending_attendant') {
-                  pendingDeliveriesScreen.showAttendantConfirmationDialog(context, item, cart);
+      floatingActionButton: _selectedItems.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () {
+                if (cart.items.values.any((cartItem) => cartItem.notes != null && cartItem.notes!.isNotEmpty && cartItem.status != 'confirmed' && cartItem.status != 'rejected')) {
+                  cart.sendOrderForConfirmation(context, _selectedItems, (List<Map<String, dynamic>> confirmedItems) {
+                    setState(() {
+                      for (var item in confirmedItems) {
+                        cart.handleAttendantDecision(item['productId'], item['status']);
+                      }
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Items sent for confirmation')),
+                    );
+                  });
+                } else {
+                  cart.processSelectedItemsCheckout(context, _selectedItems);
+                                  _logClick(
+                product, 'purchaseCount'
+              );
                 }
-              }
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Order prepared for confirmation')),
-            );
-          });
-        },
-        label: const Text('Checkout'),
-        icon: const Icon(Icons.payment),
-      ),
-);
-}
+
+              },
+              label: const Text('Checkout'),
+              icon: const Icon(Icons.payment),
+            ),
+    );
+  }
 }

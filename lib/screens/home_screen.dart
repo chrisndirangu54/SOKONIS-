@@ -240,7 +240,7 @@ class HomeScreenState extends State<HomeScreen> {
 
     for (Product product in combinedPrediction) {
       final userAnalytics =
-          await _userAnalyticsService.getUserProductAnalytics(user!.id, product.id);
+          await _userAnalyticsService.getUserProductAnalytics(user!, product);
       product.userViews = userAnalytics['userViews'] ?? 0;
       product.userClicks = userAnalytics['userClicks'] ?? 0;
       product.userTimeSpent = userAnalytics['userFavorites'] ?? 0;
@@ -334,11 +334,12 @@ class HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _logClick(Product? product) {
+  void _logClick(Product? product, String action) {
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'click',
       'productId': product!.id,
       'userId': Provider.of<UserProvider>(context, listen: false).user.id,
+      'action': '',
       'timestamp': DateTime.now(),
     });
   }
@@ -1512,12 +1513,12 @@ void _filterProducts() {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => ProductScreen(productId: product.id ?? ''),
+            builder: (_) => ProductScreen(productId: product.id),
           ),
         );
         _logProductView;
         _logTimeSpent;
-        _logClick(product);
+        _logClick(product, 'product_Screen' );
       },
       child: MouseRegion(
         onEnter: (_) => setState(() => _isFlipped = true),
@@ -2026,13 +2027,13 @@ void _filterProducts() {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => ProductScreen(productId: product.id ?? ''),
+                  builder: (_) => ProductScreen(productId: product.id),
                 ),
               );
               _logProductView;
               _logTimeSpent;
               _logClick(
-                product,
+                product,  'product_Screen' 
               );
             },
             style: ElevatedButton.styleFrom(

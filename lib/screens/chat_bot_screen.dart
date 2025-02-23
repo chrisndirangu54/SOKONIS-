@@ -153,14 +153,16 @@ void dispose() {
     });
   }
 
-  void _logClick(Product? product) {
+  void _logClick(Product? product, String action) {
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'click',
       'productId': product!.id,
       'userId': Provider.of<UserProvider>(context, listen: false).user.id,
+      'action': '',
       'timestamp': DateTime.now(),
     });
   }
+
   
   Widget buildProductCard(Product? product, {required bool isGrid}) {
     final productImageUrl = product!.pictureUrl.isNotEmpty
@@ -300,7 +302,7 @@ void dispose() {
         );
         _logProductView;
         _logTimeSpent;
-        _logClick(product);
+        _logClick(product, 'Product_Screen');
       },
       child: MouseRegion(
         onEnter: (_) => setState(() => _isFlipped = true),
@@ -815,7 +817,7 @@ void dispose() {
               _logProductView;
               _logTimeSpent;
               _logClick(
-                product,
+                product, 'Product_Screen'
               );
             },
             style: ElevatedButton.styleFrom(

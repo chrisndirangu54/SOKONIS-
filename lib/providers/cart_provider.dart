@@ -25,7 +25,10 @@ class CartProvider with ChangeNotifier {
   Map<String, CartItem> _items = {};
   final _cartStreamController =
       StreamController<Map<String, CartItem>>.broadcast();
-
+Product? product;
+  StreamSubscription? _discountedPriceSubscription;
+  Stream<double?>? discountedPriceStream2;
+  Stream<Map<String, double?>?>? discountedPriceStream;
   final List<Map<String, dynamic>> _pendingOrders = [];
 
   Map<String, CartItem> get items => _items;
@@ -34,24 +37,16 @@ class CartProvider with ChangeNotifier {
 
   Stream<Map<String, CartItem>> get cartStream => _cartStreamController.stream;
 
-  void addItem(Product product, model.User user, Variety? selectedVariety,
+
+
+  Future<void> addItem(Product product, model.User user, Variety? selectedVariety,
       quantity, notes,
-      [status]) {
+      [status]) async {
     String cartKey =
         '${product.id}_${user.id}'; // Key based on product ID and user ID
-    double priceToUse;
+    double? priceToUse = await calculatePriceToUse(product, selectedVariety);
 
-    if (selectedVariety != null && selectedVariety.discountedPrice != null) {
-      priceToUse = selectedVariety.discountedPrice!; // Use the discounted price
-    } else if (selectedVariety != null) {
-      priceToUse = selectedVariety
-          .price; // Use the regular price of the selected variety
-    } else if (product.hasDiscounts) {
-      priceToUse =
-          product.discountedPrice; // Use the product's discounted price
-    } else {
-      priceToUse = product.basePrice; // Use the base price
-    }
+
     if (_items.containsKey(cartKey)) {
       _items.update(
         cartKey,
@@ -59,7 +54,7 @@ class CartProvider with ChangeNotifier {
           user: existingItem.user,
           product: existingItem.product,
           quantity: existingItem.quantity + 1,
-          price: priceToUse,
+          price: priceToUse!,
           notes: notes, status: '',
         ),
       );
@@ -67,12 +62,39 @@ class CartProvider with ChangeNotifier {
       _items.putIfAbsent(
         cartKey,
         () => CartItem(
-            user: user, product: product, quantity: 1, price: priceToUse, notes: null, status: ''),
+            user: user, product: product, quantity: 1, price: priceToUse!, notes: null, status: ''),
       );
     }
     _cartStreamController.add(_items); // Notify listeners about the cart update
     notifyListeners();
   }
+  // Helper method to calculate priceToUse (moved from calculateDiscountsAndUpdateUI)
+Future<double?> calculatePriceToUse(Product product, Variety? selectedVariety) async {
+  // Handle variety-specific discount price from stream
+  if (selectedVariety != null && selectedVariety.discountedPriceStream != null) {
+    double? discountedPrice = (await selectedVariety.discountedPriceStream!.firstWhere(
+      (price) => price != null,
+      orElse: () => null,
+    )) as double?;
+    return discountedPrice ?? selectedVariety.price;
+  } 
+  // Handle variety regular price if no discount stream
+  else if (selectedVariety != null) {
+    return selectedVariety.price;
+  } 
+  // Handle product-wide discount from stream
+  else if (product.hasDiscounts && product.discountedPriceStream2 != null) {
+    double? discountedPrice = await product.discountedPriceStream2!.firstWhere(
+      (price) => price != null,
+      orElse: () => null,
+    );
+    return discountedPrice ?? product.basePrice;
+  } 
+  // Fallback to base price
+  else {
+    return product.basePrice;
+  }
+}
 
   // Method to remove a product from the cart
   void removeItem(Product product, model.User user) {
@@ -84,12 +106,6 @@ class CartProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateItemNotes(Product product, String? notes) {
-    if (items.containsKey(product.id)) {
-      items[product.id]!.notes = notes;
-      notifyListeners();
-    }
-  }
 
   // Method to get the total amount of the cart
   double get totalAmount {
@@ -108,21 +124,9 @@ class CartProvider with ChangeNotifier {
   }
 
   // Method to update the quantity (increment or decrement)
-  void updateQuantity(
-      product, User user, bool increment, Variety? selectedVariety) {
-    double priceToUse;
-    if (selectedVariety != null && selectedVariety.discountedPrice != null) {
-      priceToUse = selectedVariety.discountedPrice!; // Use the discounted price
-    } else if (selectedVariety != null) {
-      priceToUse = selectedVariety
-          .price; // Use the regular price of the selected variety
-    } else if (product.hasDiscounts) {
-      priceToUse =
-          product.discountedPrice; // Use the product's discounted price
-    } else {
-      priceToUse = product.basePrice; // Use the base price
-    }
-
+  Future<void> updateQuantity(
+      product, User user, bool increment, Variety? selectedVariety) async {
+    double? priceToUse = await calculatePriceToUse(product, selectedVariety);
     String cartKey = '${product}_$user'; // Key based on product ID and user ID
     if (_items.containsKey(cartKey)) {
       _items.update(
@@ -133,7 +137,7 @@ class CartProvider with ChangeNotifier {
           quantity: increment
               ? existingItem.quantity + 1
               : (existingItem.quantity > 1 ? existingItem.quantity - 1 : 1),
-          price: priceToUse, notes: null, status: '',
+          price: priceToUse!, notes: null, status: '',
         ),
       );
       _cartStreamController
@@ -151,12 +155,7 @@ class CartProvider with ChangeNotifier {
     return 0; // If the item is not in the cart, return 0
   }
 
-  @override
-  void dispose() {
-    _cartStreamController
-        .close(); // Close the StreamController when the provider is disposed
-    super.dispose();
-  }
+
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -170,7 +169,7 @@ class CartProvider with ChangeNotifier {
 
   Set<String> get selectedItems => _selectedItems;
   
-  User? user;
+  model.User? user;
 
   // Toggle the selection of an item
   void toggleItemSelection(String productId, [Set<String>? selectedItems]) {
@@ -181,7 +180,14 @@ class CartProvider with ChangeNotifier {
     }
     notifyListeners(); // Notify listeners about the change
   }
-
+  Future<void> updateItemNotes(Product product, String? notes) async {
+    if (items.containsKey(product.id)) {
+      items[product.id]!.notes = notes;
+      // Use the Product's selectedVariety (Variety?) instead of CartItem's selectedVariety (String?)
+      items[product.id]!.priceToUse = await calculatePriceToUse(product, product.selectedVariety);
+      notifyListeners();
+    }
+  }
   // Only process the selected items
   void processSelectedItemsCheckout(BuildContext context, selectedItems) {
     final cart = Provider.of<CartProvider>(context, listen: false);
@@ -257,6 +263,7 @@ class CartProvider with ChangeNotifier {
       Set<String> selectedItems,
       Function(List<Map<String, dynamic>>) onConfirmationReceived) async {
     final NotificationService notificationService = NotificationService();
+    final userProvider = Provider.of<UserProvider>(context, listen: false); // Access UserProvider
 
     // Prepare items for confirmation
     final itemsToConfirm = items.values
@@ -272,10 +279,22 @@ class CartProvider with ChangeNotifier {
             })
         .toList();
 
+    // Determine the attendant ID
+    String attendantId;
+    if (user != null && user!.isAttendant) {
+      // If the current user is an attendant, notify themselves (unlikely scenario)
+      attendantId = user!.id;
+    } else {
+      // Replace with logic to fetch an attendant's ID dynamically
+      // For now, using a placeholder or hardcoded value
+      attendantId = 'attendant_user_id'; // Replace with actual attendant ID fetch logic
+      // Example: attendantId = userProvider.getAttendantId(); // Hypothetical method
+    }
+
     // Notify the attendant
     try {
       await notificationService.sendNotification(
-        to: 'attendant_user_id', // Replace with actual attendant ID or fetch dynamically
+        to: attendantId, // Use the determined attendant ID (String)
         title: 'Order Confirmation Required',
         body: 'An order with ${itemsToConfirm.length} items needs your review. Check items with notes.',
         data: {
@@ -290,7 +309,7 @@ class CartProvider with ChangeNotifier {
       );
     }
 
-    // Immediately invoke the callback with the prepared items
+    // Invoke the callback with prepared items
     onConfirmationReceived(itemsToConfirm);
 
     notifyListeners();
@@ -890,43 +909,23 @@ Future<void> calculateDeliveryFee(LatLng origin, LatLng destination) async {
     return 0.0; // Default case, no discount
   }
 
-  void calculateDiscountsAndUpdateUI(BuildContext context) {
-    final cart = Provider.of<CartProvider>(context, listen: false);
+void calculateDiscountsAndUpdateUI(BuildContext context) {
+  final cart = Provider.of<CartProvider>(context, listen: false);
 
-    // Calculate product discounts
-    productDiscounts = cart.items.values
-        .where((item) =>
-            _selectedItems.contains(item.product.id)) // Only for selected items
-        .fold(0.0, (totalDiscount, item) {
-      double priceToUse;
+  // Calculate product discounts
+  productDiscounts = cart.items.values
+      .where((item) => _selectedItems.contains(item.product.id)) // Only for selected items
+      .fold(0.0, (totalDiscount, item) {
+    // Use the stored priceToUse
+    double itemDiscount = (item.product.basePrice - item.priceToUse!) * item.quantity;
 
-      // Check for variety-specific discount
-      if (item.product.selectedVariety != null &&
-          item.product.selectedVariety!.discountedPrice != null) {
-        priceToUse = item.product.selectedVariety!
-            .discountedPrice!; // Use the variety's discounted price
-      } else if (item.product.selectedVariety != null) {
-        priceToUse = item
-            .product.selectedVariety!.price; // Use the variety's regular price
-      }
-      // Check for product-wide discount
-      else if (item.product.hasDiscounts) {
-        priceToUse =
-            item.product.discountedPrice; // Use the product's discounted price
-      } else {
-        priceToUse = item.product.basePrice; // Use the product's base price
-      }
-
-      // Calculate discount: (Base Price - Price to Use) * Quantity
-      double itemDiscount =
-          (item.product.basePrice - priceToUse) * item.quantity;
-
-      // Accumulate the total discount
-      return totalDiscount + itemDiscount;
-    });
-  }
+    // Accumulate the total discount
+    return totalDiscount + itemDiscount;
+  });
+}
 
 }
+
 
 class CouponInputField extends StatefulWidget {
   final Function(String) onCouponApplied;

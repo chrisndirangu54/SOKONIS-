@@ -178,7 +178,7 @@ class ProductScreenState extends State<ProductScreen>
   Future<void> _fetchProductAnalytics() async {
     final analyticsService = AnalyticsService();
     final analytics =
-        await analyticsService.getProductAnalytics(widget.productId);
+        await analyticsService.getProductAnalytics(widget.product!);
 
     setState(() {
       // Assuming 'product' is a local variable, so this part will need to be adapted
@@ -208,11 +208,12 @@ class ProductScreenState extends State<ProductScreen>
     });
   }
 
-  void _logClick(Product? product) {
+  void _logClick(Product? product, String action) {
     FirebaseFirestore.instance.collection('user_logs').add({
       'event': 'click',
       'productId': product!.id,
       'userId': Provider.of<UserProvider>(context, listen: false).user.id,
+      'action': '',
       'timestamp': DateTime.now(),
     });
   }
@@ -387,7 +388,7 @@ class ProductScreenState extends State<ProductScreen>
         );
         _logProductView;
         _logTimeSpent;
-        _logClick(product);
+        _logClick(product, 'Product_Screen');
       },
       child: MouseRegion(
         onEnter: (_) => setState(() => _isFlipped = true),
@@ -902,7 +903,7 @@ class ProductScreenState extends State<ProductScreen>
               _logProductView;
               _logTimeSpent;
               _logClick(
-                product,
+                product, 'Product_Screen',
               );
             },
             style: ElevatedButton.styleFrom(
@@ -1064,7 +1065,7 @@ class ProductScreenState extends State<ProductScreen>
             padding: const EdgeInsets.only(right: 40),
             child: GestureDetector(
               onTap: () {
-                _logClick(product);
+                _logClick(product, 'Cart');
                 Navigator.pushNamed(context, '/cart');
               },
               child: CircleAvatar(
@@ -1129,7 +1130,7 @@ class ProductScreenState extends State<ProductScreen>
               const SizedBox(height: 10),
               GestureDetector(
                 onTap: () {
-                  _logClick(product);
+                  _logClick(product, 'Review');
                   Navigator.of(context).push(
                     MaterialPageRoute(
                         builder: (context) =>
@@ -1385,7 +1386,7 @@ class ProductScreenState extends State<ProductScreen>
                                       userProvider
                                           .addFavoriteProduct(product);
                                     }
-                                    _logClick(product);
+                                    _logClick(product, 'Favorite');
                                   },
                                 ),
                               ],
@@ -1548,7 +1549,7 @@ Widget buildQuantityManager(BuildContext context) {
               quantity, // Using the local quantity state
               notes,
             );
-            _logClick(product);
+            _logClick(product, 'Add to Cart');
           }
         },
       ),
