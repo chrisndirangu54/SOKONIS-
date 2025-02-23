@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:grocerry/providers/cart_provider.dart';
 import 'package:http/http.dart' as http;
 import '../providers/user_provider.dart'; // Import UserProvider
 import '../providers/product_provider.dart'; // Import ProductProvider
@@ -12,22 +13,24 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
   final String _aiApiUrl = 'https://api.openai.com/v1/completions';
-  final String _aiApiKey = 'your_openai_api_key_here'; // Replace with your OpenAI API key
+  final String _aiApiKey =
+      'your_openai_api_key_here'; // Replace with your OpenAI API key
   final UserProvider? _userProvider;
   final ProductProvider? _productProvider;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final Map<String, double> _cartPricesCache = {}; // Cache for tracking cart prices
+  final Map<String, double> _cartPricesCache =
+      {}; // Cache for tracking cart prices
   DateTime? lastUpdateTime; // Track last update for new products
-
+  final CartProvider? cartProvider;
   NotificationService({
     UserProvider? userProvider,
     ProductProvider? productProvider,
+    this.cartProvider,
   })  : _userProvider = userProvider,
         _productProvider = productProvider {
     _initializeNotifications();
     if (_userProvider != null && _productProvider != null) {
       _listenToOrderStreams();
-      _trackCartItemsForPriceDrop();
     }
     _listenToGeneralStreams();
   }
@@ -71,11 +74,11 @@ class NotificationService {
     }
   }
 
-  // **Listen to Order Streams**
   void _listenToOrderStreams() {
-    if (_userProvider != null) {
-      _userProvider!.cartStream.listen((cartItems, dynamic cartItem) async {
-        for (var cartItem in cartItem) {
+    if (cartProvider != null) {
+      cartProvider!.cartStream.listen((cartItems) async {
+        for (var cartItem in cartItems.values) {
+          // Iterate over the map's values
           final product = _productProvider?.getProductById(cartItem.product.id);
           if (product != null) {
             final currentPrice = product.basePrice;
@@ -83,13 +86,13 @@ class NotificationService {
                 currentPrice < _cartPricesCache[cartItem.product.id]!) {
               final priceDrop =
                   _cartPricesCache[cartItem.product.id]! - currentPrice;
-              _showNotification('Price Drop Alert',
-                  'The price of ${product.name} has dropped by \$$priceDrop!');
+              _analyzeAndNotify(product, 'Price Drop Alert',
+                  'The price of ${product.name} in your cart, has dropped by \$$priceDrop!');
             }
             _cartPricesCache[cartItem.product.id] = currentPrice;
           }
         }
-      } as void Function(Map<String, CartItem> event)?);
+      });
     }
   }
 
@@ -165,26 +168,6 @@ class NotificationService {
     }
   }
 
-  // **Track Cart Items for Price Drops**
-  void _trackCartItemsForPriceDrop() {
-    _userProvider!.cartStream.listen((cartItems, dynamic cartItem) async {
-      for (var cartItem in cartItem) {
-        final product = _productProvider!.getProductById(cartItem.product.id);
-        if (product != null) {
-          final currentPrice = product.basePrice;
-          if (_cartPricesCache.containsKey(cartItem.product.id) &&
-              currentPrice < _cartPricesCache[cartItem.product.id]!) {
-            final priceDrop =
-                _cartPricesCache[cartItem.product.id]! - currentPrice;
-            _showNotification('Price Drop Alert',
-                'The price of ${product.name} has dropped by \$$priceDrop!');
-          }
-          _cartPricesCache[cartItem.product.id] = currentPrice;
-        }
-      }
-    } as void Function(Map<String, CartItem> event)?);
-  }
-
   // **Fetch Positive Trending Topic**
   Future<String> _fetchPositiveTrendingTopic() async {
     final response = await http.post(
@@ -247,6 +230,8 @@ class NotificationService {
       'isComplementary': lowercasedText.contains('complementary'),
       'seasonalHint': lowercasedText.contains('seasonal'),
       'priceDropHint': lowercasedText.contains('price drop'),
+      'timeOfDayHint': lowercasedText.contains('time of day'),
+      'consumptionTimeHint': lowercasedText.contains('consumption')
     };
   }
 
@@ -256,6 +241,12 @@ class NotificationService {
     String personalizedMessage = baseMessage;
     String trendingTopic = await _fetchPositiveTrendingTopic();
     personalizedMessage = '$trendingTopic $personalizedMessage';
+
+    // Get current time of day for context
+    final hour = DateTime.now().hour;
+    String timeOfDay =
+        hour < 12 ? 'morning' : (hour < 17 ? 'afternoon' : 'evening');
+
     if (analysisResult['isTrending']) {
       personalizedMessage += ' It\'s trending right now!';
     }
@@ -266,9 +257,15 @@ class NotificationService {
       personalizedMessage += ' This item is perfect for the current season!';
     }
     if (analysisResult['priceDropHint']) {
-      personalizedMessage +=
-          ' There has been a recent price drop in this product in your cart!';
+      personalizedMessage += ' There has been a recent price drop!';
     }
+    if (analysisResult['timeOfDayHint']) {
+      personalizedMessage += ' Perfect for this $timeOfDay!';
+    }
+    if (analysisResult['consumptionTimeHint']) {
+      personalizedMessage += ' Great for your next meal or snack!';
+    }
+
     return personalizedMessage;
   }
 
@@ -309,7 +306,6 @@ class NotificationService {
       );
     }
   }
-
 
   // Handle background messages (for Firebase notifications)
   Future<void> _backgroundMessageHandler(RemoteMessage message) async {
@@ -378,16 +374,19 @@ class NotificationService {
     }
   }
 
-    Future<void> showReplenishmentReminder(String title, String body) async {
+  Future<void> showReplenishmentReminder(String title, String body) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails('replenishment_channel', 'Replenishment Notifications',
-            channelDescription: 'Notification channel for replenishment reminders',
+        AndroidNotificationDetails(
+            'replenishment_channel', 'Replenishment Notifications',
+            channelDescription:
+                'Notification channel for replenishment reminders',
             importance: Importance.max,
             priority: Priority.high,
             showWhen: false);
     const NotificationDetails platformChannelSpecifics =
         NotificationDetails(android: androidPlatformChannelSpecifics);
-    await _flutterLocalNotificationsPlugin.show(0, title, body, platformChannelSpecifics);
+    await _flutterLocalNotificationsPlugin.show(
+        0, title, body, platformChannelSpecifics);
   }
 
   Future<void> sendNotification({
@@ -398,14 +397,16 @@ class NotificationService {
   }) async {
     try {
       // Show a local notification
-      const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
-        'your_channel_id', 
-        'your_channel_name', 
+      const AndroidNotificationDetails androidPlatformChannelSpecifics =
+          AndroidNotificationDetails(
+        'your_channel_id',
+        'your_channel_name',
         importance: Importance.max,
         priority: Priority.high,
         showWhen: false,
       );
-      const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
+      const NotificationDetails platformChannelSpecifics =
+          NotificationDetails(android: androidPlatformChannelSpecifics);
 
       await _flutterLocalNotificationsPlugin.show(
         0, // Notification id, can be any unique integer

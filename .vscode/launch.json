@@ -1,10 +1,9 @@
-{
+                 {
     // Use IntelliSense to learn about possible attributes.
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-        
         {
             "name": "Launch Chrome",
             "request": "launch",
@@ -35,6 +34,12 @@
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"
+        },
+        {
+            "name": "Flutter (lib\\providers\\sales_data_provider.dart)",
+            "type": "dart",
+            "request": "launch",
+            "program": "lib\\providers\\sales_data_provider.dart"
         }
     ]
 }
