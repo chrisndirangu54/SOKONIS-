@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:grocerry/providers/wallet_provider.dart';
 import 'package:provider/provider.dart';
+
 // Assuming you have this file
 class TopUpForm extends StatefulWidget {
   const TopUpForm({super.key});
-  
-@override
 
-  _TopUpFormState createState() => _TopUpFormState();
+  @override
+  TopUpFormState createState() => TopUpFormState();
 }
-class _TopUpFormState extends State<TopUpForm> {
+
+class TopUpFormState extends State<TopUpForm> {
   final _formKey = GlobalKey<FormState>();
   double _amount = 0.0;
   PaymentMethod _selectedMethod = PaymentMethod.Mpesa;
-  
-@override
 
+  @override
   Widget build(BuildContext context) {
     return Form(
       key: _formKey,
@@ -51,8 +51,10 @@ class _TopUpFormState extends State<TopUpForm> {
             onPressed: () async {
               if (_formKey.currentState!.validate()) {
                 _formKey.currentState!.save();
-                final walletProvider = Provider.of<WalletProvider>(context, listen: false);
-                await walletProvider.topUpWallet(_amount, _selectedMethod, context);
+                final walletProvider =
+                    Provider.of<WalletProvider>(context, listen: false);
+                await walletProvider.topUpWallet(
+                    _amount, _selectedMethod, context);
                 // Handle UI feedback, perhaps show a success or error dialog
               }
             },
