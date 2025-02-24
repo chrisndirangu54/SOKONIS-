@@ -4,10 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:grocerry/providers/user_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
-// Assuming User is imported
 import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
 
-// Define PaymentMethod enum in a separate file or here for clarity
+// Define PaymentMethod enum
 enum PaymentMethod { Mpesa, CreditCard, Wallet }
 
 class WalletProvider with ChangeNotifier {
@@ -42,7 +41,8 @@ class WalletProvider with ChangeNotifier {
   }
 
   // Method to add money to wallet with payment method selection
-  Future<void> topUpWallet(double amount, PaymentMethod paymentMethod, BuildContext context) async {
+  Future<void> topUpWallet(
+      double amount, PaymentMethod paymentMethod, BuildContext context) async {
     if (amount <= 0) {
       print('Amount must be positive');
       paymentError = 'Amount must be positive';
@@ -64,7 +64,6 @@ class WalletProvider with ChangeNotifier {
           paymentSuccessful = await _processStripePayment(amount, context);
           break;
         case PaymentMethod.Wallet:
-          // Wallet topping up Wallet doesn't make sense in this context, skipping or throwing an error
           throw Exception('Cannot top up wallet using wallet');
       }
 
@@ -73,7 +72,8 @@ class WalletProvider with ChangeNotifier {
         print('Top up successful for $amount via $paymentMethod');
         await _logTransaction(amount, paymentMethod, 'success', context);
       } else {
-        print('Payment failed for $amount via $paymentMethod. Top up canceled.');
+        print(
+            'Payment failed for $amount via $paymentMethod. Top up canceled.');
         paymentError = 'Payment failed';
         notifyListeners();
       }
@@ -87,31 +87,155 @@ class WalletProvider with ChangeNotifier {
     }
   }
 
-  // Process M-Pesa payment
+  // Process M-Pesa payment with phone number input dialog
   Future<bool> _processMpesaPayment(double amount, BuildContext context) async {
+    final TextEditingController phoneController = TextEditingController();
+    List<String> previousPhoneNumbers = await _loadPreviousPhoneNumbers();
+
+    if (previousPhoneNumbers.isNotEmpty) {
+      phoneController.text =
+          previousPhoneNumbers.first; // Pre-fill with the most recent number
+    }
+
+    final phoneNumber = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Enter M-Pesa Phone Number'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g., 2547XXXXXXXX',
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (previousPhoneNumbers.isNotEmpty)
+                    DropdownButton<String>(
+                      value: phoneController.text.isNotEmpty &&
+                              previousPhoneNumbers
+                                  .contains(phoneController.text)
+                          ? phoneController.text
+                          : null,
+                      hint: const Text('Select previous number'),
+                      isExpanded: true,
+                      items: previousPhoneNumbers.map((String number) {
+                        return DropdownMenuItem<String>(
+                          value: number,
+                          child: Text(number),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          phoneController.text = newValue ?? '';
+                        });
+                      },
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final number = phoneController.text.trim();
+                    if (number.isNotEmpty &&
+                        number.startsWith('254') &&
+                        number.length == 12) {
+                      Navigator.pop(dialogContext, number);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              'Please enter a valid phone number (e.g., 2547XXXXXXXX)'),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Submit'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (phoneNumber == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Payment canceled: No phone number provided')),
+      );
+      return false;
+    }
+
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable('initiateMpesaPayment');
+      final callable =
+          FirebaseFunctions.instance.httpsCallable('initiateMpesaPayment');
       final response = await callable.call({
         'amount': amount,
-        'phoneNumber': '2547XXXXXXXX', // Replace with actual user phone number logic
+        'phoneNumber': phoneNumber,
         'paybillNumber': '123456', // Your paybill number
         'accountNumber': 'YourAccountNumber',
       });
 
-      return response.data['status'] == 'success';
+      final success = response.data['status'] == 'success';
+      if (success) {
+        await _savePhoneNumber(phoneNumber);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('M-Pesa payment initiated successfully')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('M-Pesa payment failed')),
+        );
+      }
+      return success;
     } catch (e) {
       print('M-Pesa payment error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('M-Pesa payment error: $e')),
+      );
       return false;
     }
   }
 
+  // Load previous phone numbers from SharedPreferences
+  Future<List<String>> _loadPreviousPhoneNumbers() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('mpesaPhoneNumbers') ?? [];
+  }
+
+  // Save a new phone number to SharedPreferences
+  Future<void> _savePhoneNumber(String phoneNumber) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> previousNumbers = await _loadPreviousPhoneNumbers();
+    if (!previousNumbers.contains(phoneNumber)) {
+      previousNumbers.insert(0, phoneNumber); // Add to the start of the list
+      if (previousNumbers.length > 5) {
+        previousNumbers = previousNumbers.sublist(0, 5); // Limit to 5 numbers
+      }
+      await prefs.setStringList('mpesaPhoneNumbers', previousNumbers);
+    }
+  }
+
   // Process Stripe (Visa/MasterCard) payment
-  Future<bool> _processStripePayment(double amount, BuildContext context) async {
+  Future<bool> _processStripePayment(
+      double amount, BuildContext context) async {
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final user = userProvider.currentUser;
 
-      // Create a Payment Intent in Firestore
       final paymentRef = await _firestore
           .collection('customers')
           .doc(user.id)
@@ -158,7 +282,8 @@ class WalletProvider with ChangeNotifier {
   }
 
   // Log transaction to Firestore
-  Future<void> _logTransaction(double amount, PaymentMethod paymentMethod, String status, BuildContext context) async {
+  Future<void> _logTransaction(double amount, PaymentMethod paymentMethod,
+      String status, BuildContext context) async {
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final user = userProvider.currentUser;
@@ -171,10 +296,10 @@ class WalletProvider with ChangeNotifier {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      print('Transaction logged: User ${user.id} added $amount via $paymentMethod with status $status');
+      print(
+          'Transaction logged: User ${user.id} added $amount via $paymentMethod with status $status');
     } catch (e) {
       print('Error logging transaction: $e');
     }
   }
-
 }

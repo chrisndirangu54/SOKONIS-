@@ -15,7 +15,8 @@ class ProductPriceFloating extends StatelessWidget {
   });
 
   Future<void> cancelGroupBuy(String groupId) async {
-    final groupRef = FirebaseFirestore.instance.collection('GroupBuy').doc(groupId);
+    final groupRef =
+        FirebaseFirestore.instance.collection('GroupBuy').doc(groupId);
     final groupDoc = await groupRef.get();
 
     if (!groupDoc.exists) {
@@ -25,7 +26,8 @@ class ProductPriceFloating extends StatelessWidget {
     // Update the user record to remove this group buy
     final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
     final userDoc = await userRef.get();
-    final activeGroupBuys = List<String>.from(userDoc.data()?['activeGroupBuys'] ?? []);
+    final activeGroupBuys =
+        List<String>.from(userDoc.data()?['activeGroupBuys'] ?? []);
     activeGroupBuys.remove(groupId);
     await userRef.update({'activeGroupBuys': activeGroupBuys});
 
@@ -43,8 +45,10 @@ class ProductPriceFloating extends StatelessWidget {
         child: StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('GroupBuy')
-              .where('location', isEqualTo: userLocation) // Query based on the user's location
-              .where('active', isEqualTo: true) // Check if there's an active group buy
+              .where('location',
+                  isEqualTo: userLocation) // Query based on the user's location
+              .where('active',
+                  isEqualTo: true) // Check if there's an active group buy
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -61,12 +65,14 @@ class ProductPriceFloating extends StatelessWidget {
 
             // Get the first group buy document from the query
             final groupBuyDoc = snapshot.data!.docs.first;
-            final discountEndTime = (groupBuyDoc['endTime'] as Timestamp).toDate();
+            final discountEndTime =
+                (groupBuyDoc['endTime'] as Timestamp).toDate();
             final timeLeft = discountEndTime.difference(DateTime.now());
 
             if (timeLeft.isNegative) {
               return Container(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
                 decoration: BoxDecoration(
                   color: Colors.red.withOpacity(0.8),
                   borderRadius: BorderRadius.circular(30),
@@ -78,7 +84,8 @@ class ProductPriceFloating extends StatelessWidget {
               );
             }
 
-            final timeLeftFormatted = "${timeLeft.inMinutes}m ${timeLeft.inSeconds % 60}s";
+            final timeLeftFormatted =
+                "${timeLeft.inMinutes}m ${timeLeft.inSeconds % 60}s";
 
             return Container(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
@@ -98,7 +105,8 @@ class ProductPriceFloating extends StatelessWidget {
                     onPressed: () {
                       cancelGroupBuy(groupBuyDoc.id); // Cancel the group buy
                     },
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    style:
+                        ElevatedButton.styleFrom(backgroundColor: Colors.red),
                     child: const Text('Cancel Group Buy'),
                   ),
                 ],
@@ -204,9 +212,8 @@ class Product {
     this.consumptionTime = const [],
     this.weather = const [],
     this.rating,
-    this.reviews, 
+    this.reviews,
     this.genomicAlternatives = const [],
-
   });
 
 // Factory constructor to create a Product instance from Firestore data
@@ -335,7 +342,6 @@ class Product {
   User? user;
   Variety? variety;
 
-
   get userLocation => user?.pinLocation;
 
   //get selectedVariety => variety;
@@ -360,7 +366,7 @@ class Product {
       minPrice: null,
       groupDiscount: null,
       isGroupActive: null,
-      discountedPriceStream2: const Stream<double?>.empty(), 
+      discountedPriceStream2: const Stream<double?>.empty(),
     );
   }
 
@@ -418,7 +424,7 @@ class Product {
       discountedPriceStream2: data['discountedPriceStream'] ?? 0.0,
       consumptionTime: List<String>.from(data['consumptionTime'] ?? []),
       weather: List<String>.from(data['weather'] ?? []),
-      rating: data['rating'] ?? 0, 
+      rating: data['rating'] ?? 0,
     );
   }
 
@@ -662,7 +668,8 @@ class Review {
   factory Review.fromMap(Map<String, dynamic> map) {
     // Here we assume that the map contains an 'id' field, if not, you might need to handle this case differently
     return Review(
-      id: map['id'] ?? '', // Assuming id is part of the map, otherwise handle this
+      id: map['id'] ??
+          '', // Assuming id is part of the map, otherwise handle this
       reviewerName: map['reviewerName'] ?? 'Anonymous',
       reviewText: map['reviewText'] ?? '',
       rating: map['rating'] ?? 0,
@@ -701,7 +708,6 @@ class Review {
     );
   }
 }
-
 
 class Address {
   final String? city;
