@@ -1,5 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:grocerry/models/order.dart';
+import 'package:grocerry/models/order.dart' as model;
 import 'package:grocerry/providers/cart_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
@@ -24,12 +26,15 @@ class OrderDetailsScreen extends StatefulWidget {
 
 class OrderDetailsScreenState extends State<OrderDetailsScreen> {
   bool deliveryConfirmed = false;
+  double _monthlyBudget =
+      500.0; // Default value, will be updated from Firestore
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _handleOrderStatus();
+      _loadBudget(); // Load budget when widget initializes
     });
   }
 
@@ -68,7 +73,7 @@ class OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   // Function to calculate category percentages from items' products
-  Map<String, double> calculateCategoryPercentages(Order order) {
+  Map<String, double> calculateCategoryPercentages(model.Order order) {
     final categoryCounts = <String, int>{};
     int totalProducts = 0;
 
@@ -93,29 +98,112 @@ class OrderDetailsScreenState extends State<OrderDetailsScreen> {
     return categoryPercentages;
   }
 
-  // Function to track the budget and alert if overspending
+  // Load the user's budget from Firestore
+  Future<void> _loadBudget() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      setState(() {
+        _monthlyBudget =
+            (userDoc['monthlyBudget'] as num?)?.toDouble() ?? 500.0;
+      });
+    }
+  }
+
+  // Show dialog to input budget
+  Future<void> _showBudgetInputDialog(BuildContext context) async {
+    final TextEditingController budgetController = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Set Monthly Budget'),
+          content: TextField(
+            controller: budgetController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Enter Budget (\$)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(), // Cancel
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final input = double.tryParse(budgetController.text);
+                if (input != null && input > 0) {
+                  setState(() {
+                    _monthlyBudget = input;
+                  });
+                  // Save to Firestore
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user != null) {
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.uid)
+                        .update({'monthlyBudget': input});
+                  }
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Budget updated successfully')),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Please enter a valid budget')),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget buildBudgetTracking(OrderProvider orderProvider) {
-    // Sample data for budget tracking (would come from user settings)
-    const double monthlyBudget = 500.0;
-    const double totalSpending = 400.0; // Example of current spending
-    const double budgetPercentage = totalSpending / monthlyBudget;
+    // Use provider or other source for total spending; hardcoded here for simplicity
+    const double totalSpending =
+        400.0; // Replace with orderProvider.totalSpending
+    final double budgetPercentage = totalSpending / _monthlyBudget;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Budget Tracking',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: budgetPercentage,
-          backgroundColor: Colors.grey[300],
-          valueColor: const AlwaysStoppedAnimation<Color>(
-              budgetPercentage > 1 ? Colors.red : Colors.green),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Budget Tracking',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () => _showBudgetInputDialog(context),
+              tooltip: 'Edit Budget',
+            ),
+          ],
         ),
         const SizedBox(height: 8),
-        const Text(
-          'You\'ve spent \$$totalSpending out of your \$$monthlyBudget budget this month.',
-          style: TextStyle(fontSize: 16),
+        LinearProgressIndicator(
+          value: budgetPercentage.clamp(0, 1), // Clamp to avoid overflow in UI
+          backgroundColor: Colors.grey[300],
+          valueColor: AlwaysStoppedAnimation<Color>(
+            budgetPercentage > 1 ? Colors.red : Colors.green,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'You\'ve spent \$${totalSpending.toStringAsFixed(2)} out of your \$${_monthlyBudget.toStringAsFixed(2)} budget this month.',
+          style: const TextStyle(fontSize: 16),
         ),
         if (budgetPercentage > 1)
           const Text(

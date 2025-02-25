@@ -723,7 +723,6 @@ class DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-// Helper method to build each ExpansionTile with blacklist check
   Widget _buildExpansionTile(
       String title, List<QueryDocumentSnapshot> reviews) {
     return StreamBuilder<QuerySnapshot>(
@@ -745,21 +744,50 @@ class DashboardScreenState extends State<DashboardScreen> {
             final isBlacklisted = userDoc['isBlacklisted'] as bool? ?? false;
 
             return ListTile(
-              title: Text('${r['reviewerName']} (ID: $reviewerId)'),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Review: ${r['reviewText']}'),
-                  Text('Response: ${r['autoResponse']}'),
-                  if (isBlacklisted)
-                    const Text(
-                      'Blacklisted',
-                      style: TextStyle(
-                          color: Colors.red, fontWeight: FontWeight.bold),
-                    ),
-                ],
-              ),
-            );
+                title: Text('${r['reviewerName']} (ID: $reviewerId)'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Review: ${r['reviewText']}'),
+                    Text('Response: ${r['autoResponse']}'),
+                    if (isBlacklisted)
+                      const Text(
+                        'Blacklisted',
+                        style: TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.bold),
+                      ),
+                  ],
+                ),
+                trailing: IconButton(
+                  icon: Icon(
+                    isBlacklisted ? Icons.lock_open : Icons.lock,
+                    color: isBlacklisted ? Colors.green : Colors.red,
+                  ),
+                  onPressed: () async {
+                    try {
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(reviewerId)
+                          .update({
+                        'isBlacklisted': !isBlacklisted,
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isBlacklisted
+                                ? 'User unblacklisted'
+                                : 'User blacklisted',
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Failed to update status')),
+                      );
+                    }
+                  },
+                ));
           }).toList(),
         );
       },
