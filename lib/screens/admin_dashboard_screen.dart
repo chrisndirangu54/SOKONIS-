@@ -424,6 +424,7 @@ class DashboardScreen extends StatefulWidget {
 
 class DashboardScreenState extends State<DashboardScreen> {
   String _selectedPeriod = 'Daily'; // Default time period
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Review Dashboard')),
@@ -712,43 +713,54 @@ class DashboardScreenState extends State<DashboardScreen> {
 
         return Column(
           children: [
-            ExpansionTile(
-              title: Text('Positive Sentiment (${positiveReviews.length})'),
-              children: positiveReviews
-                  .map((r) => ListTile(
-                        title: Text(r['reviewText']),
-                        subtitle: Text('Response: ${r['autoResponse']}'),
-                      ))
-                  .toList(),
-            ),
-            ExpansionTile(
-              title: Text('Negative Sentiment (${negativeReviews.length})'),
-              children: negativeReviews
-                  .map((r) => ListTile(
-                        title: Text(r['reviewText']),
-                        subtitle: Text('Response: ${r['autoResponse']}'),
-                      ))
-                  .toList(),
-            ),
-            ExpansionTile(
-              title: Text('Valid Reviews (${validReviews.length})'),
-              children: validReviews
-                  .map((r) => ListTile(
-                        title: Text(r['reviewText']),
-                        subtitle: Text('Response: ${r['autoResponse']}'),
-                      ))
-                  .toList(),
-            ),
-            ExpansionTile(
-              title: Text('Invalid Reviews (${invalidReviews.length})'),
-              children: invalidReviews
-                  .map((r) => ListTile(
-                        title: Text(r['reviewText']),
-                        subtitle: Text('Response: ${r['autoResponse']}'),
-                      ))
-                  .toList(),
-            ),
+            _buildExpansionTile('Positive Sentiment', positiveReviews),
+            _buildExpansionTile('Negative Sentiment', negativeReviews),
+            _buildExpansionTile('Valid Reviews', validReviews),
+            _buildExpansionTile('Invalid Reviews', invalidReviews),
           ],
+        );
+      },
+    );
+  }
+
+// Helper method to build each ExpansionTile with blacklist check
+  Widget _buildExpansionTile(
+      String title, List<QueryDocumentSnapshot> reviews) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').snapshots(),
+      builder: (context, userSnapshot) {
+        if (!userSnapshot.hasData) {
+          return const ExpansionTile(title: Text('Loading...'));
+        }
+        final users = userSnapshot.data!.docs;
+
+        return ExpansionTile(
+          title: Text('$title (${reviews.length})'),
+          children: reviews.map((r) {
+            final reviewerId = r['reviewerId'] as String;
+            final userDoc = users.firstWhere(
+              (u) => u.id == reviewerId,
+              orElse: () => throw Exception('User not found'),
+            );
+            final isBlacklisted = userDoc['isBlacklisted'] as bool? ?? false;
+
+            return ListTile(
+              title: Text('${r['reviewerName']} (ID: $reviewerId)'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Review: ${r['reviewText']}'),
+                  Text('Response: ${r['autoResponse']}'),
+                  if (isBlacklisted)
+                    const Text(
+                      'Blacklisted',
+                      style: TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.bold),
+                    ),
+                ],
+              ),
+            );
+          }).toList(),
         );
       },
     );

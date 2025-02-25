@@ -19,6 +19,7 @@ class User with ChangeNotifier {
   final String contact;
   final String? referralCode;
   final String? referredBy;
+  final bool isBlacklisted;
 
   // Admin-specific fields
   final bool isAdmin;
@@ -42,6 +43,7 @@ class User with ChangeNotifier {
     required this.uid,
     required this.email,
     this.token,
+    this.isBlacklisted = false,
     required this.name,
     this.address,
     this.pinLocation,
@@ -267,6 +269,13 @@ class User with ChangeNotifier {
       'contact': contact,
       'referralCode': referralCode,
       'referredBy': referredBy,
+    };
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'name': name,
+      'isBlacklisted': isBlacklisted,
     };
   }
 }

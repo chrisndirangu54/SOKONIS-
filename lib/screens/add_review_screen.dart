@@ -103,19 +103,17 @@ class AddReviewScreenState extends State<AddReviewScreen> {
 
         String userName = (user.name ?? 'Anonymous');
         final String censoredName = _censorName(userName);
+        final String userId = user.uid; // Add user ID
 
-        // Analyze sentiment and validity
         final analysis = await _analyzeReview(_reviewController.text);
         final String sentiment = analysis['sentiment'];
         final String validity = analysis['validity'];
-
-        // Generate auto-response
         final String autoResponse =
             await _generateResponse(_reviewController.text, sentiment);
 
-        // Prepare review data with sentiment and validity
         final reviewData = {
           'reviewerName': censoredName,
+          'reviewerId': userId, // Add reviewer ID
           'reviewText': _reviewController.text,
           'rating': _rating,
           'reviewDate': Timestamp.now(),
@@ -131,6 +129,7 @@ class AddReviewScreenState extends State<AddReviewScreen> {
             .add(reviewData);
 
         await _updateReviewCount(reviewRef.id);
+        await _checkAndUpdateBlacklist(userId); // Check blacklist status
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Review submitted successfully!')),
@@ -144,6 +143,39 @@ class AddReviewScreenState extends State<AddReviewScreen> {
       } finally {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _checkAndUpdateBlacklist(String userId) async {
+    try {
+      // Fetch all reviews by this user across all products
+      final reviewSnapshots = await FirebaseFirestore.instance
+          .collectionGroup('reviews')
+          .where('reviewerId', isEqualTo: userId)
+          .get();
+
+      final reviews = reviewSnapshots.docs;
+      if (reviews.isEmpty) return;
+
+      // Calculate negative and invalid ratios
+      int negativeCount =
+          reviews.where((r) => r['sentiment'] == 'negative').length;
+      int invalidCount =
+          reviews.where((r) => r['validity'] == 'invalid').length;
+      int totalCount = reviews.length;
+
+      double negativeRatio = negativeCount / totalCount;
+      double invalidRatio = invalidCount / totalCount;
+
+      // Blacklist thresholds (e.g., >50% negative or >50% invalid)
+      bool shouldBlacklist = negativeRatio > 0.5 || invalidRatio > 0.5;
+
+      // Update user profile in Firestore
+      await FirebaseFirestore.instance.collection('users').doc(userId).update({
+        'isBlacklisted': shouldBlacklist,
+      });
+    } catch (e) {
+      print('Error updating blacklist: $e');
     }
   }
 
