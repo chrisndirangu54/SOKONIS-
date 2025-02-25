@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:grocerry/models/subscription_model.dart';
+import 'package:grocerry/models/user.dart';
 import 'dart:async';
 
 import 'package:grocerry/screens/payment_screen.dart';
@@ -57,7 +58,7 @@ class SubscriptionService {
   }
 
   // Fetch subscriptions by user
-  Stream<List<Subscription>> getUserSubscriptions(String user) {
+  Stream<List<Subscription>> getUserSubscriptions(User user) {
     return _firestore
         .collection('subscriptions')
         .where('user', isEqualTo: user)

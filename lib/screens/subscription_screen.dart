@@ -4,13 +4,14 @@ import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/subscription_model.dart';
 import 'package:grocerry/models/user.dart';
 import 'package:grocerry/providers/user_provider.dart';
+import 'package:grocerry/screens/Product_selection_screen.dart';
 import 'package:grocerry/screens/subscription_suggestion_screeen.dart';
 import 'package:grocerry/services/subscription_service.dart';
 import 'package:provider/provider.dart';
 
 class SubscriptionScreen extends StatelessWidget {
   final SubscriptionService _subscriptionService = SubscriptionService();
-  final String user; // The logged-in user's details are passed here
+  final User user; // The logged-in user's details are passed here
 
   SubscriptionScreen({super.key, required this.user});
 
@@ -96,7 +97,7 @@ class SubscriptionScreen extends StatelessWidget {
 
 class SubscriptionTile extends StatefulWidget {
   final Subscription subscription;
-  final String user;
+  final User user;
   final Function(Subscription) onScheduleChange;
 
   const SubscriptionTile({
@@ -120,7 +121,8 @@ class SubscriptionTileState extends State<SubscriptionTile> {
   void initState() {
     super.initState();
     quantity = widget.subscription.quantity;
-    _searchController.text = widget.subscription.product.name; // Default search term
+    _searchController.text =
+        widget.subscription.product.name; // Default search term
     _fetchLinkedProducts();
   }
 
@@ -151,9 +153,8 @@ class SubscriptionTileState extends State<SubscriptionTile> {
           .get();
 
       setState(() {
-        _linkedProducts = querySnapshot.docs
-            .map((doc) => Product.fromFirestore())
-            .toList();
+        _linkedProducts =
+            querySnapshot.docs.map((doc) => Product.fromFirestore()).toList();
         _isSearching = false;
       });
     } catch (e) {
@@ -169,20 +170,38 @@ class SubscriptionTileState extends State<SubscriptionTile> {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      title: Text('Product: ${widget.subscription.product}'),
-      subtitle: Text('Next Delivery: ${widget.subscription.nextDelivery}'),
-      trailing: Column(
+      trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildSwitch(),
-          _buildSearchButton(),
-          _buildSuggestionsButton(), // Added suggestions button
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildSearchButton(),
+              _buildSuggestionsButton(),
+              _buildAddProductButton(),
+            ],
+          ),
         ],
       ),
-      onTap: () => _showSubscriptionOptions(context),
+      title: GestureDetector(
+        onTap: () => _showSubscriptionOptions(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Product: ${widget.subscription.product.name}'),
+            Text('Next Delivery: ${widget.subscription.nextDelivery}'),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSwitch(),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
-
 
   Widget _buildSwitch() {
     return Switch(
@@ -211,7 +230,7 @@ class SubscriptionTileState extends State<SubscriptionTile> {
     return ElevatedButton.icon(
       onPressed: () => _navigateToSuggestions(context),
       icon: const Icon(Icons.lightbulb_outline),
-      label: const Text('View Suggestions'),
+      label: const Text('View Our Suggestions'),
     );
   }
 
@@ -219,10 +238,11 @@ class SubscriptionTileState extends State<SubscriptionTile> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SubscriptionSuggestionScreen(userId: widget.user),
+        builder: (context) => SubscriptionSuggestionScreen(user: widget.user),
       ),
     );
   }
+
   void _showSearchDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -273,11 +293,10 @@ class SubscriptionTileState extends State<SubscriptionTile> {
                                             width: 40,
                                             height: 40,
                                             fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    const Icon(
-                                                        Icons.error_outline,
-                                                        size: 40),
+                                            errorBuilder: (context, error,
+                                                    stackTrace) =>
+                                                const Icon(Icons.error_outline,
+                                                    size: 40),
                                           )
                                         : (product.pictureUrl != null
                                             ? Image.network(
@@ -294,7 +313,7 @@ class SubscriptionTileState extends State<SubscriptionTile> {
                                             : null),
                                     title: Text(product.name),
                                     subtitle: Text(
-                                      'Price: \$${selectedVariety?.price.toStringAsFixed(2) ?? product.basePrice.toStringAsFixed(2) ?? 'N/A'}'),
+                                        'Price: \$${selectedVariety?.price.toStringAsFixed(2) ?? product.basePrice.toStringAsFixed(2) ?? 'N/A'}'),
                                     children: [
                                       if (product.varieties.isNotEmpty ?? false)
                                         SizedBox(
@@ -304,8 +323,8 @@ class SubscriptionTileState extends State<SubscriptionTile> {
                                             itemCount: product.varieties.length,
                                             itemBuilder:
                                                 (context, varietyIndex) {
-                                              var variety =
-                                                  product.varieties[varietyIndex];
+                                              var variety = product
+                                                  .varieties[varietyIndex];
                                               return Padding(
                                                 padding:
                                                     const EdgeInsets.all(8.0),
@@ -319,10 +338,12 @@ class SubscriptionTileState extends State<SubscriptionTile> {
                                                     width: 200,
                                                     decoration: BoxDecoration(
                                                       border: Border.all(
-                                                          color: selectedVariety ==
-                                                                  variety
-                                                              ? Colors.green
-                                                              : Colors.grey),
+                                                          color:
+                                                              selectedVariety ==
+                                                                      variety
+                                                                  ? Colors.green
+                                                                  : Colors
+                                                                      .grey),
                                                       borderRadius:
                                                           BorderRadius.circular(
                                                               8),
@@ -368,7 +389,8 @@ class SubscriptionTileState extends State<SubscriptionTile> {
                                                                 CrossAxisAlignment
                                                                     .start,
                                                             children: [
-                                                              Text(variety.name ??
+                                                              Text(variety
+                                                                      .name ??
                                                                   ''),
                                                               Text(
                                                                 '\$${variety.price.toStringAsFixed(2) ?? 'N/A'}',
@@ -423,6 +445,7 @@ class SubscriptionTileState extends State<SubscriptionTile> {
       },
     );
   }
+
   // Show subscription options in a modal
   void _showSubscriptionOptions(BuildContext context) {
     showModalBottomSheet(
@@ -433,6 +456,22 @@ class SubscriptionTileState extends State<SubscriptionTile> {
           onScheduleChange: widget.onScheduleChange,
         );
       },
+    );
+  }
+
+  // Add product to subscription button
+  Widget _buildAddProductButton() {
+    final User user = Provider.of<UserProvider>(context, listen: false).user;
+    return ElevatedButton(
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductSelectionScreen(user: user),
+          ),
+        );
+      },
+      child: const Text('Select Products to Subscribe To'),
     );
   }
 
@@ -487,7 +526,8 @@ class SubscriptionTileState extends State<SubscriptionTile> {
                   quantity: quantity,
                   nextDelivery: nextDelivery,
                   frequency: selectedFrequency,
-                  price: product.basePrice, variety: product.selectedVariety,
+                  price: product.basePrice,
+                  variety: product.selectedVariety,
                 );
                 subscriptionService.addSubscription(subscription, context);
                 Navigator.pop(context);

@@ -129,7 +129,7 @@ class Product {
   late final String category;
   final String units;
   final String categoryImageUrl;
-  final List<String> subcategories;
+  final List<String> tags;
   final List<String> subcategoryImageUrls;
   final List<Variety> varieties;
   final String pictureUrl;
@@ -177,7 +177,7 @@ class Product {
     required this.category,
     required this.categoryImageUrl,
     required this.units,
-    this.subcategories = const [],
+    this.tags = const [],
     this.subcategoryImageUrls = const [],
     this.varieties = const [],
     required this.pictureUrl,
@@ -257,7 +257,7 @@ class Product {
         : null;
 
     // Handle lists safely
-    List<String> subcategories = List<String>.from(data['subcategories'] ?? []);
+    List<String> tags = List<String>.from(data['tags'] ?? []);
     List<String> subcategoryImageUrls =
         List<String>.from(data['subcategoryImageUrls'] ?? []);
     List<Variety> varieties = (data['varieties'] as List<Variety>?)
@@ -277,7 +277,7 @@ class Product {
       description: data['description'] as String? ?? '',
       category: data['category'] as String? ?? '',
       categoryImageUrl: data['categoryImageUrl'] as String? ?? '',
-      subcategories: subcategories,
+      tags: tags,
       subcategoryImageUrls: subcategoryImageUrls,
       varieties: varieties,
       pictureUrl: data['pictureUrl'] as String? ?? '',
@@ -379,7 +379,7 @@ class Product {
       description: data['description'] ?? '',
       category: data['category'] ?? '',
       categoryImageUrl: data['categoryImageUrl'] ?? '',
-      subcategories: List<String>.from(data['subcategories'] ?? []),
+      tags: List<String>.from(data['tags'] ?? []),
       subcategoryImageUrls:
           List<String>.from(data['subcategoryImageUrls'] ?? []),
       varieties: (data['varieties'] as List?)
@@ -439,7 +439,7 @@ class Product {
       'description': description,
       'category': category,
       'categoryImageUrl': categoryImageUrl,
-      'subcategories': subcategories,
+      'tags': tags,
       'subcategoryImageUrls': subcategoryImageUrls,
       'varieties': varieties.map((v) => v.toMap()).toList(),
       'pictureUrl': pictureUrl,

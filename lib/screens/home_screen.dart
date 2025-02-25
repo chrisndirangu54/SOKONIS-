@@ -52,14 +52,14 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> {
   List<String> categories = []; // Track if initial suggestions are provided.
 // Convert your List<Product> into a Map<String, List<Product>> grouped by category
-  late Map<String, List<Product>>? categoryProducts;  
+  late Map<String, List<Product>>? categoryProducts;
   List<Product> complementaryProducts = [];
   final cs.CarouselSliderController controller = cs.CarouselSliderController();
   List<Product> favorites = [];
   List<Product> filteredProducts = [];
   List<Product> filteredProducts2 = [];
-  // Define all possible subcategories here or load them dynamically
-  final List<String> subcategories = [];
+  // Define all possible tags here or load them dynamically
+  final List<String> tags = [];
   final List<Product> _genomicAlternatives = [];
   bool? isSearching = false;
   List<Product> nearbyUsersBought = [];
@@ -69,8 +69,8 @@ class HomeScreenState extends State<HomeScreen> {
   List<String> previouslySearchedProducts =
       []; // Cache for previously searched products
   String? sortBy = 'default'; // default, priceLow, priceHigh, etc.
-  List<String> selectedSubcategories =
-      []; // Assuming products can belong to multiple subcategories
+  List<String> selectedtags =
+      []; // Assuming products can belong to multiple tags
   double? minPrice = 0.0;
   double? maxPrice = double.infinity;
   List<Product> products = [];
@@ -79,7 +79,6 @@ class HomeScreenState extends State<HomeScreen> {
   List<String> searchSuggestions = [];
   List<Product> seasonallyAvailable = [];
   String? selectedCategory;
-    List<String> subCategories = [];
 
   User? user;
   String? _healthBenefits;
@@ -123,7 +122,7 @@ class HomeScreenState extends State<HomeScreen> {
 // Initialize in your state class
   int _currentHintIndex = 0;
   Timer? _hintTimer;
-  
+
   static var _searchDebouncer;
   @override
   void didChangeDependencies() {
@@ -167,7 +166,7 @@ class HomeScreenState extends State<HomeScreen> {
           _listenToDiscountedPriceStream2(variety.discountedPriceStream!);
         }
       }
-        } else {
+    } else {
       print("Product is null in HomeScreen initState");
     }
 
@@ -263,7 +262,8 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget buildLists(BuildContext context) {
-      Map<String, List<Product>> categoryProducts = groupBy(products, (Product p) => p.category);  
+    Map<String, List<Product>> categoryProducts =
+        groupBy(products, (Product p) => p.category);
 
     return selectedCategory == null
         ? _buildCategorySelector(categoryProducts)
@@ -422,106 +422,129 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-void _filterProducts() {
-  if (_debounce?.isActive ?? false) _debounce!.cancel();
+  void _filterProducts() {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-  _debounce = Timer(const Duration(milliseconds: 500), () {
-    String query = searchController.text.toLowerCase();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      String query = searchController.text.toLowerCase();
 
-    if (query.isNotEmpty) {
-      setState(() {
-        // Create FuzzyOptions for Product, Offer, Category, and SubCategory
-        final fuzzyOptionsForProducts = FuzzyOptions<Product>(shouldSort: true);
-        final fuzzyOptionsForOffers = FuzzyOptions<Offer>(shouldSort: true);
-        final fuzzyOptionsForCategories = FuzzyOptions<String>(shouldSort: true);
-        final fuzzyOptionsForSubCategories = FuzzyOptions<String>(shouldSort: true);
+      if (query.isNotEmpty) {
+        setState(() {
+          // Create FuzzyOptions for Product, Offer, Category, and SubCategory
+          final fuzzyOptionsForProducts =
+              FuzzyOptions<Product>(shouldSort: true);
+          final fuzzyOptionsForOffers = FuzzyOptions<Offer>(shouldSort: true);
+          final fuzzyOptionsForCategories =
+              FuzzyOptions<String>(shouldSort: true);
+          final fuzzyOptionsFortags = FuzzyOptions<String>(shouldSort: true);
 
-        // Create Fuzzy objects for products, offers, categories, and subcategories
-        final fuzzyProducts = Fuzzy<Product>(
-          products,
-          options: FuzzyOptions(
-            keys: [
-              WeightedKey(
-                name: 'name',
-                weight: 0.7,
-                getter: (p) => p.name,
-              ),
-              WeightedKey(
-                name: 'varieties',
-                weight: 0.3,
-                getter: (p) => p.varieties.map((v) => v.name).join(' ') ?? '',
-              ),
-            ],
-          ),
-        );
-        final fuzzyOffers = Fuzzy<Offer>(offers, options: fuzzyOptionsForOffers);
-        final fuzzyCategories = Fuzzy<String>(categories, options: fuzzyOptionsForCategories);
-        final fuzzySubCategories = Fuzzy<String>(subCategories, options: fuzzyOptionsForSubCategories);
+          // Create Fuzzy objects for products, offers, categories, and tags
+          final fuzzyProducts = Fuzzy<Product>(
+            products,
+            options: FuzzyOptions(
+              keys: [
+                WeightedKey(
+                  name: 'name',
+                  weight: 0.7,
+                  getter: (p) => p.name,
+                ),
+                WeightedKey(
+                  name: 'varieties',
+                  weight: 0.3,
+                  getter: (p) => p.varieties.map((v) => v.name).join(' ') ?? '',
+                ),
+              ],
+            ),
+          );
+          final fuzzyOffers =
+              Fuzzy<Offer>(offers, options: fuzzyOptionsForOffers);
+          final fuzzyCategories =
+              Fuzzy<String>(categories, options: fuzzyOptionsForCategories);
+          final fuzzytags = Fuzzy<String>(tags, options: fuzzyOptionsFortags);
 
-        // Similarity check on products (direct name/variety matching)
-        List<Product> similarityResults = products
-            .where((product) =>
-                product.name.similarityTo(query) > 0.5 ||
-                product.varieties.any((variety) => variety.name.similarityTo(query) > 0.5))
-            .toList();
+          // Similarity check on products (direct name/variety matching)
+          List<Product> similarityResults = products
+              .where((product) =>
+                  product.name.similarityTo(query) > 0.5 ||
+                  product.varieties
+                      .any((variety) => variety.name.similarityTo(query) > 0.5))
+              .toList();
 
-        // Fuzzy matching on products (weighted multi-field search)
-        List<Product> fuzzyProductResults = fuzzyProducts.search(query).map((result) => result.item).toList();
+          // Fuzzy matching on products (weighted multi-field search)
+          List<Product> fuzzyProductResults =
+              fuzzyProducts.search(query).map((result) => result.item).toList();
 
-        // Use fuzzy matching to filter offers based on offer title
-        List<Offer> offerResults = fuzzyOffers.search(query).map((result) => result.item).toList();
+          // Use fuzzy matching to filter offers based on offer title
+          List<Offer> offerResults =
+              fuzzyOffers.search(query).map((result) => result.item).toList();
 
-        // Extract products based on offer IDs
-        List<Product> productsFromOffers = offerResults.expand((offer) {
-          return products.where((product) => product.id == offer.productId).toList();
-        }).toList();
+          // Extract products based on offer IDs
+          List<Product> productsFromOffers = offerResults.expand((offer) {
+            return products
+                .where((product) => product.id == offer.productId)
+                .toList();
+          }).toList();
 
-        // Use fuzzy matching to filter categories based on category name
-        List<String> categoryResults = fuzzyCategories.search(query).map((result) => result.item).toList();
+          // Use fuzzy matching to filter categories based on category name
+          List<String> categoryResults = fuzzyCategories
+              .search(query)
+              .map((result) => result.item)
+              .toList();
 
-        // Map categories from product.categories for filtering
-        List<Product> productsFromCategories = categoryResults.expand((category) {
-          return products.where((product) => product.category == category).toList();
-        }).toList();
+          // Map categories from product.categories for filtering
+          List<Product> productsFromCategories =
+              categoryResults.expand((category) {
+            return products
+                .where((product) => product.category == category)
+                .toList();
+          }).toList();
 
-        // Use fuzzy matching to filter subcategories based on subcategory name
-        List<String> subCategoryResults = fuzzySubCategories.search(query).map((result) => result.item).toList();
+          // Use fuzzy matching to filter tags based on subcategory name
+          List<String> subCategoryResults =
+              fuzzytags.search(query).map((result) => result.item).toList();
 
-        // Map subcategories from product.subCategory for filtering
-        List<Product> productsFromSubCategories = subCategoryResults.expand((subCategory) {
-          return products.where((product) => product.subcategories == subCategory).toList();
-        }).toList();
+          // Map tags from product.subCategory for filtering
+          List<Product> productsFromtags =
+              subCategoryResults.expand((subCategory) {
+            return products
+                .where((product) => product.tags == subCategory)
+                .toList();
+          }).toList();
 
-        // Combine all results and remove duplicates using a Set
-        filteredProducts = [
-          ...similarityResults,
-          ...fuzzyProductResults,
-          ...productsFromOffers,
-          ...productsFromCategories,
-          ...productsFromSubCategories,
-        ].toSet().toList(); // toSet() removes duplicates based on Product equality
+          // Combine all results and remove duplicates using a Set
+          filteredProducts = [
+            ...similarityResults,
+            ...fuzzyProductResults,
+            ...productsFromOffers,
+            ...productsFromCategories,
+            ...productsFromtags,
+          ]
+              .toSet()
+              .toList(); // toSet() removes duplicates based on Product equality
 
-        // Update searchSuggestions with products, offer titles, category names, and subcategory names
-        searchSuggestions = [
-          ...filteredProducts.map((product) => product.name),
-          ...filteredProducts.expand((p) => p.varieties.map((v) => v.name)),
-          ...offerResults.map((offer) => offer.title),
-          ...categoryResults,
-          ...subCategoryResults,
-        ].toSet().toList(); // toSet() removes duplicates based on Product equality
+          // Update searchSuggestions with products, offer titles, category names, and subcategory names
+          searchSuggestions = [
+            ...filteredProducts.map((product) => product.name),
+            ...filteredProducts.expand((p) => p.varieties.map((v) => v.name)),
+            ...offerResults.map((offer) => offer.title),
+            ...categoryResults,
+            ...subCategoryResults,
+          ]
+              .toSet()
+              .toList(); // toSet() removes duplicates based on Product equality
 
-        if (!_hasInitialSuggestions) {
-          _hasInitialSuggestions = true;
-        }
-      });
-    } else {
-      setState(() {
-        searchSuggestions = [];
-        filteredProducts = []; // Clear filtered products if query is empty
-      });
-    }
-  });
-}
+          if (!_hasInitialSuggestions) {
+            _hasInitialSuggestions = true;
+          }
+        });
+      } else {
+        setState(() {
+          searchSuggestions = [];
+          filteredProducts = []; // Clear filtered products if query is empty
+        });
+      }
+    });
+  }
 
   // Helper method to search in both product names and varieties
 
@@ -543,7 +566,6 @@ void _filterProducts() {
       suggestions.addAll(offers.map((offer) =>
           offer.title)); // Assuming `order.title` is the field to filter
     }
-
 
     if (products.isNotEmpty) {
       suggestions.addAll(products.map((product) => product.name));
@@ -612,14 +634,12 @@ void _filterProducts() {
   List<Product> _applyFiltersAndSort(List<Product>? products) {
     List<Product>? filteredProducts2 = products!.where((Product? product) {
       // Filter by price
-      if (product!.basePrice < minPrice! ||
-          product.basePrice > maxPrice!) {
+      if (product!.basePrice < minPrice! || product.basePrice > maxPrice!) {
         return false;
       }
       // Filter by subcategory
-      if (selectedSubcategories.isNotEmpty &&
-          !product.subcategories
-              .any((subcat) => selectedSubcategories.contains(subcat))) {
+      if (selectedtags.isNotEmpty &&
+          !product.tags.any((subcat) => selectedtags.contains(subcat))) {
         return false;
       }
 
@@ -645,7 +665,8 @@ void _filterProducts() {
 
   // Widget to display categories as selectable options
   Widget _buildCategorySelector(Map<String, List<Product>>? categoryProducts) {
-    Map<String, List<Product>> categoryProducts = groupBy(products, (Product p) => p.category);
+    Map<String, List<Product>> categoryProducts =
+        groupBy(products, (Product p) => p.category);
 
     List<String> categories = categoryProducts.keys.toList();
 
@@ -872,7 +893,7 @@ void _filterProducts() {
                 categoryImageUrl: '',
                 units: '',
                 discountedPrice: 0.0,
-)
+              )
             : null;
 
         return Card(
@@ -998,16 +1019,16 @@ void _filterProducts() {
   Product getRandomProduct() {
     if (products.isEmpty) {
       return Product(
-          id: '0',
-          name: 'No Products',
-          pictureUrl: 'assets/images/basket.png',
-          basePrice: 0.0,
-          description: '',
-          category: '',
-          categoryImageUrl: '',
-          units: '',
-          discountedPrice: 0.0,
-);
+        id: '0',
+        name: 'No Products',
+        pictureUrl: 'assets/images/basket.png',
+        basePrice: 0.0,
+        description: '',
+        category: '',
+        categoryImageUrl: '',
+        units: '',
+        discountedPrice: 0.0,
+      );
     }
     final random = Random();
     return products[random.nextInt(products.length)];
@@ -1235,7 +1256,8 @@ void _filterProducts() {
 
   Widget _buildProductGrid(
       String? currentCategory, Map<String, List<Product>> categoryProducts) {
-      Map<String, List<Product>> categoryProducts = groupBy(products, (Product p) => p.category);  
+    Map<String, List<Product>> categoryProducts =
+        groupBy(products, (Product p) => p.category);
 
     List<Product> productsToShow =
         currentCategory != null ? categoryProducts[currentCategory] ?? [] : [];
@@ -1312,19 +1334,19 @@ void _filterProducts() {
         Text(
             'Price: \$ ${minPrice!.toStringAsFixed(2)} - \$ ${maxPrice!.toStringAsFixed(2)}'),
 
-        // Subcategory Filter (assuming subcategories are predefined)
+        // Subcategory Filter (assuming tags are predefined)
         Wrap(
           children: List.generate(
-            subcategories.length,
+            tags.length,
             (index) => ChoiceChip(
-              label: Text(subcategories[index]),
-              selected: selectedSubcategories.contains(subcategories[index]),
+              label: Text(tags[index]),
+              selected: selectedtags.contains(tags[index]),
               onSelected: (bool selected) {
                 setState(() {
                   if (selected) {
-                    selectedSubcategories.add(subcategories[index]);
+                    selectedtags.add(tags[index]);
                   } else {
-                    selectedSubcategories.remove(subcategories[index]);
+                    selectedtags.remove(tags[index]);
                   }
                 });
               },
@@ -1414,7 +1436,7 @@ void _filterProducts() {
           ((originalPrice - discountedPrice) / originalPrice) * 100;
       discountPercentage = '-${percentage.toStringAsFixed(0)}%';
     }
-  
+
     // Check if the product is in stock
     bool inStock = _productProvider.isInStock(product);
     const int highlyRatedThreshold = 100;
@@ -1518,7 +1540,7 @@ void _filterProducts() {
         );
         _logProductView;
         _logTimeSpent;
-        _logClick(product, 'product_Screen' );
+        _logClick(product, 'product_Screen');
       },
       child: MouseRegion(
         onEnter: (_) => setState(() => _isFlipped = true),
@@ -1763,18 +1785,16 @@ void _filterProducts() {
                                     Container(
                                       width: 25,
                                       height: 25,
-                                      margin:
-                                          const EdgeInsets.only(right: 8.0),
+                                      margin: const EdgeInsets.only(right: 8.0),
                                       child: ClipRRect(
                                         borderRadius:
                                             BorderRadius.circular(8.0),
                                         child: Image.network(
                                           variety.imageUrl,
                                           fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (context, error, stackTrace) =>
-                                                  const Icon(Icons.error,
-                                                      size: 24),
+                                          errorBuilder: (context, error,
+                                                  stackTrace) =>
+                                              const Icon(Icons.error, size: 24),
                                         ),
                                       ),
                                     ),
@@ -1947,7 +1967,8 @@ void _filterProducts() {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                ...product!.genomicAlternatives.map((alternative) {
+                                ...product!.genomicAlternatives
+                                    .map((alternative) {
                                   return ListTile(
                                     leading: Image.network(
                                       alternative.pictureUrl,
@@ -1971,7 +1992,7 @@ void _filterProducts() {
                                               productId: alternative.id),
                                         ),
                                       );
-                                                                        },
+                                    },
                                   );
                                 }),
                               ],
@@ -2032,9 +2053,7 @@ void _filterProducts() {
               );
               _logProductView;
               _logTimeSpent;
-              _logClick(
-                product,  'product_Screen' 
-              );
+              _logClick(product, 'product_Screen');
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blueAccent,
@@ -2086,8 +2105,7 @@ void _filterProducts() {
             onTapCancel: () => setState(() => _isPressed = false),
             onTap: () {
               // Button action logic here
-              if (_userProvider.user.isAdmin &&
-                  !_userProvider.user.isRider) {
+              if (_userProvider.user.isAdmin && !_userProvider.user.isRider) {
                 Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const AdminDashboardScreen()));
               } else if (_userProvider.user.isRider) {
@@ -2234,56 +2252,69 @@ void _filterProducts() {
                         decoration: BoxDecoration(
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black
-                                  .withOpacity(0.2), // Shadow color.
+                              color:
+                                  Colors.black.withOpacity(0.2), // Shadow color
                               spreadRadius: 2,
                               blurRadius: 10,
-                              offset: const Offset(0,
-                                  4), // Shadow offset (horizontal, vertical).
+                              offset: const Offset(0, 4), // Shadow offset
                             ),
                           ],
                         ),
                         child: TweenAnimationBuilder<double>(
                           tween: Tween<double>(begin: 0.0, end: 0.1),
                           duration: const Duration(
-                              milliseconds:
-                                  500), // Duration for the bounce effect.
-                          curve: Curves.elasticInOut, // Elastic effect curve.
+                              milliseconds: 500), // Bounce effect duration
+                          curve: Curves.elasticInOut, // Elastic effect curve
                           builder: (context, tiltValue, child) {
+                            // Get screen dimensions
+                            final screenWidth =
+                                MediaQuery.of(context).size.width;
+                            final screenHeight =
+                                MediaQuery.of(context).size.height;
+                            // Define adaptive sizes (e.g., 25% of screen width, capped at 100)
+                            final containerSize =
+                                (screenWidth * 0.25).clamp(50.0, 100.0);
+                            final lottieSize =
+                                (containerSize * 0.8).clamp(40.0, 80.0);
+
                             return GlassmorphicContainer(
-                              width: 100,
-                              height: 100,
+                              width: containerSize, // Adaptive width
+                              height:
+                                  containerSize, // Keep square, adaptive height
                               borderRadius: 20,
                               blur: 15,
                               alignment: Alignment.center,
                               border: 2,
                               linearGradient: LinearGradient(
                                 colors: [
-                                  Colors.white.withOpacity(0.2),
-                                  Colors.white.withOpacity(0.05),
+                                  Colors.lightGreenAccent.withOpacity(0.2),
+                                  Colors.orange.withOpacity(0.05),
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                               borderGradient: LinearGradient(
                                 colors: [
-                                  Colors.white.withOpacity(0.4),
-                                  Colors.white.withOpacity(0.1),
+                                  Colors.redAccent.withOpacity(0.4),
+                                  Colors.purpleAccent.withOpacity(0.2),
+                                  Colors.pinkAccent.withOpacity(0.1),
                                 ],
                               ),
                               child: Transform(
                                 transform: Matrix4.identity()
                                   ..setEntry(
-                                      3, 2, 0.001) // Perspective setting.
+                                      3, 2, 0.005) // Stronger perspective
                                   ..rotateY(
-                                      tiltValue) // Subtle rotation along Y-axis.
+                                      tiltValue * 3) // Amplify Y-axis rotation
                                   ..rotateX(
-                                      tiltValue), // Subtle rotation along X-axis.
-                                alignment: FractionalOffset.center,
+                                      tiltValue * 3) // Amplify X-axis rotation
+                                  ..scale(1.1), // Optional scale
+                                alignment: Alignment
+                                    .center, // Updated to Alignment.center
                                 child: Lottie.network(
                                   'https://lottie.host/f0e504ff-1b4a-43d1-a08c-93fa0aa5e4ae/6xKWN4vKCF.json',
-                                  height: 80,
-                                  width: 80,
+                                  height: lottieSize, // Adaptive height
+                                  width: lottieSize, // Adaptive width
                                   fit: BoxFit.contain,
                                 ),
                               ),
@@ -2292,16 +2323,27 @@ void _filterProducts() {
                         ),
                       ),
                     ),
-                    const SizedBox(
-                        width: 8), // Spacing between the logo and title.
-                    const Text('SOKONI\'S!'),
+                    const SizedBox(width: 8), // Spacing between logo and title
+                    Flexible(
+                      child: Text(
+                        'SOKONI\'S!',
+                        style: TextStyle(
+                          fontSize: (MediaQuery.of(context).size.width * 0.05)
+                              .clamp(14.0, 24.0),
+                        ),
+                        overflow: TextOverflow
+                            .ellipsis, // Prevent overflow on small screens
+                      ),
+                    ),
                   ],
                 ),
                 actions: [
                   Transform(
                     transform: Matrix4.identity()
-                      ..setEntry(3, 2, 0.001) // Apply perspective effect.
-                      ..rotateY(0.1), // Slight rotation along the Y-axis.
+                      ..setEntry(3, 2,
+                          0.005) // Stronger perspective for better 3D effect
+                      ..rotateX(0.15) // Increase to ~8.6 degrees for visibility
+                      ..scale(1.1), // Optional: slight scale-up for emphasis
                     alignment: Alignment.center,
                     child: StatefulBuilder(
                       builder: (context, setState) {
@@ -2339,17 +2381,21 @@ void _filterProducts() {
                   ),
                   Transform(
                     transform: Matrix4.identity()
-                      ..setEntry(3, 2, 0.001) // Maintain perspective.
-                      ..rotateY(-0.1),
+                      ..setEntry(3, 2, 0.005) // Stronger perspective
+                      ..rotateY(-0.3), // More pronounced Y tilt
                     alignment: Alignment.center,
                     child: StatefulBuilder(
                       builder: (context, setState) {
                         return AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
+                          duration: const Duration(milliseconds: 600),
                           curve: Curves.easeInOut,
                           transform: Matrix4.identity()
-                            ..setEntry(3, 2, 0.001) // Perspective effect.
-                            ..rotateX(-0.05),
+                            ..setEntry(3, 2,
+                                0.005) // Stronger perspective for better 3D effect
+                            ..rotateX(
+                                0.15) // Increase to ~8.6 degrees for visibility
+                            ..scale(
+                                1.1), // Optional: slight scale-up for emphasis // Slight scale for emphasis
                           child: IconButton(
                             tooltip:
                                 'Notifications', // Tooltip for notifications.
@@ -2409,9 +2455,10 @@ void _filterProducts() {
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeInOut,
                     transform: Matrix4.identity()
-                      ..setEntry(
-                          3, 2, 0.001) // Apply perspective transformation.
-                      ..rotateX(0.05),
+                      ..setEntry(3, 2,
+                          0.005) // Stronger perspective for better 3D effect
+                      ..rotateX(0.15) // Increase to ~8.6 degrees for visibility
+                      ..scale(1.1), // Optional: slight scale-up for emphasis
                     child: StatefulBuilder(
                       builder: (context, setState) {
                         return IconButton(
@@ -2443,9 +2490,10 @@ void _filterProducts() {
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeInOut,
                     transform: Matrix4.identity()
-                      ..setEntry(
-                          3, 2, 0.001) // Apply perspective transformation.
-                      ..rotateX(0.05),
+                      ..setEntry(3, 2,
+                          0.005) // Stronger perspective for better 3D effect
+                      ..rotateX(0.15) // Increase to ~8.6 degrees for visibility
+                      ..scale(1.1), // Optional: slight scale-up for emphasis
                     child: StatefulBuilder(
                       builder: (context, setState) {
                         return IconButton(
@@ -2480,9 +2528,10 @@ void _filterProducts() {
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeInOut,
                     transform: Matrix4.identity()
-                      ..setEntry(
-                          3, 2, 0.001) // Apply perspective transformation.
-                      ..rotateX(0.05),
+                      ..setEntry(3, 2,
+                          0.005) // Stronger perspective for better 3D effect
+                      ..rotateX(0.15) // Increase to ~8.6 degrees for visibility
+                      ..scale(1.1), // Optional: slight scale-up for emphasis
                     child: StatefulBuilder(
                       builder: (context, setState) {
                         return IconButton(
@@ -2901,5 +2950,3 @@ class Debouncer {
     _timer = Timer(Duration(milliseconds: milliseconds), action);
   }
 }
-
-

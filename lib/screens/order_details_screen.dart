@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grocerry/models/order.dart';
 import 'package:grocerry/providers/cart_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
@@ -67,7 +68,7 @@ class OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   // Function to calculate category percentages from items' products
-  Map<String, double> calculateCategoryPercentages(order) {
+  Map<String, double> calculateCategoryPercentages(Order order) {
     final categoryCounts = <String, int>{};
     int totalProducts = 0;
 
@@ -371,6 +372,7 @@ class OrderDetailsScreenState extends State<OrderDetailsScreen> {
     );
   }
 }
+
 class PaymentConfirmationScreen extends StatelessWidget {
   final String orderId;
 
@@ -387,10 +389,14 @@ class PaymentConfirmationScreen extends StatelessWidget {
             Text('Please select your payment method for order $orderId:'),
             ElevatedButton(
               onPressed: () {
-                final cartItems = context.read<CartProvider>().items.values.toList();
-                context.read<CartProvider>().selectPaymentMethodWithoutCOD(cartItems, context);
+                final cartItems =
+                    context.read<CartProvider>().items.values.toList();
+                context
+                    .read<CartProvider>()
+                    .selectPaymentMethodWithoutCOD(cartItems, context);
               },
-              child: const Text('Select Payment Method'), // Here you can use const
+              child:
+                  const Text('Select Payment Method'), // Here you can use const
             ),
           ],
         ),

@@ -8,7 +8,8 @@ import 'package:csv/csv.dart';
 class ProductService {
   late final GroupBuyService? groupBuyService;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final String openAiApiKey = 'your_openai_api_key'; // Replace with your API key
+  final String openAiApiKey =
+      'your_openai_api_key'; // Replace with your API key
 
   ProductService({this.groupBuyService});
 
@@ -34,7 +35,7 @@ class ProductService {
         'category': headers.indexOf('category'),
         'units': headers.indexOf('units'),
         'categoryImageUrl': headers.indexOf('categoryImageUrl'),
-        'subcategories': headers.indexOf('subcategories'),
+        'tags': headers.indexOf('tags'),
         'subcategoryImageUrls': headers.indexOf('subcategoryImageUrls'),
         'variety': headers.indexOf('variety'),
         'varietyImageUrls': headers.indexOf('varietyImageUrls'),
@@ -91,15 +92,14 @@ class ProductService {
                 headerMap['categoryImageUrl'] != -1
             ? row[headerMap['categoryImageUrl']!].toString()
             : '';
-        List<String> subcategories = headerMap['subcategories'] != null &&
-                headerMap['subcategories'] != -1
-            ? row[headerMap['subcategories']!].toString().split(',')
+        List<String> tags = headerMap['tags'] != null && headerMap['tags'] != -1
+            ? row[headerMap['tags']!].toString().split(',')
             : [];
-        List<String> subcategoryImageUrls = headerMap['subcategoryImageUrls'] !=
-                    null &&
-                headerMap['subcategoryImageUrls'] != -1
-            ? row[headerMap['subcategoryImageUrls']!].toString().split(',')
-            : [];
+        List<String> subcategoryImageUrls =
+            headerMap['subcategoryImageUrls'] != null &&
+                    headerMap['subcategoryImageUrls'] != -1
+                ? row[headerMap['subcategoryImageUrls']!].toString().split(',')
+                : [];
         List<String> varietyImageUrls = headerMap['varietyImageUrls'] != null &&
                 headerMap['varietyImageUrls'] != -1
             ? row[headerMap['varietyImageUrls']!].toString().split(',')
@@ -235,7 +235,7 @@ class ProductService {
           category: category,
           units: units,
           categoryImageUrl: categoryImageUrl,
-          subcategories: subcategories,
+          tags: tags,
           subcategoryImageUrls: subcategoryImageUrls,
           varieties: varieties,
           pictureUrl: pictureUrl,
@@ -280,11 +280,13 @@ class ProductService {
   }
 
   // Helper method to parse varieties from a row
-  List<Variety> _getVarietiesFromRow(String varietyNames, List<String> varietyImageUrls) {
+  List<Variety> _getVarietiesFromRow(
+      String varietyNames, List<String> varietyImageUrls) {
     List<String> names = varietyNames.split(',');
     List<Variety> varieties = [];
     for (int i = 0; i < names.length; i++) {
-      String imageUrl = (i < varietyImageUrls.length) ? varietyImageUrls[i].trim() : '';
+      String imageUrl =
+          (i < varietyImageUrls.length) ? varietyImageUrls[i].trim() : '';
       varieties.add(Variety(
         name: names[i].trim(),
         color: '', // Default as not provided in CSV
@@ -296,6 +298,4 @@ class ProductService {
     }
     return varieties;
   }
-
-  
 }

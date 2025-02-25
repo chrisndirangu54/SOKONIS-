@@ -716,13 +716,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
-                    color:
-                        Colors.white.withOpacity(0.1), // Semi-transparent color
+                    color: Colors.blueAccent
+                        .withOpacity(0.1), // Semi-transparent color
                     border: Border.all(
-                        color: Colors.white.withOpacity(0.2), width: 1),
+                        color: Colors.orangeAccent.withOpacity(0.2), width: 1),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.lightBlueAccent.withOpacity(0.2),
                         blurRadius: 20,
                         spreadRadius: 5,
                       ),
@@ -956,7 +956,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onPressed: () {
                           Navigator.of(context).push(MaterialPageRoute(
                             builder: (context) =>
-                                SubscriptionScreen(user: userProvider.user.id),
+                                SubscriptionScreen(user: userProvider.user),
                           ));
                         },
                         child: const Text('Go to Subscription'),

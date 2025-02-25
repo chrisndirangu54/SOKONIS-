@@ -74,12 +74,14 @@ class LoadingScreenState extends State<LoadingScreen>
                         animation: _pulseController,
                         builder: (context, child) {
                           return CustomPaint(
-                            painter: BorderGradientPainter(_pulseController, pulseWidth: 3.0),
+                            painter: BorderGradientPainter(_pulseController,
+                                pulseWidth: 3.0),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(30.0),
                               child: Container(
                                 width: MediaQuery.of(context).size.width * 0.5,
-                                height: MediaQuery.of(context).size.height * 0.5,
+                                height:
+                                    MediaQuery.of(context).size.height * 0.5,
                                 decoration: BoxDecoration(
                                   color: Colors.white.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(30.0),
@@ -88,11 +90,13 @@ class LoadingScreenState extends State<LoadingScreen>
                                   alignment: Alignment.center,
                                   children: [
                                     BackdropFilter(
-                                      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 5.0, sigmaY: 5.0),
                                       child: Container(),
                                     ),
                                     const Image(
-                                      image: AssetImage("assets/images/basket.png"),
+                                      image: AssetImage(
+                                          "assets/images/basket.png"),
                                       fit: BoxFit.contain,
                                     ),
                                   ],
@@ -140,8 +144,18 @@ class WaterRipplePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..color = Colors.blue.withOpacity(0.3 + animation.value * 0.2);
+      ..strokeWidth = 4.0 // Increased stroke width from 2.0 to 4.0
+      ..shader = LinearGradient(
+        colors: [
+          Colors.blue.withOpacity(0.3 + animation.value * 0.2),
+          Colors.green.withOpacity(0.3 + animation.value * 0.2),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromCircle(
+        center: Offset(size.width / 2, size.height / 2),
+        radius: size.width * 0.5 * animation.value,
+      ));
 
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width * 0.5 * animation.value;

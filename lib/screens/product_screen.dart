@@ -56,7 +56,6 @@ class ProductScreenState extends State<ProductScreen>
       curve: Curves.easeInOut,
     ),
   );
-  final List<Product> _genomicAlternatives = [];
   Stream<List<Product>> get predictedProductsStream =>
       _predictedProductsController.stream;
   late final Animation<double> _rotationAnimation = Tween<double>(
@@ -69,8 +68,12 @@ class ProductScreenState extends State<ProductScreen>
   Offer? offer;
 
   var notes;
-  
+
   late bool _isFlipped;
+
+  Product? selectedProduct;
+
+  var allProducts;
 
   get quantity => null;
 
@@ -79,7 +82,7 @@ class ProductScreenState extends State<ProductScreen>
     super.initState();
     // Initialize the ScrollController
     _scrollController = ScrollController();
-   _loadPredictedProducts(); // Load initial data on initialization
+    _loadPredictedProducts(); // Load initial data on initialization
 
     // Initialize the AnimationController
     // Initialize the AnimationController
@@ -91,7 +94,7 @@ class ProductScreenState extends State<ProductScreen>
     _logProductView(product);
     _viewStartTime = DateTime.now();
     _fetchProductAnalytics();
-    
+
     // Check if widget.product is not null before accessing its properties
     if (widget.product != null) {
       _discountedPriceSubscription =
@@ -109,10 +112,9 @@ class ProductScreenState extends State<ProductScreen>
           _listenToDiscountedPriceStream2(variety.discountedPriceStream!);
         }
       }
-        } else {
+    } else {
       print("Product is null in HomeScreen initState");
     }
-
   }
 
   void _selectVariety(Variety variety) {
@@ -125,14 +127,14 @@ class ProductScreenState extends State<ProductScreen>
   void dispose() {
     _scrollController.dispose();
     super.dispose();
-      _predictedProductsController.close();
+    _predictedProductsController.close();
 
     _logTimeSpent(product, _viewStartTime);
     _controller.dispose();
     super.dispose();
   }
 
-    void _listenToDiscountedPriceStream2(Stream<Map<String, double?>?>? stream) {
+  void _listenToDiscountedPriceStream2(Stream<Map<String, double?>?>? stream) {
     if (stream != null) {
       stream.listen((newPrice) {
         setState(() {
@@ -147,8 +149,7 @@ class ProductScreenState extends State<ProductScreen>
   Future<void> _loadPredictedProducts() async {
     try {
       await Future.delayed(const Duration(seconds: 2)); // Mock delay
-      final List<Product> predictedProducts = [
-      ];
+      final List<Product> predictedProducts = [];
       _predictedProductsController.add(predictedProducts);
     } catch (e) {
       _predictedProductsController.addError(e);
@@ -175,6 +176,7 @@ class ProductScreenState extends State<ProductScreen>
 
     print('Requesting notification for product: $productId');
   }
+
   Future<void> _fetchProductAnalytics() async {
     final analyticsService = AnalyticsService();
     final analytics =
@@ -217,6 +219,7 @@ class ProductScreenState extends State<ProductScreen>
       'timestamp': DateTime.now(),
     });
   }
+
   String? getCurrentImageUrl() {
     // Returns the image URL for the selected variety and image
     if (product!.varieties.isEmpty) {
@@ -251,6 +254,7 @@ class ProductScreenState extends State<ProductScreen>
           selectedVariety.imageUrls.length) as int; // Cycle through images
     });
   }
+
   Widget _buildProductCard(Product? product, {required bool isGrid}) {
     final productImageUrl = product!.pictureUrl.isNotEmpty
         ? product.pictureUrl
@@ -283,7 +287,7 @@ class ProductScreenState extends State<ProductScreen>
           ((originalPrice - discountedPrice) / originalPrice) * 100;
       discountPercentage = '-${percentage.toStringAsFixed(0)}%';
     }
-  
+
     // Check if the product is in stock
     final productProvider = Provider.of<ProductProvider>(context);
     bool inStock = productProvider.isInStock(product);
@@ -448,7 +452,11 @@ class ProductScreenState extends State<ProductScreen>
       // Assuming you have a CartProvider or similar for managing cart
       var notes;
       Provider.of<CartProvider>(context, listen: false).addItem(
-          product!, Provider.of<UserProvider>(context, listen: false).user, selectedVariety, initialQuantity, notes ?? '');
+          product!,
+          Provider.of<UserProvider>(context, listen: false).user,
+          selectedVariety,
+          initialQuantity,
+          notes ?? '');
       // Optionally show a snackbar or update UI
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${product!.name} added to cart')),
@@ -633,18 +641,16 @@ class ProductScreenState extends State<ProductScreen>
                                     Container(
                                       width: 25,
                                       height: 25,
-                                      margin:
-                                          const EdgeInsets.only(right: 8.0),
+                                      margin: const EdgeInsets.only(right: 8.0),
                                       child: ClipRRect(
                                         borderRadius:
                                             BorderRadius.circular(8.0),
                                         child: Image.network(
                                           variety.imageUrl,
                                           fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (context, error, stackTrace) =>
-                                                  const Icon(Icons.error,
-                                                      size: 24),
+                                          errorBuilder: (context, error,
+                                                  stackTrace) =>
+                                              const Icon(Icons.error, size: 24),
                                         ),
                                       ),
                                     ),
@@ -817,7 +823,8 @@ class ProductScreenState extends State<ProductScreen>
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                ...product!.genomicAlternatives.map((alternative) {
+                                ...product!.genomicAlternatives
+                                    .map((alternative) {
                                   return ListTile(
                                     leading: Image.network(
                                       alternative.pictureUrl,
@@ -841,7 +848,7 @@ class ProductScreenState extends State<ProductScreen>
                                               productId: alternative.id),
                                         ),
                                       );
-                                                                        },
+                                    },
                                   );
                                 }),
                               ],
@@ -903,7 +910,8 @@ class ProductScreenState extends State<ProductScreen>
               _logProductView;
               _logTimeSpent;
               _logClick(
-                product, 'Product_Screen',
+                product,
+                'Product_Screen',
               );
             },
             style: ElevatedButton.styleFrom(
@@ -928,6 +936,7 @@ class ProductScreenState extends State<ProductScreen>
       child: Container(color: Colors.white),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -1052,7 +1061,6 @@ class ProductScreenState extends State<ProductScreen>
       );
     }
 
-
     return Scaffold(
       backgroundColor: primaryColor,
       appBar: AppBar(
@@ -1104,30 +1112,65 @@ class ProductScreenState extends State<ProductScreen>
               // Product name
               Text(
                 product.name,
-                style:
-                    const TextStyle(fontSize: 16), // Adjust font size as needed
+                style: const TextStyle(fontSize: 16),
               ),
               // Subscribe icon button
               IconButton(
                 icon: Icon(
-                  Icons.notifications, // Icon for subscription
-                  color: subscription
-                          .isActive // Assuming subscription is a Subscription object
-                      ? Colors.orange // Active subscription color
-                      : Colors.grey, // Inactive subscription color
+                  Icons.notifications,
+                  color: subscription.isActive ? Colors.orange : Colors.grey,
                 ),
                 onPressed: () {
-                  // Call _askForSubscription with the product ID
                   _askForSubscription(product);
-                  // Toggle subscription status
-
-                  setState(() {}); // Update UI
+                  setState(() {});
                 },
-                tooltip: subscription.isActive
-                    ? 'Unsubscribe' // Tooltip when active
-                    : 'Subscribe', // Tooltip when inactive
+                tooltip: subscription.isActive ? 'Unsubscribe' : 'Subscribe',
               ),
               const SizedBox(height: 10),
+
+              // Product tags as ActionChips
+              Wrap(
+                spacing: 8.0,
+                runSpacing: 4.0,
+                alignment: WrapAlignment.center,
+                children: product.tags.map((tag) {
+                  return ActionChip(
+                    label: Text(
+                      tag,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    backgroundColor: primaryColor.withOpacity(0.1),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: const BorderSide(
+                        color: Colors.lightGreenAccent,
+                        width: 1.0,
+                      ),
+                    ),
+                    onPressed: () {
+                      // Filter products with the selected tag
+                      final filteredProducts = allProducts.where((p) {
+                        return p.tags.contains(tag);
+                      }).toList();
+
+                      // For simplicity, pick the first matching product or handle the list elsewhere
+                      setState(() {
+                        if (filteredProducts.isNotEmpty) {
+                          selectedProduct = filteredProducts
+                              .first; // Example: use first match
+                          _buildProductCard(selectedProduct,
+                              isGrid: false); // Call with filtered product
+                        }
+                      });
+                    },
+                    tooltip: 'Filter by $tag',
+                  );
+                }).toList(),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Review section
               GestureDetector(
                 onTap: () {
                   _logClick(product, 'Review');
@@ -1138,41 +1181,38 @@ class ProductScreenState extends State<ProductScreen>
                   );
                 },
                 child: Container(
-                  padding: const EdgeInsets.all(
-                      8), // Adjust padding for visual space
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: primaryColor, // Background color of the container
-                    borderRadius: BorderRadius.circular(8), // Rounded corners
+                    color: primaryColor,
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Colors
-                          .lightGreenAccent, // Border color to make it visible
+                      color: Colors.lightGreenAccent,
                       width: 1.0,
                     ),
                   ),
                   child: Row(
-  children: [
-    // Star rating
-    ...List.generate(
-      5,
-      (starIndex) => Icon(
-        Icons.star,
-        color: starIndex < (averageRating ?? 0) // Use null-safe default
-            ? Colors.orange
-            : Colors.grey,
-      ),
-    ),
-    // Review count text
-    Text(
-      " (${product.reviewCount} reviews)",
-      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      maxLines: 1, // Named argument
-      overflow: TextOverflow.ellipsis,
-    ),
-  ],
-),
-                
+                    children: [
+                      ...List.generate(
+                        5,
+                        (starIndex) => Icon(
+                          Icons.star,
+                          color: starIndex < (averageRating ?? 0)
+                              ? Colors.orange
+                              : Colors.grey,
+                        ),
+                      ),
+                      Text(
+                        " (${product.reviewCount} reviews)",
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
               ),
+
               const SizedBox(height: 5),
               const SizedBox(height: 150),
               Expanded(
@@ -1215,7 +1255,8 @@ class ProductScreenState extends State<ProductScreen>
                                             ..scale(_scaleAnimation
                                                 .value), // Animated zoom effect
                                           child: Image.network(
-                                            getCurrentImageUrl() ?? 'https://example.com/default_image.png',
+                                            getCurrentImageUrl() ??
+                                                'https://example.com/default_image.png',
                                             height: 100,
                                             width: 100,
                                             color: Colors.black.withOpacity(
@@ -1243,7 +1284,8 @@ class ProductScreenState extends State<ProductScreen>
                                             ..scale(_scaleAnimation.value +
                                                 0.2), // Slightly larger scale
                                           child: Image.network(
-                                            getCurrentImageUrl() ?? 'https://example.com/default_image.png',
+                                            getCurrentImageUrl() ??
+                                                'https://example.com/default_image.png',
                                             height: 100,
                                             width: 100,
                                             color: Colors.black.withOpacity(
@@ -1271,7 +1313,8 @@ class ProductScreenState extends State<ProductScreen>
                                             ..scale(_scaleAnimation.value +
                                                 0.4), // Main scale effect
                                           child: Image.network(
-                                            getCurrentImageUrl() ?? 'https://example.com/default_image.png',
+                                            getCurrentImageUrl() ??
+                                                'https://example.com/default_image.png',
                                             height: 100,
                                             width: 100,
                                           ),
@@ -1383,8 +1426,7 @@ class ProductScreenState extends State<ProductScreen>
                                       userProvider
                                           .removeFavoriteProduct(product);
                                     } else {
-                                      userProvider
-                                          .addFavoriteProduct(product);
+                                      userProvider.addFavoriteProduct(product);
                                     }
                                     _logClick(product, 'Favorite');
                                   },
@@ -1423,47 +1465,55 @@ class ProductScreenState extends State<ProductScreen>
                 ),
               ),
               const SizedBox(height: 20),
-                                        StreamBuilder<List<Product>>(
-        stream: predictedProductsStream, // Use the stream
-        builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting) {
-                                return const Center(child: CircularProgressIndicator());
-                              } else if (snapshot.hasError) {
-                                return Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red));
-                              } else {
-                                final recommendedProducts = snapshot.data ?? [];
-                                if (recommendedProducts.isEmpty) {
-                                  return const Text('No recommended products available.', style: TextStyle(color: Colors.grey));
-                                }
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Recommended Products',
-                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    SizedBox(
-                                      height: 200,
-                                      child: ListView.builder(
-                                        scrollDirection: Axis.horizontal,
-                                        itemCount: recommendedProducts.length,
-                                        itemBuilder: (context, index) {
-                                          return Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                                            child: SizedBox(
-                                              width: 150,
-                                              child: _buildProductCard(recommendedProducts[index], isGrid: false),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }
+              StreamBuilder<List<Product>>(
+                stream: predictedProductsStream, // Use the stream
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  } else if (snapshot.hasError) {
+                    return Text('Error: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.red));
+                  } else {
+                    final recommendedProducts = snapshot.data ?? [];
+                    if (recommendedProducts.isEmpty) {
+                      return const Text('No recommended products available.',
+                          style: TextStyle(color: Colors.grey));
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Recommended Products',
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 200,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: recommendedProducts.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                child: SizedBox(
+                                  width: 150,
+                                  child: _buildProductCard(
+                                      recommendedProducts[index],
+                                      isGrid: false),
+                                ),
+                              );
                             },
                           ),
+                        ),
+                      ],
+                    );
+                  }
+                },
+              ),
             ],
           ),
         ),
@@ -1472,90 +1522,93 @@ class ProductScreenState extends State<ProductScreen>
   }
 
 // Widget to manage quantity
-Widget buildQuantityManager(BuildContext context) {
-  final productProvider = Provider.of<ProductProvider>(context);
-  final userProvider = Provider.of<UserProvider>(context);
-  final cartProvider = Provider.of<CartProvider>(context, listen: false);
+  Widget buildQuantityManager(BuildContext context) {
+    final productProvider = Provider.of<ProductProvider>(context);
+    final userProvider = Provider.of<UserProvider>(context);
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
 
-  final user = userProvider.user;
-  final product = productProvider.getProductById(widget.productId);
+    final user = userProvider.user;
+    final product = productProvider.getProductById(widget.productId);
 
-  // Local state for quantity
-  int quantity = cartProvider.items[product?.id]?.quantity ?? 1;
+    // Local state for quantity
+    int quantity = cartProvider.items[product?.id]?.quantity ?? 1;
 
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-      // Quantity Manager Section
-      Expanded(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            IconButton(
-              icon: SvgPicture.asset(
-                'assets/icons/minus-solid.svg',
-                width: 14,
-                height: 14,
-                colorFilter: const ColorFilter.mode(
-                    Color.fromARGB(255, 157, 157, 157), BlendMode.srcIn),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Quantity Manager Section
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              IconButton(
+                icon: SvgPicture.asset(
+                  'assets/icons/minus-solid.svg',
+                  width: 14,
+                  height: 14,
+                  colorFilter: const ColorFilter.mode(
+                      Color.fromARGB(255, 157, 157, 157), BlendMode.srcIn),
+                ),
+                onPressed: () {
+                  setState(() {
+                    if (quantity > 1) {
+                      quantity--;
+                    }
+                  });
+                },
               ),
-              onPressed: () {
-                setState(() {
-                  if (quantity > 1) {
-                    quantity--;
-                  }
-                });
-              },
-            ),
-            // Quantity display window
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(5),
+              // Quantity display window
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  quantity.toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 20),
+                ),
               ),
-              child: Text(
-                quantity.toString(),
-                style: const TextStyle(color: Colors.white, fontSize: 20),
+              IconButton(
+                icon: SvgPicture.asset(
+                  'assets/icons/plus-solid.svg',
+                  width: 14,
+                  height: 14,
+                  colorFilter: const ColorFilter.mode(
+                      Color.fromARGB(255, 157, 157, 157), BlendMode.srcIn),
+                ),
+                onPressed: () {
+                  setState(() {
+                    quantity++;
+                  });
+                },
               ),
-            ),
-            IconButton(
-              icon: SvgPicture.asset(
-                'assets/icons/plus-solid.svg',
-                width: 14,
-                height: 14,
-                colorFilter: const ColorFilter.mode(
-                    Color.fromARGB(255, 157, 157, 157), BlendMode.srcIn),
-              ),
-              onPressed: () {
-                setState(() {
-                  quantity++;
-                });
-              },
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
 
-      // Add to Cart Button Section
-      IconButton(
-        icon: const Icon(Icons.add_shopping_cart, color: Colors.white, size: 40),
-        onPressed: () {
-          if (product != null) {
-            cartProvider.addItem(
-              product,
-              user,
-              selectedVariety,
-              quantity, // Using the local quantity state
-              notes,
-            );
-            _logClick(product, 'Add to Cart');
-          }
-        },
-      ),
-    ],
-  );
-}
+        // Add to Cart Button Section
+        IconButton(
+          icon: const Icon(Icons.add_shopping_cart,
+              color: Colors.white, size: 40),
+          onPressed: () {
+            if (product != null) {
+              cartProvider.addItem(
+                product,
+                user,
+                selectedVariety,
+                quantity, // Using the local quantity state
+                notes,
+              );
+              _logClick(product, 'Add to Cart');
+            }
+          },
+        ),
+      ],
+    );
+  }
+
   void _askForSubscription(Product product) {
     int selectedFrequency = 7; // Default to weekly
     int selectedDay = DateTime.now().weekday; // Default to today’s weekday
@@ -1775,7 +1828,6 @@ extension on Stream<double?>? {
 extension on Product {
   get quantity => null;
 }
-
 
 class IconDetail {
   IconDetail({this.image, required this.head, this.icon});

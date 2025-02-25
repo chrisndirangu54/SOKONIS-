@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/subscription_model.dart';
+import 'package:grocerry/models/user.dart';
 import 'package:grocerry/providers/user_provider.dart';
 import 'package:grocerry/screens/health_screen.dart';
 import 'package:grocerry/services/subscription_service.dart';
@@ -10,9 +11,9 @@ import 'dart:convert';
 import 'package:provider/provider.dart';
 
 class SubscriptionSuggestionScreen extends StatefulWidget {
-  final String userId;
+  final User user;
 
-  const SubscriptionSuggestionScreen({super.key, required this.userId});
+  const SubscriptionSuggestionScreen({super.key, required this.user});
 
   @override
   State<SubscriptionSuggestionScreen> createState() =>
@@ -57,14 +58,14 @@ class _SubscriptionSuggestionScreenState
     try {
       // Check if a health condition is already selected
       bool hasHealthCondition =
-          await _checkHealthConditionSelected(widget.userId);
+          await _checkHealthConditionSelected(widget.user.id);
 
       String? selectedHealthCondition;
       if (!hasHealthCondition) {
         bool? wantsToSelectCondition = await _askToSelectHealthCondition();
         if (wantsToSelectCondition == true) {
           List<String> conditions = await _healthConditionService
-              .fetchHealthConditions(widget.userId);
+              .fetchHealthConditions(widget.user.id);
           if (conditions.isNotEmpty) {
             selectedHealthCondition =
                 await _showHealthConditionSelectionDialog(conditions);
@@ -85,7 +86,7 @@ class _SubscriptionSuggestionScreenState
       // Fetch purchase history
       final purchasesSnapshot = await FirebaseFirestore.instance
           .collection('purchases')
-          .where('userId', isEqualTo: widget.userId)
+          .where('userId', isEqualTo: widget.user.id)
           .orderBy('timestamp', descending: true)
           .limit(50)
           .get();
