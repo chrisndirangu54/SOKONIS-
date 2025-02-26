@@ -9,8 +9,6 @@ class SocialMediaMarketer {
   final String _aiImageApiUrl = 'https://api.generative-ai.com/v1/images';
   final String _aiVideoApiUrl = 'https://api.generative-ai.com/v1/videos';
   final String _openAiApiUrl = 'https://api.openai.com/v1/completions';
-  final String _weatherApiUrl =
-      'https://api.openweathermap.org/data/2.5/weather';
   final String _tiktokApiUrl = 'https://api.tiktok.com/v1/post';
   final String _facebookApiUrl = 'https://graph.facebook.com/v20.0/me/photos';
   final String _instagramApiUrl = 'https://graph.instagram.com/v20.0/me/media';
@@ -18,7 +16,6 @@ class SocialMediaMarketer {
   final String _googleAdsApiUrl = 'https://api.google.com/ads/v1/campaigns';
   final String _aiApiKey = 'your_generative_ai_api_key_here';
   final String _openAiApiKey = 'your_openai_api_key_here';
-  final String _weatherApiKey = 'your_openweathermap_api_key_here';
   final String _tiktokApiKey = 'your_tiktok_api_key_here';
   final String _facebookApiKey = 'your_facebook_access_token_here';
   final String _instagramApiKey = 'your_instagram_access_token_here';
