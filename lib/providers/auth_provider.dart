@@ -6,9 +6,11 @@ import 'package:grocerry/models/user.dart' as models;
 import 'package:grocerry/providers/product_provider.dart';
 import 'package:grocerry/providers/user_provider.dart';
 import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class AuthProvider with ChangeNotifier {
   auth.User? _user;
+  models.User? user;
   final auth.FirebaseAuth _auth = auth.FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -19,11 +21,13 @@ class AuthProvider with ChangeNotifier {
   final UserProvider? userProvider;
   final ProductProvider? productProvider;
   final Completer<void> _initializationCompleter = Completer<void>();
-  bool? _isInitializing = true;
+  bool _isInitializing = true;
 
   AuthProvider(this.userProvider, this.productProvider) {
+    _initializeUser(); // Start initialization immediately
     _auth.authStateChanges().listen((auth.User? user) async {
-      await _initializationCompleter.future;
+      await _initializationCompleter
+          .future; // Wait for initialization to complete
       if (user != null && (_user == null || _user?.uid != user.uid)) {
         try {
           await _updateUserState(user.uid);
@@ -32,25 +36,31 @@ class AuthProvider with ChangeNotifier {
         }
       } else if (user == null) {
         _user = null;
-        userProvider!.updateUser(user! as models.User);
+        userProvider!.updateUser(null); // Safely handle null user
+        notifyListeners();
       }
       notifyListeners();
     });
   }
 
-  auth.User? get user => _user;
-
-bool get isLoggedIn {
-  if (_isInitializing! || _auth.currentUser == null || _user == null) {
-    return false;
+  bool get isLoggedIn {
+    if (_isInitializing || _auth.currentUser == null || _user == null) {
+      return false;
+    }
+    return !(_auth.currentUser?.isAnonymous ?? true);
   }
-  return !(_auth.currentUser?.isAnonymous ?? true);
-}
 
   Future<void> _initializeUser() async {
-    final currentUser = _auth.currentUser;
-    if (currentUser != null) {
-      await _updateUserState(currentUser.uid);
+    try {
+      final currentUser = _auth.currentUser;
+      if (currentUser != null) {
+        await _updateUserState(currentUser.uid);
+      }
+    } catch (e) {
+      _handleAuthError(e);
+    } finally {
+      _isInitializing = false; // Mark initialization complete
+      _initializationCompleter.complete(); // Resolve the completer
     }
   }
 
@@ -65,6 +75,10 @@ bool get isLoggedIn {
         await _firestore.collection('users').doc(uid).update({'token': token});
       }
     } catch (e) {
+      if (e is AuthException &&
+          e.message == 'User data not found in Firestore.') {
+        await logout(); // Logout if user data is missing
+      }
       _handleAuthError(e);
     }
   }
@@ -111,11 +125,9 @@ bool get isLoggedIn {
 
   Future<void> signInWithGoogle(String? referralCode) async {
     try {
-      await _googleSignIn
-          .signOut(); // Sign out before signing in again, if needed
+      await _googleSignIn.signOut(); // Ensure fresh sign-in
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        // Handle case where user cancels sign-in
         throw AuthException('Google Sign-In was cancelled by the user.');
       }
 
@@ -161,8 +173,7 @@ bool get isLoggedIn {
       await _auth.signOut();
       await _googleSignIn.signOut();
       _user = null;
-      userProvider!
-          .updateUser(user! as models.User); // Clear user data on logout
+      userProvider!.updateUser(null); // Safely clear user data
       notifyListeners();
     } catch (e) {
       _handleAuthError(e);
@@ -194,8 +205,37 @@ bool get isLoggedIn {
   }
 
   Future<String?> _fetchNotificationToken() async {
-    // Implement actual token fetching logic here
-    return null; // Return null if token fetching fails or isn't implemented
+    try {
+      // Initialize Firebase Messaging instance
+      final messaging = FirebaseMessaging.instance;
+
+      // Request permission for notifications (iOS requires this explicitly)
+      NotificationSettings settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      // Check if permission is granted
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        // Fetch the FCM token
+        String? token = await messaging.getToken();
+        if (token != null) {
+          debugPrint('FCM Token fetched successfully: $token');
+          return token;
+        } else {
+          debugPrint('Failed to fetch FCM token: Token is null');
+          return null;
+        }
+      } else {
+        debugPrint('Notification permission denied by user');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Error fetching FCM token: $e');
+      return null; // Return null on any error to avoid breaking the auth flow
+    }
   }
 
   void _handleAuthError(Object error) {
@@ -206,13 +246,7 @@ bool get isLoggedIn {
       errorMessage = 'Authentication Error: ${error.message}';
     }
     debugPrint(errorMessage);
-    // Here you might want to reset any states or flags that could lead to redundant operations
-  }
-
-  void _handleInitializationError(Object error) {
-    _isInitializing = false;
-    _initializationCompleter.complete();
-    _handleAuthError(error);
+    // Optionally notify UI of errors (e.g., via a callback or state)
   }
 }
 

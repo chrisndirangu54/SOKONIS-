@@ -33,7 +33,8 @@ class _CartScreenState extends State<CartScreen> {
 
   late double productDiscounts;
   final Set<String> _selectedItems = {};
-static const PendingDeliveriesScreen pendingDeliveriesScreen = PendingDeliveriesScreen();
+  static const PendingDeliveriesScreen pendingDeliveriesScreen =
+      PendingDeliveriesScreen();
   late String _couponCode;
 
   void _logClick(Product? product, String action) {
@@ -45,24 +46,29 @@ static const PendingDeliveriesScreen pendingDeliveriesScreen = PendingDeliveries
       'timestamp': DateTime.now(),
     });
   }
-Stream<double?>? _getPriceStream(CartItem cartItem) {
-  Variety? selectedVariety = cartItem.selectedVariety != null
-      ? cartItem.product.varieties.firstWhere(
-          (v) => v.name == cartItem.selectedVariety,
-        )
-      : cartItem.product.selectedVariety;
 
-  if (selectedVariety != null && selectedVariety.discountedPriceStream != null) {
-    // Transform Stream<Map<String, double?>?>? to Stream<double?>?
-    return selectedVariety.discountedPriceStream!.map(
-      (map) => map != null ? map['discountedPrice'] : null, // Extract double? from map
-    );
-  } else if (cartItem.product.hasDiscounts && cartItem.product.discountedPriceStream2 != null) {
-    // Assuming discountedPriceStream2 is also Stream<Map<String, double?>?>?
-    return cartItem.product.discountedPriceStream2!;
+  Stream<double?>? _getPriceStream(CartItem cartItem) {
+    Variety? selectedVariety = cartItem.selectedVariety != null
+        ? cartItem.product.varieties.firstWhere(
+            (v) => v.name == cartItem.selectedVariety,
+          )
+        : cartItem.product.selectedVariety;
+
+    if (selectedVariety != null &&
+        selectedVariety.discountedPriceStream != null) {
+      // Transform Stream<Map<String, double?>?>? to Stream<double?>?
+      return selectedVariety.discountedPriceStream!.map(
+        (map) => map != null
+            ? map['discountedPrice']
+            : null, // Extract double? from map
+      );
+    } else if (cartItem.product.hasDiscounts &&
+        cartItem.product.discountedPriceStream2 != null) {
+      // Assuming discountedPriceStream2 is also Stream<Map<String, double?>?>?
+      return cartItem.product.discountedPriceStream2!;
+    }
+    return null; // No stream, use static priceToUse
   }
-  return null; // No stream, use static priceToUse
-}
 
   @override
   Widget build(BuildContext context) {
@@ -149,18 +155,93 @@ Stream<double?>? _getPriceStream(CartItem cartItem) {
                                         Text('Quantity: ${cartItem.quantity}',
                                             style:
                                                 const TextStyle(fontSize: 16)),
+                                        TextField(
+                                          decoration: const InputDecoration(
+                                            labelText: 'Notes',
+                                            hintText: 'e.g., not so ripe',
+                                          ),
+                                          controller: TextEditingController(
+                                              text: cartItem.notes),
+                                          onChanged: (value) {
+                                            cart.updateItemNotes(
+                                                cartItem.product, value);
+                                          },
+                                        ),
+                                        // Add confirmation/rejection buttons if status is 'chargeMore'
+                                        if (cartItem.status ==
+                                            'price_adjustment') ...[
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceEvenly,
+                                            children: [
+                                              ElevatedButton(
+                                                onPressed: () {
+                                                  // Confirm the adjusted price
+                                                  cart.handleAttendantDecision(
+                                                      cartItem.product.id,
+                                                      'confirmed');
+                                                  setState(() {}); // Update UI
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                        content: Text(
+                                                            'Price adjustment confirmed')),
+                                                  );
+                                                },
+                                                style: ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.green),
+                                                child: const Text('Confirm'),
+                                              ),
+                                              ElevatedButton(
+                                                onPressed: () {
+                                                  // Reject the adjustment, reset price, and set status to 'declined'
+                                                  cart
+                                                          .items[cartItem
+                                                              .product.id]!
+                                                          .price =
+                                                      cart.calculatePriceToUse(
+                                                              product,
+                                                              cartItem.product
+                                                                  .selectedVariety)
+                                                          as double;
+                                                  cart.handleAttendantDecision(
+                                                      cartItem.product.id,
+                                                      'declined');
+                                                  setState(() {}); // Update UI
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                        content: Text(
+                                                            'Price adjustment rejected, price reset')),
+                                                  );
+                                                },
+                                                style: ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.red),
+                                                child: const Text('Reject'),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
                                         const SizedBox(height: 8),
-                StreamBuilder<double?>(
-                  stream: _getPriceStream(cartItem), // Select appropriate stream
-                  initialData: cartItem.priceToUse, // Start with provider’s default
-                  builder: (context, snapshot) {
-                    final price = snapshot.data ?? cartItem.priceToUse;
-                    return Text(
-                      'Total: \$${(price! * cartItem.quantity).toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 16, color: Colors.black54),
-                    );
-                  },
-                ),
+                                        StreamBuilder<double?>(
+                                          stream: _getPriceStream(
+                                              cartItem), // Select appropriate stream
+                                          initialData: cartItem
+                                              .priceToUse, // Start with provider’s default
+                                          builder: (context, snapshot) {
+                                            final price = snapshot.data ??
+                                                cartItem.priceToUse;
+                                            return Text(
+                                              'Total: \$${(price! * cartItem.quantity).toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                  fontSize: 16,
+                                                  color: Colors.black54),
+                                            );
+                                          },
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -250,50 +331,6 @@ Stream<double?>? _getPriceStream(CartItem cartItem) {
                         ],
                       ),
                     ),
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: 'Notes',
-                    hintText: 'e.g., not so ripe',
-                  ),
-                  controller: TextEditingController(text: cartItem.notes),
-                  onChanged: (value) {
-                    cart.updateItemNotes(cartItem.product, value);
-                  },
-                ),
-                // Add confirmation/rejection buttons if status is 'chargeMore'
-                if (cartItem.status == 'price_adjustment') ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ElevatedButton(
-                        onPressed: () {
-                          // Confirm the adjusted price
-                          cart.handleAttendantDecision(cartItem.product.id, 'confirmed');
-                          setState(() {}); // Update UI
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Price adjustment confirmed')),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                        child: const Text('Confirm'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          // Reject the adjustment, reset price, and set status to 'declined'
-                          cart.items[cartItem.product.id]!.price = cart.calculatePriceToUse(product, cartItem.product.selectedVariety) as double;
-                          cart.handleAttendantDecision(cartItem.product.id, 'declined');
-                          setState(() {}); // Update UI
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Price adjustment rejected, price reset')),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                        child: const Text('Reject'),
-                      ),
-                    ],
-                  ),
-                ],
 
                     // Coupon Input Field
                     Padding(
@@ -339,26 +376,30 @@ Stream<double?>? _getPriceStream(CartItem cartItem) {
           ? null
           : FloatingActionButton.extended(
               onPressed: () {
-                if (cart.items.values.any((cartItem) => cartItem.notes != null && cartItem.notes!.isNotEmpty && cartItem.status != 'confirmed' && cartItem.status != 'rejected')) {
-                  cart.sendOrderForConfirmation(context, _selectedItems, (List<Map<String, dynamic>> confirmedItems) {
+                if (cart.items.values.any((cartItem) =>
+                    cartItem.notes != null &&
+                    cartItem.notes!.isNotEmpty &&
+                    cartItem.status != 'confirmed' &&
+                    cartItem.status != 'rejected')) {
+                  cart.sendOrderForConfirmation(context, _selectedItems,
+                      (List<Map<String, dynamic>> confirmedItems) {
                     setState(() {
                       for (var item in confirmedItems) {
-                        cart.handleAttendantDecision(item['productId'], item['status']);
+                        cart.handleAttendantDecision(
+                            item['productId'], item['status']);
                       }
                     });
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Items sent for confirmation')),
+                      const SnackBar(
+                          content: Text('Items sent for confirmation')),
                     );
                   });
                 } else {
                   cart.processSelectedItemsCheckout(context, _selectedItems);
-                                  _logClick(
-                product, 'purchaseCount'
-              );
+                  _logClick(product, 'purchaseCount');
                 }
-
               },
-              label: const Text('Checkout'),
+              label: const Text('Confirm/Checkout'),
               icon: const Icon(Icons.payment),
             ),
     );

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:grocerry/models/user.dart';
 import 'package:grocerry/providers/user_provider.dart';
 import 'package:grocerry/services/notification_service.dart';
 import '../models/product.dart'; // Import the Product class
@@ -151,7 +152,6 @@ class ProductProvider with ChangeNotifier {
     } catch (e) {
       print("Error fetching products by category: $e");
       _categoryProductsStreamController.add([]);
-
     }
   }
 
@@ -243,51 +243,57 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-Future<List<Product>> fetchProductsByWeather() async {
-  try {
-    // Assuming Nairobi, KE for example; replace with user's location if possible
-    const apiKey = 'YOUR_API_KEY';
-    final response = await http.get(Uri.parse(
-        'http://api.weatherapi.com/v1/current.json?key=$apiKey&q=Nairobi'));
+  Future<List<Product>> fetchProductsByWeather() async {
+    try {
+      // Use Nairobi, KE as an example; replace with user's location if available
+      User user = UserProvider().user;
+      const apiKey =
+          'YOUR_OPENWEATHERMAP_API_KEY'; // Replace with your OpenWeatherMap API key
+      var city = user.pinLocation; // Can be dynamic based on user location
+      final response = await http.get(Uri.parse(
+          'https://api.openweathermap.org/data/2.5/weather?q=$city&appid=$apiKey'));
 
-    if (response.statusCode == 200) {
-      final weatherData = jsonDecode(response.body);
-      final currentCondition = 
-          weatherData['current']?['condition']?['text']?.toLowerCase() ?? 'unknown';
+      if (response.statusCode == 200) {
+        final weatherData = jsonDecode(response.body);
+        final currentCondition =
+            weatherData['weather']?[0]?['description']?.toLowerCase() ??
+                'unknown';
 
-      // Fetch all products from Firestore
-      final querySnapshot = await _firestore.collection('products').get();
-      final List<Product> allProducts = querySnapshot.docs
-          .map((doc) => Product.fromFirestore(doc: doc))
-          .toList();
+        // Fetch all products from Firestore
+        final querySnapshot = await _firestore.collection('products').get();
+        final List<Product> allProducts = querySnapshot.docs
+            .map((doc) => Product.fromFirestore(doc: doc))
+            .toList();
 
-      // Determine weather condition and filter products. This is a simplistic approach; you might want more specific conditions.
-      String weatherCondition = 'other'; // Default condition
-      if (currentCondition.contains('rain') || currentCondition.contains('drizzle')) {
-        weatherCondition = 'rainy';
-      } else if (currentCondition.contains('cloud') || currentCondition.contains('overcast')) {
-        weatherCondition = 'cloudy';
-      } else if (currentCondition.contains('sun') || currentCondition.contains('clear')) {
-        weatherCondition = 'sunny';
-      } 
+        // Determine weather condition and filter products
+        String weatherCondition = 'other'; // Default condition
+        if (currentCondition.contains('rain') ||
+            currentCondition.contains('drizzle')) {
+          weatherCondition = 'rainy';
+        } else if (currentCondition.contains('cloud') ||
+            currentCondition.contains('overcast')) {
+          weatherCondition = 'cloudy';
+        } else if (currentCondition.contains('clear') ||
+            currentCondition.contains('sun')) {
+          weatherCondition = 'sunny';
+        }
 
-      // Filter products based on weather condition
-      final filteredProducts = allProducts.where((product) {
-        // Use null-aware check for weather in Product
-        return product.weather?.contains(weatherCondition) ?? false;
-      }).toList();
+        // Filter products based on weather condition
+        final filteredProducts = allProducts.where((product) {
+          return product.weather?.contains(weatherCondition) ?? false;
+        }).toList();
 
-      _weatherProductsStreamController.add(filteredProducts);
-      return filteredProducts; // Return the list explicitly
-    } else {
-      throw Exception('Failed to load weather data');
+        _weatherProductsStreamController.add(filteredProducts);
+        return filteredProducts; // Return the filtered list
+      } else {
+        throw Exception('Failed to load weather data: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching products by weather: $e');
+      _weatherProductsStreamController.add([]); // Send an empty list on error
+      return []; // Return an empty list on error
     }
-  } catch (e) {
-    print('Error fetching products by weather: $e');
-    _weatherProductsStreamController.add([]); // Send an empty list on error
-    return []; // Return an empty list on error
   }
-}
 
   // Get a single product by its ID from the cached products list
   Product? getProductById(String id) {

@@ -57,7 +57,7 @@ class RegisterScreenState extends State<RegisterScreen>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-  
+
     // Listen for incoming links
     _linkSubscription = linkStream.listen((String? link) {
       if (link != null) {
@@ -68,21 +68,21 @@ class RegisterScreenState extends State<RegisterScreen>
     });
   }
 
-void _parseReferralCode(String link) {
-  try {
-    Uri uri = Uri.parse(link);
-    setState(() {
-      _referralCode = uri.queryParameters['ref'];
-      if (_referralCode != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Referral code applied: $_referralCode')),
-        );
-      }
-    });
-  } catch (e) {
-    print('Error parsing referral link: $e');
+  void _parseReferralCode(String link) {
+    try {
+      Uri uri = Uri.parse(link);
+      setState(() {
+        _referralCode = uri.queryParameters['ref'];
+        if (_referralCode != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Referral code applied: $_referralCode')),
+          );
+        }
+      });
+    } catch (e) {
+      print('Error parsing referral link: $e');
+    }
   }
-}
 
   @override
   void dispose() {
@@ -350,12 +350,10 @@ void _parseReferralCode(String link) {
                         ),
                         child: GestureDetector(
                           onTapDown: (_) => setState(() {
-                            _controller.forward(); // Animate on press
+                            _controller.forward();
                           }),
                           onTapUp: (_) => setState(() {
-                            _controller
-                                .reverse(); // Return to normal state on release
-                            _handleRegistration(); // Trigger registration after release
+                            _controller.reverse();
                           }),
                           child: AnimatedBuilder(
                             animation: _buttonController,
@@ -450,7 +448,7 @@ void _parseReferralCode(String link) {
         onTapDown: (_) => _fabController.forward(), // Start scaling down
         onTapUp: (_) => _fabController.reverse(), // Scale back up
         onTapCancel: () =>
-            _controller.reverse(), // Scale back up if tap canceled
+            _fabController.reverse(), // Scale back up if tap canceled
         child: AnimatedBuilder(
           animation: _fabController,
           builder: (context, child) {
@@ -568,52 +566,39 @@ void _parseReferralCode(String link) {
 
   Future<void> _handleRegistration() async {
     if (_formKey.currentState!.validate()) {
-      // Set loading state before starting the registration process
       setState(() {
         _isLoading = true;
       });
-
-      // Retrieve values from the controllers
       final String email = _emailController.text.trim();
       final String password = _passwordController.text.trim();
       final String contact = _contactController.text.trim();
-      final String name =
-          _nameController.text.trim(); // Ensure name is captured
-      final String? referralCode = _referralCode; // Optional referral code
+      final String name = _nameController.text.trim();
+      final String? referralCode = _referralCode;
 
       try {
-        // Get AuthProvider instance using Provider
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-        // Register the user with provided details
         await authProvider.register(
             email, password, name, contact, referralCode);
-
-        // Check if the user is logged in after registration
         if (authProvider.isLoggedIn) {
-          // Registration successful, handle post-registration actions here
-          // Navigate to the HomeScreen if the user is logged in
           if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Registration successful!'),
+              backgroundColor: Colors.green,
+            ));
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => const HomeScreen()),
             );
           }
-
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Registration successful!'),
-            backgroundColor: Colors.green,
-          ));
         }
       } catch (e) {
-        // Handle errors that occur during registration
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Registration failed: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ));
-
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Registration failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ));
+        }
         debugPrint("Error during registration: $e");
       } finally {
-        // Ensure loading state is reset after the process is complete
         setState(() {
           _isLoading = false;
         });

@@ -798,7 +798,8 @@ class CartProvider with ChangeNotifier {
         deliveryFee = 0.0;
         print('Delivery fee: Free (Active subscription with price >= 10000)');
       } else {
-        final etaService = ETAService('YOUR_GOOGLE_MAPS_API_KEY');
+        // Use OpenRouteService with your ORS API key
+        final etaService = ETAService('YOUR_OPENROUTESERVICE_API_KEY');
         final etaAndDistance =
             await etaService.calculateETAAndDistance(origin, destination);
 

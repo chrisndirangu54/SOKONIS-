@@ -27,7 +27,8 @@ class UserProvider with ChangeNotifier {
 
   // Streams
   final _userStreamController = StreamController<User>.broadcast();
-  final _cartStreamController = StreamController<Map<String, CartItem>>.broadcast();
+  final _cartStreamController =
+      StreamController<Map<String, CartItem>>.broadcast();
 
   var isUploadingProfilePicture;
   var profilePictureUploadError;
@@ -39,7 +40,6 @@ class UserProvider with ChangeNotifier {
 
   // Constructor
   UserProvider({
-
     String contact = '',
     Address? address,
     LatLng? pinLocation = const LatLng(0, 0),
@@ -70,7 +70,8 @@ class UserProvider with ChangeNotifier {
     if (isValidReferralCode(code)) {
       try {
         // Check Firestore for the referral code
-        final referralCodeDoc = await _firestore.collection('referralCodes').doc(code).get();
+        final referralCodeDoc =
+            await _firestore.collection('referralCodes').doc(code).get();
 
         if (referralCodeDoc.exists) {
           final referralData = referralCodeDoc.data()!;
@@ -96,7 +97,8 @@ class UserProvider with ChangeNotifier {
           // Update the usage count in the referral codes document
           await _firestore.collection('referralCodes').doc(code).update({
             'usageCount': FieldValue.increment(1),
-            'usedBy': FieldValue.arrayUnion([_user.id]), // Add this user to the usedBy list
+            'usedBy': FieldValue.arrayUnion(
+                [_user.id]), // Add this user to the usedBy list
           });
 
           // Update local fields
@@ -198,9 +200,9 @@ class UserProvider with ChangeNotifier {
   }
 
   // Methods to manage user data
-  void updateUser(User newUser) {
+  void updateUser(User? newUser) {
     if (_user != newUser) {
-      _user = newUser;
+      _user = newUser!;
       _userStreamController.add(_user);
       notifyListeners();
     }
@@ -296,7 +298,6 @@ class UserProvider with ChangeNotifier {
     }
   }
 
-  // Function to fetch the address
   Future<void> fetchpinLocation(LatLng pinLocation) async {
     // Check if the address is already cached
     if (_pinLocationCache.containsKey(pinLocation)) {
@@ -305,42 +306,48 @@ class UserProvider with ChangeNotifier {
       return;
     }
 
-    const apiKey = 'YOUR_GOOGLE_MAPS_API_KEY';
+    // Nominatim base URL for reverse geocoding
+    const String baseUrl = 'https://nominatim.openstreetmap.org/reverse';
 
-    // Handle missing API key
-    if (apiKey.isEmpty) {
-      _handleError('API key is missing');
-      return;
-    }
-
-    final url =
-        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${pinLocation.latitude},${pinLocation.longitude}&key=$apiKey';
+    // Construct the URL with query parameters
+    final url = '$baseUrl?format=json'
+        '&lat=${pinLocation.latitude}'
+        '&lon=${pinLocation.longitude}';
 
     try {
-      final response = await _dio.get(url);
+      // Make the request with a custom User-Agent (required by Nominatim policy)
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {
+            'User-Agent':
+                'YourAppName/1.0 (your.email@example.com)', // Replace with your app name and contact
+          },
+        ),
+      );
 
       // Handle successful response
-      if (response.statusCode == 200 && response.data['status'] == 'OK') {
-        final results = response.data['results'];
-        if (results.isNotEmpty &&
-            results[0]['formatted_address'] != null) {
-          _user = _user.copyWith(pinLocation: LatLng(results[0]['geometry']['location']['lat'], results[0]['geometry']['location']['lng']));
-        } else {
-          _user = _user.copyWith(pinLocation: null); // Handle case when no address is found
-        }
+      if (response.statusCode == 200 &&
+          response.data['lat'] != null &&
+          response.data['lon'] != null) {
+        // Nominatim returns lat/lon as strings, convert to double
+        final lat = double.parse(response.data['lat']);
+        final lon = double.parse(response.data['lon']);
+        final newPinLocation = LatLng(lat, lon);
 
-        // Cache the result to avoid future API calls for the same location
+        _user = _user.copyWith(pinLocation: newPinLocation);
+
+        // Cache the result
         _pinLocationCache[pinLocation] = _user.pinLocation;
         _notifypinLocationChange();
       } else {
-        _handleError(
-            'Failed to load address. Status: ${response.data['status']}');
+        _user = _user.copyWith(pinLocation: null); // No valid location found
+        _handleError('Failed to load location from Nominatim response');
       }
     } on DioException catch (e) {
-      _handleError('Dio error: ${e.message}'); // Catch Dio-specific errors
+      _handleError('Dio error: ${e.message}');
     } catch (error) {
-      _handleError(
-          'Unexpected error: $error'); // Catch any other unexpected errors
+      _handleError('Unexpected error: $error');
     }
   }
 
@@ -352,7 +359,8 @@ class UserProvider with ChangeNotifier {
   // Private function to handle errors
   void _handleError(String error) {
     print('Error: $error');
-    _user = _user.copyWith(pinLocation: null); // Set fallback address in case of errors
+    _user = _user.copyWith(
+        pinLocation: null); // Set fallback address in case of errors
     _notifypinLocationChange();
   }
 
@@ -501,9 +509,9 @@ class UserProvider with ChangeNotifier {
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
   static var addressList;
-  
+
   String? _referredBy;
-  
+
   bool hasUsedReferral;
 
   // Method to select and upload a profile picture
@@ -533,6 +541,4 @@ class UserProvider with ChangeNotifier {
       print('Error selecting/uploading profile picture: $error');
     }
   }
-
-
 }
