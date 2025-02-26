@@ -304,11 +304,11 @@ class MyAppState extends State<MyApp> {
 
 // Color definitions
 Color mainColor = const Color(0XFFF4C750);
-Color primaryColor = const Color.fromARGB(255, 39, 39, 39);
+Color primaryColor = const Color.fromARGB(255, 0, 0, 0);
 Color secondaryColor = const Color.fromARGB(255, 111, 240, 5);
 Color textColor = const Color.fromARGB(255, 252, 44, 252);
 Color textColor2 = const Color.fromARGB(255, 18, 238, 154);
-Color textColor3 = const Color.fromARGB(255, 226, 233, 230);
+Color textColor3 = const Color.fromARGB(255, 255, 255, 255);
 Color iconBackgroundColor = const Color(0XFF262626);
 
 Color lightMainColor = const Color(0XFFF4C750);

@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
@@ -5,9 +6,62 @@ import '../providers/order_provider.dart';
 import '../providers/sales_data_provider.dart';
 import '../screens/order_details_screen.dart';
 import '../providers/product_provider.dart';
+import 'package:grocerry/models/order.dart' as model;
 
-class AllOrdersScreen extends StatelessWidget {
+class AllOrdersScreen extends StatefulWidget {
   const AllOrdersScreen({super.key});
+
+  @override
+  AllOrdersScreenState createState() => AllOrdersScreenState();
+}
+
+class AllOrdersScreenState extends State<AllOrdersScreen> {
+  List<model.Order>? allOrders; // Replace with your actual data source
+  model.Order? order; // Replace with your actual data source
+  @override
+  void initState() {
+    super.initState();
+    // Simulate loading orders (replace with your data fetch logic)
+    allOrders = [];
+  }
+
+  // Cancel an order
+  Future<void> _cancelOrder(String orderId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(orderId)
+          .update({'status': 'Cancelled'});
+      setState(() {
+        final order = allOrders!.firstWhere((o) => o.orderId == orderId);
+        order.status = 'Cancelled';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order cancelled successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to cancel order')),
+      );
+    }
+  }
+
+  // Blacklist a user
+  Future<void> _blacklistUser(String id) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(id)
+          .update({'isBlacklisted': true});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User blacklisted successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to blacklist user')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -286,21 +340,46 @@ class AllOrdersScreen extends StatelessWidget {
                           child: ListTile(
                             title: Text(
                               order.orderId,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             subtitle:
                                 Text('Total Amount: \$${order.totalAmount}'),
-                            trailing: Text(
-                              'Status: ${order.status}',
-                              style: const TextStyle(color: Colors.blueAccent),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Status: ${order.status}',
+                                  style:
+                                      const TextStyle(color: Colors.blueAccent),
+                                ),
+                                PopupMenuButton<String>(
+                                  onSelected: (value) {
+                                    if (value == 'cancel') {
+                                      _cancelOrder(order.orderId);
+                                    } else if (value == 'blacklist') {
+                                      _blacklistUser(order.user.id);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    if (order.status !=
+                                        'Cancelled') // Hide if already cancelled
+                                      const PopupMenuItem(
+                                        value: 'cancel',
+                                        child: Text('Cancel Order'),
+                                      ),
+                                    const PopupMenuItem(
+                                      value: 'blacklist',
+                                      child: Text('Blacklist User'),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                             onTap: () {
                               Navigator.of(context).push(MaterialPageRoute(
-                                builder: (context) => OrderDetailsScreen(
-                                  orderId: order.orderId,
-                                ),
+                                builder: (context) =>
+                                    OrderDetailsScreen(orderId: order.orderId),
                               ));
                             },
                           ),
