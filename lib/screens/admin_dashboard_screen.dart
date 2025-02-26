@@ -794,3 +794,55 @@ class DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+
+class PlatformSwitchManager {
+  // Map to store platform switches (default: all enabled)
+  Map<String, bool> _platformSwitches;
+
+  // Constructor with optional initial switches
+  PlatformSwitchManager({
+    Map<String, bool>? initialSwitches,
+  }) : _platformSwitches = initialSwitches ??
+            {
+              'tiktok': true,
+              'facebook': true,
+              'instagram': true,
+              'twitter': true,
+              'googleAds': true,
+            } {
+    print(
+        'PlatformSwitchManager initialized with switches: $_platformSwitches');
+  }
+
+  // Set switch for a specific platform
+  void setSwitch(String platform, bool enabled) {
+    if (_platformSwitches.containsKey(platform.toLowerCase())) {
+      _platformSwitches[platform.toLowerCase()] = enabled;
+      print('Switch for $platform set to $enabled');
+    } else {
+      print('Invalid platform: $platform');
+    }
+  }
+
+  // Get switch status for a specific platform
+  bool getSwitch(String platform) {
+    return _platformSwitches[platform.toLowerCase()] ?? false;
+  }
+
+  // Get all switches
+  Map<String, bool> getAllSwitches() {
+    return Map.from(_platformSwitches);
+  }
+
+  // Enable all platforms
+  void enableAll() {
+    _platformSwitches.updateAll((key, value) => true);
+    print('All platforms enabled: $_platformSwitches');
+  }
+
+  // Disable all platforms
+  void disableAll() {
+    _platformSwitches.updateAll((key, value) => false);
+    print('All platforms disabled: $_platformSwitches');
+  }
+}
