@@ -131,19 +131,6 @@ class SocialMediaMarketer {
     }
   }
 
-  // **Fetch Current Weather**
-  Future<String> _fetchCurrentWeather() async {
-    final response = await http.get(
-      Uri.parse('$_weatherApiUrl?q=Nairobi&appid=$_weatherApiKey&units=metric'),
-    );
-    if (response.statusCode == 200) {
-      var data = jsonDecode(response.body);
-      return data['weather'][0]['main'].toLowerCase();
-    } else {
-      return 'clear';
-    }
-  }
-
   // **Get Top Consumer Location**
   Future<String> _getTopConsumerLocation(String productId) async {
     try {
@@ -240,13 +227,9 @@ class SocialMediaMarketer {
   // **Generate Caption with ChatGPT**
   Future<String> _createChatGptCaption(
       String baseMessage, Product product) async {
-    final hour = DateTime.now().hour;
-    String timeOfDay =
-        hour < 12 ? 'morning' : (hour < 17 ? 'afternoon' : 'evening');
-    String weather = await _fetchCurrentWeather();
     final prompt = '''
       Create a short, engaging social media caption for "${product.name}" at \$${product.basePrice}. 
-      Base message: "$baseMessage". Include time of day ($timeOfDay) and weather ($weather), 
+      Base message: "$baseMessage".  
       keep it positive, catchy, and add hashtags (e.g., #GroceryDeals, #${product.name.replaceAll(' ', '')}). 
       Ensure uniqueness.
     ''';
@@ -266,7 +249,7 @@ class SocialMediaMarketer {
     if (response.statusCode == 200) {
       return jsonDecode(response.body)['choices'][0]['text'].trim();
     } else {
-      return '$baseMessage Enjoy this $timeOfDay treat in $weather weather! #GroceryDeals #${product.name.replaceAll(' ', '')}';
+      return '$baseMessage Get this ${product.name}. Delivered at your doorstep in 30 minutes! #GroceryDeals #${product.name.replaceAll(' ', '')}';
     }
   }
 
