@@ -36,7 +36,8 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   List<String> recipeSuggestions = []; // List to store the recipe suggestions
   Product? product;
   var quantity;
-  final HealthConditionService healthConditionService = HealthConditionService();
+  final HealthConditionService healthConditionService =
+      HealthConditionService();
 
   @override
   void initState() {
@@ -183,7 +184,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
       if (querySnapshot.docs.isNotEmpty) {
         for (var doc in querySnapshot.docs) {
           Product product =
-              Product.fromFirestore(); // Use named parameter
+              Product.fromFirestore(doc: doc); // Use named parameter
           linkedProducts.add(GroceryItem(
             name: product.name,
             price: product.basePrice,
@@ -372,118 +373,127 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     return nextDelivery;
   }
 
-Future<void> _recommendMeals(String userId) async {
-  final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+  Future<void> _recommendMeals(String userId) async {
+    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
 
-  // Check if a health condition is already selected
-  bool hasHealthCondition = await _checkHealthConditionSelected(userId);
+    // Check if a health condition is already selected
+    bool hasHealthCondition = await _checkHealthConditionSelected(userId);
 
-  if (!hasHealthCondition) {
-    // Show a dialog asking if they want to select a health condition
-    bool? wantsToSelectCondition = await _askToSelectHealthCondition();
-    if (wantsToSelectCondition == true) {
-      List<String> conditions = await healthConditionService.fetchHealthConditions(userId);
-      if (conditions.isNotEmpty) {
-        String? selectedCondition = await _showHealthConditionSelectionDialog(conditions);
-        if (selectedCondition != null) {
-          // Update the condition in the service or state management
-          healthConditionService.updateSelectedHealthCondition(selectedCondition);
-          
-          // Now proceed with recommendations using the new condition
-          _proceedWithMealRecommendations(userId, selectedCondition);
+    if (!hasHealthCondition) {
+      // Show a dialog asking if they want to select a health condition
+      bool? wantsToSelectCondition = await _askToSelectHealthCondition();
+      if (wantsToSelectCondition == true) {
+        List<String> conditions =
+            await healthConditionService.fetchHealthConditions(userId);
+        if (conditions.isNotEmpty) {
+          String? selectedCondition =
+              await _showHealthConditionSelectionDialog(conditions);
+          if (selectedCondition != null) {
+            // Update the condition in the service or state management
+            healthConditionService
+                .updateSelectedHealthCondition(selectedCondition);
+
+            // Now proceed with recommendations using the new condition
+            _proceedWithMealRecommendations(userId, selectedCondition);
+          } else {
+            // If user cancels selection or no condition chosen, proceed without condition
+            _proceedWithMealRecommendations(userId, null);
+          }
         } else {
-          // If user cancels selection or no condition chosen, proceed without condition
+          // No conditions available, proceed without condition
           _proceedWithMealRecommendations(userId, null);
         }
       } else {
-        // No conditions available, proceed without condition
+        // User doesn't want to select a condition, proceed without one
         _proceedWithMealRecommendations(userId, null);
       }
     } else {
-      // User doesn't want to select a condition, proceed without one
-      _proceedWithMealRecommendations(userId, null);
+      // Health condition already selected, proceed with recommendations
+      healthConditionService.healthConditionStream
+          .listen((selectedHealthCondition) async {
+        _proceedWithMealRecommendations(userId, selectedHealthCondition);
+      });
     }
-  } else {
-    // Health condition already selected, proceed with recommendations
-    healthConditionService.healthConditionStream.listen((selectedHealthCondition) async {
-      _proceedWithMealRecommendations(userId, selectedHealthCondition);
+  }
+
+  Future<bool> _checkHealthConditionSelected(String userId) async {
+    return await healthConditionService.healthConditionStream
+            .firstWhere((condition) => condition != null, orElse: () => '') !=
+        '';
+  }
+
+  Future<bool?> _askToSelectHealthCondition() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Select a Health Condition?'),
+          content: const Text(
+              'Would you like to select a health condition for personalized meal recommendations?'),
+          actions: [
+            TextButton(
+              child: const Text('No'),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            TextButton(
+              child: const Text('Yes'),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<String?> _showHealthConditionSelectionDialog(
+      List<String> conditions) async {
+    return await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Select a Health Condition'),
+          content: SingleChildScrollView(
+            child: Column(
+              children: conditions
+                  .map((condition) => ListTile(
+                        title: Text(condition),
+                        onTap: () {
+                          Navigator.pop(context, condition);
+                        },
+                      ))
+                  .toList(),
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _proceedWithMealRecommendations(
+      String userId, String? healthCondition) async {
+    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+    final pastPurchases = await orderProvider.getPastPurchases(userId);
+
+    final recommendations = await _mlService.recommendMeals(
+      pastPurchases.cast<String>(),
+      healthCondition,
+    );
+
+    // Save meal recommendations
+    await _saveMealRecommendations(recommendations);
+
+    setState(() {
+      // Trigger a UI update
     });
   }
-}
-
-Future<bool> _checkHealthConditionSelected(String userId) async {
-  return await healthConditionService.healthConditionStream.firstWhere((condition) => condition != null, orElse: () => '') != '';
-}
-
-Future<bool?> _askToSelectHealthCondition() async {
-  return await showDialog<bool>(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text('Select a Health Condition?'),
-        content: const Text('Would you like to select a health condition for personalized meal recommendations?'),
-        actions: [
-          TextButton(
-            child: const Text('No'),
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          TextButton(
-            child: const Text('Yes'),
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      );
-    },
-  );
-}
-
-Future<String?> _showHealthConditionSelectionDialog(List<String> conditions) async {
-  return await showDialog<String>(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text('Select a Health Condition'),
-        content: SingleChildScrollView(
-          child: Column(
-            children: conditions.map((condition) => 
-              ListTile(
-                title: Text(condition),
-                onTap: () {
-                  Navigator.pop(context, condition);
-                },
-              )
-            ).toList(),
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            child: const Text('Cancel'),
-            onPressed: () {
-              Navigator.pop(context);
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
-
-void _proceedWithMealRecommendations(String userId, String? healthCondition) async {
-  final orderProvider = Provider.of<OrderProvider>(context, listen: false);
-  final pastPurchases = await orderProvider.getPastPurchases(userId);
-
-  final recommendations = await _mlService.recommendMeals(
-    pastPurchases.cast<String>(),
-    healthCondition,
-  );
-
-  // Save meal recommendations
-  await _saveMealRecommendations(recommendations);
-
-  setState(() {
-    // Trigger a UI update
-  });
-}
 
   // Helper method to save meal recommendations
   Future<void> _saveMealRecommendations(List<String> recommendations) async {
@@ -920,11 +930,7 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                                   : null),
                                           title: Text(product.name),
                                           subtitle: Text(
-                                          'Price: \$${selectedVariety?.discountedPriceStream != null ? 
-                                          selectedVariety!.discountedPriceStream!.firstWhere((value) => value != null, orElse: () => null).then((map) => 
-                                            map?.values.first?.toStringAsFixed(2) ?? groceryItem!.product.basePrice.toStringAsFixed(2)
-                                          ) : 
-                                          groceryItem!.product.basePrice.toStringAsFixed(2)}' ),
+                                              'Price: \$${selectedVariety?.discountedPriceStream != null ? selectedVariety!.discountedPriceStream!.firstWhere((value) => value != null, orElse: () => null).then((map) => map?.values.first?.toStringAsFixed(2) ?? groceryItem!.product.basePrice.toStringAsFixed(2)) : groceryItem!.product.basePrice.toStringAsFixed(2)}'),
                                           children: [
                                             if (groceryItem!
                                                 .product.varieties.isNotEmpty)
@@ -934,8 +940,8 @@ void _proceedWithMealRecommendations(String userId, String? healthCondition) asy
                                                 child: ListView.builder(
                                                   scrollDirection:
                                                       Axis.horizontal,
-                                                  itemCount: groceryItem.product
-                                                      .varieties.length,
+                                                  itemCount: groceryItem
+                                                      .product.varieties.length,
                                                   itemBuilder:
                                                       (context, varietyIndex) {
                                                     var variety = groceryItem

@@ -8,21 +8,60 @@ import 'package:grocerry/screens/admin_dashboard_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:flutter_ffmpeg/flutter_ffmpeg.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Still needed for storage and lookups
-import '../providers/product_provider.dart'; // Import ProductProvider
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../providers/product_provider.dart';
 import '../models/product.dart';
 
-// Firebase Functions entry point (runs on server startup)
+// Firebase Functions entry point for stream listening
 @CloudFunction()
 Future<Map<String, dynamic>> initializeSocialMediaMarketer(
     CloudEvent event, RequestContext context) async {
-  final productProvider = ProductProvider(); // Instantiate server-side
+  final productProvider = ProductProvider();
   final marketer = SocialMediaMarketer(productProvider: productProvider);
-  marketer._listenToProductStreams(); // Start listening to streams on server
+  marketer._listenToProductStreams();
   return {
     'status': 'success',
     'message': 'Social Media Marketer initialized and listening to streams'
   };
+}
+
+// HTTP-triggered function for cleanup (to be scheduled via Pub/Sub)
+@CloudFunction()
+Future<Map<String, dynamic>> cleanupOldFiles(http.Request request) async {
+  final firestore = FirebaseFirestore.instance;
+  final twoDaysAgo = DateTime.now().subtract(const Duration(days: 2));
+
+  try {
+    final snapshot = await firestore
+        .collection('storage_files')
+        .where('uploadTimestamp', isLessThan: Timestamp.fromDate(twoDaysAgo))
+        .get();
+
+    const storageBucket = 'your-app.appspot.com'; // Replace with your bucket
+    const storageBaseUrl =
+        'https://firebasestorage.googleapis.com/v0/b/$storageBucket/o';
+    const authToken = 'your_firebase_auth_token'; // Replace with real token
+
+    for (var doc in snapshot.docs) {
+      final filePath = doc['path'];
+      final deleteUrl = '$storageBaseUrl/$filePath';
+      final response = await http.delete(
+        Uri.parse(deleteUrl),
+        headers: {'Authorization': 'Bearer $authToken'},
+      );
+
+      if (response.statusCode == 204 || response.statusCode == 200) {
+        await doc.reference.delete();
+        print('Deleted file from Storage: $filePath');
+      } else {
+        print('Failed to delete file $filePath: ${response.body}');
+      }
+    }
+    return {'status': 'success', 'message': 'Old files cleaned up'};
+  } catch (e) {
+    print('Error cleaning up old files: $e');
+    return {'status': 'error', 'message': 'Failed to clean up old files: $e'};
+  }
 }
 
 class SocialMediaMarketer {
@@ -41,21 +80,22 @@ class SocialMediaMarketer {
   final String _instagramApiKey = 'your_instagram_access_token_here';
   final String _twitterApiKey = 'your_twitter_bearer_token_here';
   final String _googleAdsApiKey = 'your_google_ads_api_key_here';
-  final ProductProvider productProvider; // Required ProductProvider instance
+  final ProductProvider productProvider;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final PlatformSwitchManager switchManager;
-  // Firebase Storage config (replace with your bucket)
+  DateTime? lastPostTime;
+
   final String _storageBucket =
       'your-app.appspot.com'; // Replace with your Firebase Storage bucket
   final String _firebaseStorageBaseUrl =
       'https://firebasestorage.googleapis.com/v0/b/';
   final String _firebaseAuthToken = 'your_firebase_auth_token';
 
-  DateTime? lastUpdateTime; // Obtain via Firebase Admin SDK or service account
+  DateTime? lastUpdateTime; // Replace with real token
 
   SocialMediaMarketer(
       {required this.productProvider, PlatformSwitchManager? switchManager})
-      : switchManager = switchManager ?? PlatformSwitchManager() {
+      : switchManager = switchManager ?? const PlatformSwitchManager() {
     _initializeMarketer();
   }
 
@@ -63,7 +103,6 @@ class SocialMediaMarketer {
     print('Social Media Marketer initialized on server.');
   }
 
-  // **Listen to Product Streams (Server-Side)**
   void _listenToProductStreams() {
     productProvider.productsStream.listen((products) async {
       await _handleNewProductUpdates(products);
@@ -103,8 +142,8 @@ class SocialMediaMarketer {
       }).toList();
       lastUpdateTime = DateTime.now();
       for (var product in newProducts) {
-        _createAndPostContent(product, 'Seasonal Special!',
-            '${product.name} is in season now! Grab it for \$${product.basePrice}.');
+        _createAndPostContent(product, 'New Product Alert!',
+            '${product.name} is now available! Grab it for \$${product.basePrice}.');
       }
     } catch (e) {
       print('Error fetching new products: $e');
@@ -143,7 +182,6 @@ class SocialMediaMarketer {
     }
   }
 
-  // **Get Top Consumer Location**
   Future<String> _getTopConsumerLocation(String productId) async {
     try {
       final querySnapshot = await _firestore
@@ -171,7 +209,6 @@ class SocialMediaMarketer {
     }
   }
 
-  // **Generate Visual Content**
   Future<String> _generateVisualContent(Product product, bool isVideo) async {
     final apiUrl = isVideo ? _aiVideoApiUrl : _aiImageApiUrl;
     final prompt = isVideo
@@ -262,7 +299,6 @@ class SocialMediaMarketer {
       final imageFile = File('${tempDir.path}/$imageFileName');
       await imageFile.writeAsBytes(imageBytes);
 
-      // Use File? instead of String for audioFile
       final File? audioFile =
           await _generateAIMusic(musicPrompt, duration, tempDir);
 
@@ -272,7 +308,7 @@ class SocialMediaMarketer {
 
       List<String> ffmpegCommand = ['-loop', '1', '-i', imageFile.path];
       if (audioFile != null && audioFile.existsSync()) {
-        ffmpegCommand.addAll(['-i', audioFile.path]); // Use audioFile.path here
+        ffmpegCommand.addAll(['-i', audioFile.path]);
       }
 
       List<String> filters = [
@@ -337,7 +373,7 @@ class SocialMediaMarketer {
         final audioFile = File('${tempDir.path}/$audioFileName');
         await audioFile.writeAsBytes(audioBytes);
         print('AI music generated successfully at ${audioFile.path}');
-        return audioFile; // Return File instead of String
+        return audioFile;
       }
       return null;
     } catch (e) {
@@ -349,11 +385,11 @@ class SocialMediaMarketer {
   Future<img.BitmapFont> loadFont() async {
     // Load the .fnt file as a string
     final String fontData =
-        await rootBundle.loadString('assets/fonts/arial_24.fnt');
+        await rootBundle.loadString('assets/comfortaa-bold.fnt');
 
     // Load the .png file associated with the .fnt
     final ByteData fontImageData =
-        await rootBundle.load('assets/fonts/arial_24.png');
+        await rootBundle.load('assets/comfortaa-bold.png');
     final Uint8List fontImageBytes = fontImageData.buffer.asUint8List();
 
     // Decode the image
@@ -408,6 +444,41 @@ class SocialMediaMarketer {
     }
   }
 
+  // **Upload to Firebase Storage with Tracking for Deletion**
+  Future<String> _uploadToStorage(File file, String path) async {
+    try {
+      final uploadUrl = '$_firebaseStorageBaseUrl$_storageBucket/o?name=$path';
+      final response = await http.post(
+        Uri.parse(uploadUrl),
+        headers: {
+          'Authorization': 'Bearer $_firebaseAuthToken',
+          'Content-Type': 'application/octet-stream',
+        },
+        body: await file.readAsBytes(),
+      );
+
+      if (response.statusCode == 200) {
+        final downloadUrl =
+            '$_firebaseStorageBaseUrl$_storageBucket/o/$path?alt=media';
+        print('File uploaded to Firebase Storage: $downloadUrl');
+
+        // Store metadata in Firestore for deletion tracking
+        await _firestore.collection('storage_files').add({
+          'path': path,
+          'uploadTimestamp': FieldValue.serverTimestamp(),
+        });
+
+        return downloadUrl;
+      } else {
+        throw Exception(
+            'Failed to upload to Firebase Storage: ${response.body}');
+      }
+    } catch (e) {
+      print('Error uploading to Firebase Storage: $e');
+      throw Exception('Failed to upload file to storage');
+    }
+  }
+
   Future<String> _fetchPositiveTrendingTopic() async {
     final response = await http.post(
       Uri.parse(_openAiApiUrl),
@@ -458,39 +529,14 @@ class SocialMediaMarketer {
     return '$trendingTopic $baseMessage Get ${product.name} now! #GroceryDeals #${product.name.replaceAll(' ', '')}';
   }
 
-  // **Upload to Firebase Storage (Server-Side)**
-  Future<String> _uploadToStorage(File file, String path) async {
-    try {
-      final uploadUrl = '$_firebaseStorageBaseUrl$_storageBucket/o?name=$path';
-      final response = await http.post(
-        Uri.parse(uploadUrl),
-        headers: {
-          'Authorization': 'Bearer $_firebaseAuthToken',
-          'Content-Type': 'application/octet-stream',
-        },
-        body: await file.readAsBytes(),
-      );
-
-      if (response.statusCode == 200) {
-        final downloadUrl =
-            '$_firebaseStorageBaseUrl$_storageBucket/o/$path?alt=media';
-        print('File uploaded to Firebase Storage: $downloadUrl');
-        return downloadUrl;
-      } else {
-        throw Exception(
-            'Failed to upload to Firebase Storage: ${response.body}');
-      }
-    } catch (e) {
-      print('Error uploading to Firebase Storage: $e');
-      throw Exception('Failed to upload file to storage');
-    }
-  }
-
   Future<void> _postToTikTok(
-      String contentUrl, String caption, String productId) async {
+      String contentUrl, String caption, String productId,
+      {bool isSponsored = false}) async {
     if (!switchManager.getSwitch('tiktok')) return;
     final geoTagLocation = await _getTopConsumerLocation(productId);
-    final response = await http.post(
+
+    // Post content to TikTok
+    final postResponse = await http.post(
       Uri.parse(_tiktokApiUrl),
       headers: {
         'Authorization': 'Bearer $_tiktokApiKey',
@@ -503,17 +549,61 @@ class SocialMediaMarketer {
         'location': geoTagLocation,
       }),
     );
-    if (response.statusCode != 200) {
-      print('Failed to post to TikTok: ${response.body}');
+
+    if (postResponse.statusCode == 200) {
+      print('Posted to TikTok with geotag: $geoTagLocation');
+      final postId = jsonDecode(
+          postResponse.body)['id']; // Assuming TikTok returns a post ID
+
+      // Promote the post as a sponsored ad if specified
+      if (isSponsored) {
+        const adUrl =
+            'https://business-api.tiktok.com/open_api/v1.3/ad/create/';
+        final adResponse = await http.post(
+          Uri.parse(adUrl),
+          headers: {
+            'Authorization': 'Bearer $_tiktokApiKey',
+            'Content-Type': 'application/json'
+          },
+          body: jsonEncode({
+            'advertiser_id': '<YOUR_ADVERTISER_ID>',
+            'adgroup_id':
+                '<YOUR_ADGROUP_ID>', // Pre-create an ad group in TikTok Ads Manager
+            'creative': {
+              'video_id': postId,
+              'call_to_action': 'SHOP_NOW',
+            },
+            'budget': 500, // Example budget in cents ($5.00)
+            'schedule_type': 'SCHEDULE_START_END',
+            'start_time': DateTime.now().toIso8601String(),
+            'end_time':
+                DateTime.now().add(const Duration(days: 2)).toIso8601String(),
+            'targeting': {
+              'location': [geoTagLocation],
+            },
+          }),
+        );
+        if (adResponse.statusCode == 200) {
+          print('Sponsored ad created for TikTok post $postId');
+        } else {
+          print('Failed to create TikTok sponsored ad: ${adResponse.body}');
+        }
+      }
+    } else {
+      print('Failed to post to TikTok: ${postResponse.body}');
     }
   }
 
   Future<void> _postToFacebook(
-      String contentUrl, String caption, bool isVideo, String productId) async {
+      String contentUrl, String caption, bool isVideo, String productId,
+      {bool isSponsored = false}) async {
     if (!switchManager.getSwitch('facebook')) return;
     final geoTagLocation = await _getTopConsumerLocation(productId);
-    final response = await http.post(
-      Uri.parse(isVideo ? '$_facebookApiUrl/../videos' : _facebookApiUrl),
+
+    // Base URL for posting
+    final baseUrl = isVideo ? '$_facebookApiUrl/../videos' : _facebookApiUrl;
+    final postResponse = await http.post(
+      Uri.parse(baseUrl),
       headers: {
         'Authorization': 'Bearer $_facebookApiKey',
         'Content-Type': 'application/json'
@@ -524,16 +614,61 @@ class SocialMediaMarketer {
         'place': {'name': geoTagLocation},
       }),
     );
-    if (response.statusCode != 200) {
-      print('Failed to post to Facebook: ${response.body}');
+
+    if (postResponse.statusCode == 200) {
+      print('Posted to Facebook with geotag: $geoTagLocation');
+      final postId = jsonDecode(postResponse.body)['id'];
+
+      // Boost the post as a sponsored ad if specified
+      if (isSponsored) {
+        const adUrl =
+            'https://graph.facebook.com/v20.0/act_<YOUR_AD_ACCOUNT_ID>/adsets';
+        final adResponse = await http.post(
+          Uri.parse(adUrl),
+          headers: {
+            'Authorization': 'Bearer $_facebookApiKey',
+            'Content-Type': 'application/json'
+          },
+          body: jsonEncode({
+            'name': 'Sponsored Post for $productId',
+            'status': 'ACTIVE',
+            'campaign_id':
+                '<YOUR_CAMPAIGN_ID>', // Pre-create a campaign in Ads Manager
+            'optimization_goal': 'POST_ENGAGEMENT',
+            'billing_event': 'IMPRESSIONS',
+            'bid_amount': 100, // In cents, e.g., $1.00
+            'daily_budget': 500, // In cents, e.g., $5.00
+            'targeting': {
+              'geo_locations': {
+                'custom_locations': [
+                  {'name': geoTagLocation}
+                ]
+              },
+            },
+            'promoted_object': {
+              'page_id': '<YOUR_PAGE_ID>',
+              'object_id': postId
+            },
+          }),
+        );
+        if (adResponse.statusCode == 200) {
+          print('Sponsored ad created for post $postId');
+        } else {
+          print('Failed to create sponsored ad: ${adResponse.body}');
+        }
+      }
+    } else {
+      print('Failed to post to Facebook: ${postResponse.body}');
     }
   }
 
   Future<void> _postToInstagram(
-      String contentUrl, String caption, bool isVideo, String productId) async {
+      String contentUrl, String caption, bool isVideo, String productId,
+      {bool isSponsored = false}) async {
     if (!switchManager.getSwitch('instagram')) return;
     final geoTagLocation = await _getTopConsumerLocation(productId);
-    final response = await http.post(
+
+    final postResponse = await http.post(
       Uri.parse(_instagramApiUrl),
       headers: {
         'Authorization': 'Bearer $_instagramApiKey',
@@ -546,16 +681,58 @@ class SocialMediaMarketer {
         'location': {'name': geoTagLocation},
       }),
     );
-    if (response.statusCode != 200) {
-      print('Failed to post to Instagram: ${response.body}');
+
+    if (postResponse.statusCode == 200) {
+      print('Posted to Instagram with geotag: $geoTagLocation');
+      final postId = jsonDecode(postResponse.body)['id'];
+
+      if (isSponsored) {
+        const adUrl =
+            'https://graph.facebook.com/v20.0/act_<YOUR_AD_ACCOUNT_ID>/adsets'; // Meta Ads API
+        final adResponse = await http.post(
+          Uri.parse(adUrl),
+          headers: {
+            'Authorization': 'Bearer $_instagramApiKey',
+            'Content-Type': 'application/json'
+          },
+          body: jsonEncode({
+            'name': 'Sponsored Post for ${productId}',
+            'status': 'ACTIVE',
+            'campaign_id': '<YOUR_CAMPAIGN_ID>',
+            'optimization_goal': 'POST_ENGAGEMENT',
+            'billing_event': 'IMPRESSIONS',
+            'bid_amount': 100,
+            'daily_budget': 500,
+            'targeting': {
+              'geo_locations': {
+                'custom_locations': [
+                  {'name': geoTagLocation}
+                ]
+              },
+            },
+            'promoted_object': {
+              'instagram_post_id': postId
+            }, // Instagram-specific
+          }),
+        );
+        if (adResponse.statusCode == 200) {
+          print('Sponsored ad created for Instagram post $postId');
+        } else {
+          print('Failed to create Instagram sponsored ad: ${adResponse.body}');
+        }
+      }
+    } else {
+      print('Failed to post to Instagram: ${postResponse.body}');
     }
   }
 
   Future<void> _postToTwitter(
-      String contentUrl, String caption, String productId) async {
+      String contentUrl, String caption, String productId,
+      {bool isSponsored = false}) async {
     if (!switchManager.getSwitch('twitter')) return;
     final geoTagLocation = await _getTopConsumerLocation(productId);
-    final response = await http.post(
+
+    final postResponse = await http.post(
       Uri.parse(_twitterApiUrl),
       headers: {
         'Authorization': 'Bearer $_twitterApiKey',
@@ -569,8 +746,34 @@ class SocialMediaMarketer {
         'place': {'full_name': geoTagLocation},
       }),
     );
-    if (response.statusCode != 201) {
-      print('Failed to post to Twitter: ${response.body}');
+
+    if (postResponse.statusCode == 201) {
+      print('Posted to Twitter with geotag: $geoTagLocation');
+      final tweetId = jsonDecode(postResponse.body)['data']['id'];
+
+      if (isSponsored) {
+        const adUrl =
+            'https://ads-api.twitter.com/12/accounts/<YOUR_ACCOUNT_ID>/promoted_tweets';
+        final adResponse = await http.post(
+          Uri.parse(adUrl),
+          headers: {
+            'Authorization': 'Bearer $_twitterApiKey',
+            'Content-Type': 'application/json'
+          },
+          body: jsonEncode({
+            'line_item_id':
+                '<YOUR_LINE_ITEM_ID>', // Pre-create in Twitter Ads Manager
+            'tweet_ids': [tweetId],
+          }),
+        );
+        if (adResponse.statusCode == 200 || adResponse.statusCode == 201) {
+          print('Promoted Tweet created for tweet $tweetId');
+        } else {
+          print('Failed to promote Tweet: ${adResponse.body}');
+        }
+      }
+    } else {
+      print('Failed to post to Twitter: ${postResponse.body}');
     }
   }
 
@@ -600,26 +803,33 @@ class SocialMediaMarketer {
   }
 
   Future<void> _postToAllPlatforms(
-      String contentUrl, String caption, bool isVideo, String productId) async {
+      String contentUrl, String caption, bool isVideo, String productId,
+      {bool isSponsored = false}) async {
     if (isVideo) {
       if (switchManager.getSwitch('tiktok')) {
-        await _postToTikTok(contentUrl, caption, productId);
+        await _postToTikTok(contentUrl, caption, productId,
+            isSponsored: isSponsored);
       }
       if (switchManager.getSwitch('facebook')) {
-        await _postToFacebook(contentUrl, caption, true, productId);
+        await _postToFacebook(contentUrl, caption, true, productId,
+            isSponsored: isSponsored);
       }
       if (switchManager.getSwitch('instagram')) {
-        await _postToInstagram(contentUrl, caption, true, productId);
+        await _postToInstagram(contentUrl, caption, true, productId,
+            isSponsored: isSponsored);
       }
     } else {
       if (switchManager.getSwitch('facebook')) {
-        await _postToFacebook(contentUrl, caption, false, productId);
+        await _postToFacebook(contentUrl, caption, false, productId,
+            isSponsored: isSponsored);
       }
       if (switchManager.getSwitch('instagram')) {
-        await _postToInstagram(contentUrl, caption, false, productId);
+        await _postToInstagram(contentUrl, caption, false, productId,
+            isSponsored: isSponsored);
       }
       if (switchManager.getSwitch('twitter')) {
-        await _postToTwitter(contentUrl, caption, productId);
+        await _postToTwitter(contentUrl, caption, productId,
+            isSponsored: isSponsored);
       }
     }
     if (switchManager.getSwitch('googleAds')) {
@@ -628,7 +838,8 @@ class SocialMediaMarketer {
   }
 
   Future<void> _createAndPostContent(
-      Product product, String title, String baseMessage) async {
+      Product product, String title, String baseMessage,
+      {bool isSponsored = false}) async {
     try {
       bool isVideo = DateTime.now().second % 2 == 0;
       String contentUrl = await _generateVisualContent(product, isVideo);
@@ -636,7 +847,8 @@ class SocialMediaMarketer {
           isVideo ? contentUrl : await _embedTextOnContent(contentUrl, title);
       String caption = await _createChatGptCaption(baseMessage, product);
       await _postToAllPlatforms(
-          embeddedContentUrl, caption, isVideo, product.id);
+          embeddedContentUrl, caption, isVideo, product.id,
+          isSponsored: isSponsored);
       await _storePostRecord(embeddedContentUrl, caption);
     } catch (e) {
       print('Error creating and posting content: $e');
@@ -654,5 +866,12 @@ class SocialMediaMarketer {
     } catch (e) {
       print('Error storing post record: $e');
     }
+  }
+
+  Future<void> createAndPostManual(
+      Product product, String title, String message,
+      {bool isSponsored = false}) async {
+    await _createAndPostContent(product, title, message,
+        isSponsored: isSponsored);
   }
 }

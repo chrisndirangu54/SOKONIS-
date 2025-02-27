@@ -111,11 +111,11 @@ class OfferService {
   Future<img.BitmapFont> loadFont() async {
     // Load the .fnt file as a string
     final String fontData =
-        await rootBundle.loadString('assets/fonts/arial_24.fnt');
+        await rootBundle.loadString('assets/comfortaa-regular.fnt');
 
     // Load the .png file associated with the .fnt
     final ByteData fontImageData =
-        await rootBundle.load('assets/fonts/arial_24.png');
+        await rootBundle.load('assets/comfortaa-regular.fnt');
     final Uint8List fontImageBytes = fontImageData.buffer.asUint8List();
 
     // Decode the image

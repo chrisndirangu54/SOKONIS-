@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/providers/product_provider.dart';
 import 'package:grocerry/screens/coupon_management_screen.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'admin_add_product_screen.dart';
@@ -565,21 +568,21 @@ class DashboardScreenState extends State<DashboardScreen> {
             isCurved: true,
             color: Colors.green,
             barWidth: 2,
-            dotData: const FlDotData(show: false),
+            dotData: FlDotData(show: false),
           ),
           LineChartBarData(
             spots: negativeSpots,
             isCurved: true,
             color: Colors.red,
             barWidth: 2,
-            dotData: const FlDotData(show: false),
+            dotData: FlDotData(show: false),
           ),
           LineChartBarData(
             spots: neutralSpots,
             isCurved: true,
             color: Colors.grey,
             barWidth: 2,
-            dotData: const FlDotData(show: false),
+            dotData: FlDotData(show: false),
           ),
         ],
         // Tooltip on touch
@@ -632,10 +635,8 @@ class DashboardScreenState extends State<DashboardScreen> {
               getTitlesWidget: (value, meta) => Text(value.toInt().toString()),
             ),
           ),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
         gridData: FlGridData(
           show: true,
@@ -795,54 +796,273 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-class PlatformSwitchManager {
-  // Map to store platform switches (default: all enabled)
-  Map<String, bool> _platformSwitches;
+class PlatformSwitchManager extends StatefulWidget {
+  const PlatformSwitchManager({super.key});
 
-  // Constructor with optional initial switches
-  PlatformSwitchManager({
-    Map<String, bool>? initialSwitches,
-  }) : _platformSwitches = initialSwitches ??
-            {
-              'tiktok': true,
-              'facebook': true,
-              'instagram': true,
-              'twitter': true,
-              'googleAds': true,
-            } {
+  @override
+  PlatformSwitchManagerState createState() => PlatformSwitchManagerState();
+}
+
+class PlatformSwitchManagerState extends State<PlatformSwitchManager> {
+  // Map to store platform switches (default: all enabled)
+  final Map<String, bool> _platformSwitches = {
+    'tiktok': true,
+    'facebook': true,
+    'instagram': true,
+    'twitter': true,
+    'googleAds': true,
+  };
+  FirebaseFirestore? firestore;
+
+  // Sponsored switch
+  bool _isSponsored = false;
+
+  // List to store manually added products
+  final List<Product> _manualProducts = [];
+
+  // Search query and results
+  String _searchQuery = '';
+  List<Product> _searchResults = [];
+
+  @override
+  void initState() {
+    super.initState();
     print(
         'PlatformSwitchManager initialized with switches: $_platformSwitches');
+    print('Initial manual products: ${_manualProducts.length}');
   }
 
-  // Set switch for a specific platform
+  // **Switch Management Methods**
+
   void setSwitch(String platform, bool enabled) {
     if (_platformSwitches.containsKey(platform.toLowerCase())) {
-      _platformSwitches[platform.toLowerCase()] = enabled;
+      setState(() {
+        _platformSwitches[platform.toLowerCase()] = enabled;
+      });
       print('Switch for $platform set to $enabled');
     } else {
       print('Invalid platform: $platform');
     }
   }
 
-  // Get switch status for a specific platform
   bool getSwitch(String platform) {
     return _platformSwitches[platform.toLowerCase()] ?? false;
   }
 
-  // Get all switches
   Map<String, bool> getAllSwitches() {
     return Map.from(_platformSwitches);
   }
 
-  // Enable all platforms
   void enableAll() {
-    _platformSwitches.updateAll((key, value) => true);
+    setState(() {
+      _platformSwitches.updateAll((key, value) => true);
+    });
     print('All platforms enabled: $_platformSwitches');
   }
 
-  // Disable all platforms
   void disableAll() {
-    _platformSwitches.updateAll((key, value) => false);
+    setState(() {
+      _platformSwitches.updateAll((key, value) => false);
+    });
     print('All platforms disabled: $_platformSwitches');
+  }
+
+  // **Manual Product Management Methods**
+
+  void addManualProduct(Product product) {
+    if (!_manualProducts.contains(product)) {
+      setState(() {
+        _manualProducts.add(product);
+      });
+      print('Product added manually: ${product.id}');
+    } else {
+      print('Product already exists: ${product.id}');
+    }
+  }
+
+  void removeManualProduct(String productId) {
+    setState(() {
+      _manualProducts.removeWhere((product) => product.id == productId);
+    });
+    print('Product removed: $productId');
+  }
+
+  List<Product> getManualProducts() {
+    return List.from(_manualProducts);
+  }
+
+  Product? selectProduct(String productId) {
+    try {
+      return _manualProducts.firstWhere((product) => product.id == productId);
+    } catch (e) {
+      print('Product not found: $productId');
+      return null;
+    }
+  }
+
+  // **Firestore Search Methods**
+
+  Future<List<Product>> searchProducts(String query) async {
+    try {
+      final snapshot = await firestore!
+          .collection('products')
+          .where('name', isGreaterThanOrEqualTo: query)
+          .where('name', isLessThanOrEqualTo: '$query\uf8ff')
+          .get();
+      final products =
+          snapshot.docs.map((doc) => Product.fromFirestore(doc: doc)).toList();
+      print('Found ${products.length} products matching query "$query"');
+      return products;
+    } catch (e) {
+      print('Error searching products: $e');
+      return [];
+    }
+  }
+
+  Future<void> addProductFromFirestore(String productId) async {
+    try {
+      final doc = await firestore!.collection('products').doc(productId).get();
+      if (doc.exists) {
+        final product = Product.fromFirestore(doc: doc);
+        addManualProduct(product);
+      } else {
+        print('Product with ID $productId not found in Firestore');
+      }
+    } catch (e) {
+      print('Error adding product from Firestore: $e');
+    }
+  }
+
+  // Call server-side SocialMediaMarketer via HTTP
+  Future<void> postToServer(
+      Product product, String title, String message) async {
+    try {
+      final response = await http.post(
+        Uri.parse(
+            'https://us-central1-your-project-id.cloudfunctions.net/initializeSocialMediaMarketer'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'product': {
+            'id': product.id,
+            'name': product.name,
+            'basePrice': product.basePrice
+          },
+          'title': title,
+          'message': message,
+          'isSponsored': _isSponsored,
+          'switches': _platformSwitches,
+        }),
+      );
+      if (response.statusCode == 200) {
+        print('Successfully posted to server: ${response.body}');
+      } else {
+        print('Failed to post to server: ${response.body}');
+      }
+    } catch (e) {
+      print('Error posting to server: $e');
+    }
+  }
+
+  // **UI Implementation**
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Platform Switch Manager')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Platform Switches
+            const Text('Platforms:',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            ..._platformSwitches.keys.map((platform) => SwitchListTile(
+                  title: Text(platform),
+                  value: _platformSwitches[platform]!,
+                  onChanged: (value) => setSwitch(platform, value),
+                )),
+            SwitchListTile(
+              title: const Text('Sponsored Ads'),
+              value: _isSponsored,
+              onChanged: (value) => setState(() => _isSponsored = value),
+            ),
+            const SizedBox(height: 16),
+
+            // Search Products
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Search Products',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) async {
+                setState(() => _searchQuery = value);
+                if (value.isNotEmpty) {
+                  _searchResults = await searchProducts(value);
+                } else {
+                  _searchResults = [];
+                }
+                setState(() {});
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Search Results
+            Expanded(
+              child: ListView.builder(
+                itemCount: _searchResults.length,
+                itemBuilder: (context, index) {
+                  final product = _searchResults[index];
+                  return ListTile(
+                    title: Text(product.name),
+                    subtitle: Text('ID: ${product.id}'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () {
+                        addManualProduct(product);
+                        setState(() {});
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Manual Products
+            const Text('Manual Products:',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _manualProducts.length,
+                itemBuilder: (context, index) {
+                  final product = _manualProducts[index];
+                  return ListTile(
+                    title: Text(product.name),
+                    subtitle: Text('ID: ${product.id}'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete),
+                      onPressed: () => removeManualProduct(product.id),
+                    ),
+                  );
+                },
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (_manualProducts.isNotEmpty) {
+                  final product =
+                      _manualProducts.first; // Example: post first product
+                  postToServer(product, 'Manual Post', 'Check this out!');
+                } else {
+                  print('No manual products to post');
+                }
+              },
+              child: const Text('Post Selected Product'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
