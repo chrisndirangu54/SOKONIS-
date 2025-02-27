@@ -1070,7 +1070,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 MaterialPageRoute(
                                   builder: (context) => MapPickerScreen(
                                     initialPosition: selectedLocation ??
-                                        const latLng.LatLng(0.0, 0.0),
+                                        latLng.LatLng(0.0, 0.0),
                                     onLocationSelected: (latLng, placemarks) {
                                       setState(() {
                                         selectedLocation = latLng;

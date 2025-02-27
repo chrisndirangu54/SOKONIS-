@@ -79,7 +79,7 @@ class _CartScreenState extends State<CartScreen> {
     // Calculate total amount for selected items
     final selectedTotalAmount = cart.items.values
         .where((item) => _selectedItems.contains(item.product.id))
-        .fold(0.0, (sum, item) => sum + (item.price * item.quantity));
+        .fold(0.0, (sum, item) => sum! + (item.price * item.quantity));
 
     // Calculate the discount amount based on the coupon code
     final discountAmount = cart.calculateDiscount(_couponCode, context);

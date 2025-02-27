@@ -6,84 +6,83 @@ publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.3.0 <4.0.0'  # Matches Flutter 3.19.0's Dart 3.3.0
+  sdk: '>=2.17.0 <3.0.0'  # Restrict to Dart <3.0.0 for compatibility with 2.18.2
 
 dependencies:
   flutter:
     sdk: flutter
-  firebase_core: ^2.24.2
-  firebase_auth: ^4.16.0
-  cloud_firestore: ^4.14.0
-  flutter_svg: ^2.0.10+1
-  cupertino_icons: ^1.0.8
-  provider: ^6.1.1
-  http: ^1.2.0
-  cloud_functions: ^4.6.0
-  url_launcher: ^6.2.4
-  dio: ^5.4.0
-  google_maps_flutter: ^2.5.3
-  geolocator: ^12.0.0
-  firebase_messaging: ^14.7.10
-  permission_handler: ^11.3.0
-  firebase_database: ^10.4.0
-  image: ^3.0.1
-  firebase_storage: ^11.6.0
-  intl: ^0.19.0
-  cached_network_image: ^3.3.1
-  flutter_local_notifications: ^17.0.0
+
+  # Firebase packages (compatible with Dart 2.18.2)
+  firebase_core: ^1.24.0    # Last version before Dart 2.19.0 requirement
+  firebase_auth: ^3.11.2    # Last version before Dart 2.19.0 requirement
+  cloud_firestore: ^3.5.1   # Last version before Dart 2.19.0 requirement
+  firebase_messaging: ^13.1.0  # Last version before Dart 2.19.0 requirement
+  firebase_storage: ^10.3.11  # Last version before Dart 2.19.0 requirement
+  firebase_database: ^9.1.7  # Last version before Dart 2.19.0 requirement
+  cloud_functions: ^3.3.9    # Last version before Dart 2.19.0 requirement
+
+  # UI and utility packages (compatible with Dart 2.18.2)
+  flutter_svg: ^1.1.6       # Last version before Dart 2.19.0 requirement
+  cupertino_icons: ^1.0.5
+  provider: ^6.0.5
+  http: ^0.13.5            # Compatible with Dart 2.18.2
+  url_launcher: ^6.0.20    # Last version before Dart 2.19.0 requirement
+  dio: ^4.0.6              # Last version before Dart 2.19.0 requirement
+  google_maps_flutter: ^2.2.8  # Last version before Dart 2.19.0 requirement
+  geolocator: ^9.0.2       # Last version before Dart 2.19.0 requirement
+  permission_handler: ^10.2.0  # Last version before Dart 2.19.0 requirement
+  image: ^3.3.0            # Last version before Dart 2.19.0 requirement
+  intl: ^0.17.0            # Compatible with Dart 2.18.2
+  cached_network_image: ^3.2.3
+  flutter_local_notifications: ^12.0.4  # Last version before Dart 2.19.0 requirement
   animated_text_kit: ^4.2.2
-  carousel_slider: ^5.0.0
+  carousel_slider: ^4.2.1
   equatable: ^2.0.5
-  fl_chart: ^0.68.0
+  fl_chart: ^0.55.0
   string_similarity: ^2.1.1
   tuple: ^2.0.2
-  path_provider: ^2.1.2
-  google_fonts: ^6.1.0
-  image_picker: ^1.0.7
-  uuid: ^4.3.3
-  google_sign_in: ^6.2.1
-  shimmer: ^3.0.0
-  csv: ^6.0.0
-  file_picker: ^8.0.0+1
-  share: ^2.0.4  # Consider switching to share_plus
-  uni_links: ^0.5.1  # Older, may need updating
-  collection: ^1.18.0
-  fluttertoast: ^8.2.5
-  firebase_ml_vision: ^0.12.0+3  # Deprecated, consider alternatives
-  google_mlkit_text_recognition: ^0.12.0
-  google_mlkit_object_detection: ^0.12.0
-  flutter_stripe: ^10.1.0
+  path_provider: ^2.0.11
+  image_picker: ^0.8.9      # Last version before Dart 2.19.0 requirement
+  uuid: ^3.0.7             # Last version before Dart 2.19.0 requirement
+  google_sign_in: ^5.4.4   # Last version before Dart 2.19.0 requirement
+  shimmer: ^2.0.0          # Last version before Dart 2.19.0 requirement
+  csv: ^5.0.2              # Last version before Dart 2.19.0 requirement
+  file_picker: ^5.0.0     # Last version before Dart 2.19.0 requirement
+  uni_links: ^0.5.1
+  collection: ^1.16.0
+  fluttertoast: ^8.2.2
+  google_mlkit_text_recognition: ^0.11.0  # Last version before Dart 2.19.0 requirement
+  google_mlkit_object_detection: ^0.11.0  # Last version before Dart 2.19.0 requirement
+  flutter_stripe: ^7.0.0   # Last version before Dart 2.19.0 requirement
   glassmorphism: ^3.0.0
-  model_viewer_plus: ^1.8.0
-  country_code_picker: ^3.0.0
+  model_viewer_plus: ^1.5.0  # Compatible with Dart 2.18.2
+  country_code_picker: ^3.0.0  # Last version before Dart 2.19.0 requirement
   background_locator: ^1.6.12
-  
-  geocoding: ^3.0.0
-  fuzzy: ^0.5.1
-  bento: ^0.0.1+alpha  # Very experimental, may not work
-  lottie: ^3.1.0
-  video_player: ^2.8.6
+  geocoding: ^2.0.5        # Last version before Dart 2.19.0 requirement
+  fuzzy: ^0.1.0           # Last version before Dart 2.19.0 requirement
+  lottie: ^1.4.3           # Last version before Dart 2.19.0 requirement
+  video_player: ^2.4.10    # Last version before Dart 2.19.0 requirement
   percent_indicator: ^4.2.3
-  url_strategy: ^0.2.0  # Older, consider ^0.3.0
-  video_player_web: ^2.3.0
-  shared_preferences: ^2.2.2
-  sensors_plus: ^5.0.1
+  url_strategy: ^0.2.0 
+  video_player_web: ^2.0.16  # Last version before Dart 2.19.0 requirement
+  shared_preferences: ^2.0.15
+  sensors_plus: ^2.0.1     # Last version before Dart 2.19.0 requirement
   random_string: ^2.3.1
-  share_plus: ^9.0.0
-  google_maps_flutter_platform_interface: ^2.5.2
+  share_plus: ^7.0.0       # Last version before Dart 2.19.0 requirement
+  google_maps_flutter_platform_interface: ^2.2.5  # Last version before Dart 2.19.0 requirement
   marquee: ^2.2.3
-  flutter_sound: ^9.11.0
-  flutter_map: ^6.1.0
-  latlong2: ^0.9.1
+  flutter_sound: ^8.5.0    # Last version before Dart 2.19.0 requirement
+  flutter_map: ^3.1.0      # Last version before Dart 2.19.0 requirement
+  latlong2: ^0.8.1         # Last version before Dart 2.19.0 requirement
+  rxdart: ^0.27.7
+  ffmpeg_kit_flutter: ^4.5.1  # Last version before Dart 2.19.0 requirement
 
-  rxdart: any
-  flutter_ffmpeg: ^0.4.2
-  functions_framework: ^0.4.3+1
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0  # Already specified
-  mockito: ^5.4.2  # Already specified latest
+  flutter_lints: ^2.0.2
+  mockito: ^5.3.2          # Compatible with Dart 2.18.2
+  build_runner: ^2.1.0
 
 flutter:
   uses-material-design: true
@@ -91,6 +90,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/3d/
 
   fonts:
     - family: Comfortaa
