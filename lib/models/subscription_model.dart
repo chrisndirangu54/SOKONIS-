@@ -29,10 +29,34 @@ class Subscription {
     required this.price,
     this.products, // Optional list of additional products
   });
+  // Add this factory constructor
+  factory Subscription.fromData({
+    required Product product,
+    required User user,
+    required int quantity,
+    required DateTime nextDelivery,
+    required bool isActive,
+    required int frequency,
+    required Variety variety,
+    required double price,
+    List<Product>? products,
+  }) {
+    return Subscription(
+      product: product,
+      user: user,
+      quantity: quantity,
+      nextDelivery: nextDelivery,
+      isActive: isActive,
+      frequency: frequency,
+      variety: variety,
+      price: price,
+      products: products,
+    );
+  }
 
   // Update the price based on the frequency
   void updatePrice() {
-    double subPrice = variety.price ?? product.basePrice ?? 0.0;
+    double subPrice = variety.price;
 
     // Ensure 'price' is initialized, even if with 0.0
     double? price = 0.0;
@@ -79,18 +103,40 @@ class Subscription {
     };
   }
 
-  factory Subscription.fromSnapshot(DocumentSnapshot snapshot) {
+  // Static async method to fetch data and create Subscription
+  static Future<Subscription> fromSnapshot(DocumentSnapshot snapshot) async {
     final data = snapshot.data() as Map<String, dynamic>;
-    return Subscription(
-      product: (data['productId']), // Assume Product has a fromId method
-      user: (data['user']),           // Assume User has a fromId method
+    final productDoc = await FirebaseFirestore.instance
+        .collection('products')
+        .doc(data['productId'])
+        .get();
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(data['user'])
+        .get();
+    final product = Product.fromFirestore(doc: productDoc);
+    final user = User.fromJson(userDoc.data()!);
+    final variety = Variety.fromMap(data['variety']);
+    final products = data['products'] != null
+        ? await Future.wait((data['products'] as List).map((id) async {
+            final doc = await FirebaseFirestore.instance
+                .collection('products')
+                .doc(id)
+                .get();
+            return Product.fromFirestore(doc: doc);
+          }))
+        : null;
+
+    return Subscription.fromData(
+      product: product,
+      user: user,
       quantity: data['quantity'] as int,
       nextDelivery: (data['nextDelivery'] as Timestamp).toDate(),
       isActive: data['isActive'] as bool,
       frequency: data['frequency'] as int,
       price: (data['price'] as num).toDouble(),
-      variety: Variety.fromMap(data['variety']), // Assume Variety has a fromMap method
-      products: data['products'] ,
+      variety: variety,
+      products: products,
     );
   }
 

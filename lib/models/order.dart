@@ -134,16 +134,17 @@ String status; // New field for notes
     required this.status, // Initialize status field
   });
 
-  factory OrderItem.fromMap(Map<String, dynamic> data) {
-    return OrderItem(
-      user: data['user'],
-      product: Product.fromMap(data['product']),
-      quantity: data['quantity'] ?? 0,
-      price: data['price'] ?? 0.0,
-      isReviewed: data['isReviewed'] ?? false,
-      date: (data['date'] as Timestamp).toDate(), status: '',
-    );
-  }
+factory OrderItem.fromMap(Map<String, dynamic> data) {
+  return OrderItem(
+    user: User.fromJson(data['user']), // Assumes user is a map
+    product: Product.fromMap(data['product']),
+    quantity: data['quantity'] ?? 0,
+    price: data['price'] ?? 0.0,
+    isReviewed: data['isReviewed'] ?? false,
+    date: (data['date'] as Timestamp).toDate(),
+    status: data['status'] ?? '',
+  );
+}
 
   // Method to convert an OrderItem object into a map
   Map<String, dynamic> toMap() {

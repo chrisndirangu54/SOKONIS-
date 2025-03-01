@@ -95,7 +95,7 @@ class SocialMediaMarketer {
 
   SocialMediaMarketer(
       {required this.productProvider, PlatformSwitchManager? switchManager})
-      : switchManager = switchManager ?? const PlatformSwitchManager() {
+      : switchManager = switchManager ?? PlatformSwitchManager() {
     _initializeMarketer();
   }
 

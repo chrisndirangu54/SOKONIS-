@@ -470,24 +470,20 @@ class CartProvider with ChangeNotifier {
     }
   }
 
-// Helper method to convert CartItems to OrderItems
-  List<model.OrderItem> _convertToOrderItems(
-      List<CartItem> cartItems, BuildContext context) {
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final user = userProvider.currentUser;
+List<model.OrderItem> _convertToOrderItems(List<CartItem> cartItems, BuildContext context) {
+  final userProvider = Provider.of<UserProvider>(context, listen: false);
+  final user = userProvider.currentUser;
 
-    return cartItems
-        .map((cartItem) => model.OrderItem(
-              product: cartItem.product,
-              quantity: cartItem.quantity,
-              price: cartItem.price,
-              notes: cartItem.notes,
-              date: DateTime.now(),
-              user: user!,
-              status: cartItem.status,
-            ))
-        .toList();
-  }
+  return cartItems.map((cartItem) => model.OrderItem(
+    product: cartItem.product,
+    quantity: cartItem.quantity,
+    price: cartItem.price,
+    notes: cartItem.notes,
+    date: DateTime.now(),
+    user: user!,
+    status: cartItem.status,
+  )).toList();
+}
 
   Future<String?> _processVisaMasterCardPayment(List<CartItem> selectedItems,
       double totalWithDelivery, BuildContext context) async {
@@ -728,18 +724,17 @@ class CartProvider with ChangeNotifier {
     );
   }
 
-  Future<List<Subscription>> _fetchActiveSubscriptions() async {
-    // This method should fetch subscriptions from Firestore (similar to SubscriptionService)
-    // Replace 'your_user_id' with the actual user ID
-    const userId = 'your_user_id';
-    final snapshot = await _firestore
-        .collection('subscriptions')
-        .where('userId', isEqualTo: userId)
-        .where('isActive', isEqualTo: true)
-        .get();
-    return snapshot.docs.map((doc) => Subscription.fromSnapshot(doc)).toList();
-  }
-
+Future<List<Subscription>> _fetchActiveSubscriptions() async {
+  const userId = 'your_user_id'; // Replace with dynamic user ID
+  final snapshot = await _firestore
+      .collection('subscriptions')
+      .where('userId', isEqualTo: userId)
+      .where('isActive', isEqualTo: true)
+      .get();
+  final subscriptionFutures =
+      snapshot.docs.map((doc) => Subscription.fromSnapshot(doc)).toList();
+  return await Future.wait(subscriptionFutures);
+}
 // In your OrderProvider or wherever you have this method:
   void selectPaymentMethodWithoutCOD(
       List<CartItem> selectedItems, dynamic context) {
@@ -784,37 +779,33 @@ class CartProvider with ChangeNotifier {
     );
   }
 
-  Future<void> calculateDeliveryFee(LatLng origin, LatLng destination) async {
-    try {
-      final activeSubscriptions = await _fetchActiveSubscriptions();
+Future<void> calculateDeliveryFee(LatLng origin, LatLng destination) async {
+  try {
+    final activeSubscriptions = await _fetchActiveSubscriptions();
 
-      // Check if there's any active subscription with a price of 10,000 or more
-      final hasEligibleSubscription = activeSubscriptions.any(
-        (subscription) => subscription.price >= 10000,
-      );
+    // Check if there's any active subscription with a price of 10,000 or more
+    final hasEligibleSubscription = activeSubscriptions.any(
+      (subscription) => subscription.price >= 10000, // Now works correctly
+    );
 
-      if (hasEligibleSubscription) {
-        // If there's an active subscription with a price of 10,000 or more, make delivery free
-        deliveryFee = 0.0;
-        print('Delivery fee: Free (Active subscription with price >= 10000)');
-      } else {
-        // Use OpenRouteService with your ORS API key
-        final etaService = ETAService('YOUR_OPENROUTESERVICE_API_KEY');
-        final etaAndDistance =
-            await etaService.calculateETAAndDistance(origin, destination);
+    if (hasEligibleSubscription) {
+      deliveryFee = 0.0;
+      print('Delivery fee: Free (Active subscription with price >= 10000)');
+    } else {
+      final etaService = ETAService('YOUR_OPENROUTESERVICE_API_KEY');
+      final etaAndDistance =
+          await etaService.calculateETAAndDistance(origin, destination);
 
-        final distanceInKm = etaAndDistance['distance'] as double;
-        deliveryFee = distanceInKm * 40; // $40 per km
-        print('Delivery fee: \$${deliveryFee.toStringAsFixed(2)}');
-      }
-
-      // Notify listeners that the delivery fee has changed
-      notifyListeners();
-    } catch (e) {
-      print('Error calculating delivery fee: $e');
+      final distanceInKm = etaAndDistance['distance'] as double;
+      deliveryFee = distanceInKm * 40; // $40 per km
+      print('Delivery fee: \$${deliveryFee.toStringAsFixed(2)}');
     }
-  }
 
+    notifyListeners();
+  } catch (e) {
+    print('Error calculating delivery fee: $e');
+  }
+}
   Future<List<Map<String, dynamic>>> fetchQualifiedCoupons(
       List<CartItem> cartItems,
       double cartTotal,
@@ -1028,6 +1019,3 @@ class CouponList extends StatelessWidget {
   }
 }
 
-class _convertToOrderItems {
-  _convertToOrderItems(List<CartItem> list);
-}

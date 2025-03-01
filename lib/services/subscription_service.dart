@@ -58,17 +58,17 @@ class SubscriptionService {
   }
 
   // Fetch subscriptions by user
-  Stream<List<Subscription>> getUserSubscriptions(User user) {
-    return _firestore
-        .collection('subscriptions')
-        .where('user', isEqualTo: user)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => Subscription.fromSnapshot(doc))
-          .toList();
-    });
-  }
+Stream<List<Subscription>> getUserSubscriptions(User user) {
+  return _firestore
+      .collection('subscriptions')
+      .where('user', isEqualTo: user.id) // Use user.id instead of User object
+      .snapshots()
+      .asyncMap((snapshot) async {
+    final subscriptionFutures =
+        snapshot.docs.map((doc) => Subscription.fromSnapshot(doc)).toList();
+    return await Future.wait(subscriptionFutures);
+  });
+}
 
   // Update next delivery date
   Future<void> updateNextDelivery(
@@ -104,7 +104,7 @@ class SubscriptionService {
         .get();
 
     for (var doc in subscriptionsSnapshot.docs) {
-      Subscription subscription = Subscription.fromSnapshot(doc);
+      Subscription subscription = await Subscription.fromSnapshot(doc);
 
       // Check if the subscription has expired (30 days after activation)
       if (subscription.activationDate
@@ -143,7 +143,7 @@ class SubscriptionService {
     // Optionally, notify the user about the reactivation
     var subscriptionDoc =
         await _firestore.collection('subscriptions').doc(subscriptionId).get();
-    var subscription = Subscription.fromSnapshot(subscriptionDoc);
+      Subscription subscription = await Subscription.fromSnapshot(subscriptionDoc);
     await _sendNotification(subscription.user.id,
         "Your subscription has been reactivated. Thank you for your payment.");
   }

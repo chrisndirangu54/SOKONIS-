@@ -20,7 +20,7 @@ import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import '../providers/order_provider.dart';
 import 'package:flutter/services.dart';
-import 'package:share/share.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:grocerry/screens/health_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:grocerry/models/order.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/subscription_model.dart';
+import 'package:grocerry/models/user.dart';
+import 'package:grocerry/providers/user_provider.dart';
 import 'package:grocerry/services/notification_service.dart';
 import 'dart:math'; // For generating random coupon codes
 
@@ -103,22 +105,16 @@ class OrderProvider with ChangeNotifier {
 
   Future<void> _fetchOrdersFromFirebase() async {
     try {
-      final querySnapshot =
-          await firestore.FirebaseFirestore.instance.collection('orders').get();
+      final querySnapshot = await _firestore.collection('orders').get();
       _allOrders.clear();
+      // Access UserProvider via context will happen in widget tree; for now, assume it's injected
+      // This method should ideally be called with context in a widget, but we'll simulate for now
+      final userProvider =
+          UserProvider(); // Temporary instance; replace with Provider.of in real use
+      final user = userProvider
+          .user; // Assuming user is a Future<User> from _initializeUser
       for (final doc in querySnapshot.docs) {
-        final data = doc.data();
-        final order = Order(
-          totalAmount: (data['totalAmount'] as num?)?.toDouble() ?? 0.0,
-          riderLocation: data['riderLocation'] ?? 'Unknown location',
-          status: data['status'] ?? 'Unknown status',
-          date: (data['date'] as firestore.Timestamp?)?.toDate() ??
-              DateTime.now(),
-          orderId: doc.id,
-          items: data['items'] ?? [],
-          user: data['User'] ?? 'Unknown user',
-          address: data['Address'] ?? 'Unknown Address', paymentMethod: '',
-        );
+        final order = Order.fromFirestore(doc, user);
         _allOrders.add(order);
       }
       _updatePendingOrders();
@@ -222,8 +218,7 @@ class OrderProvider with ChangeNotifier {
         6, (index) => possible[Random().nextInt(possible.length)]).join();
   }
 
-  Future<void> updateNextDelivery(
-      Product product, DateTime nextDate) async {
+  Future<void> updateNextDelivery(Product product, DateTime nextDate) async {
     await _firestore.collection('subscriptions').doc(product.id).update({
       'nextDelivery': nextDate,
     });
@@ -235,17 +230,18 @@ class OrderProvider with ChangeNotifier {
     // Fetch all active subscriptions
     final subscriptions = await _fetchActiveSubscriptions();
     for (var subscription in subscriptions) {
-      if (_isReplenishmentDue(subscription)) {
+      if (_isReplenishmentDue(await subscription)) {
         // Create an order for the subscription item
-        await _placeReplenishmentOrder(subscription, product, user);
+        await _placeReplenishmentOrder(await subscription, product, user);
       }
     }
   }
 
-  Future<List<Subscription>> _fetchActiveSubscriptions() async {
+  Future<List<Future<Subscription>>> _fetchActiveSubscriptions() async {
     // This method should fetch subscriptions from Firestore (similar to SubscriptionService)
     // Replace 'your_user_id' with the actual user ID
-    const user = 'your_user_id';
+    User? user;
+
     final snapshot = await _firestore
         .collection('subscriptions')
         .where('user', isEqualTo: user)
@@ -277,7 +273,8 @@ class OrderProvider with ChangeNotifier {
           quantity: subscription.quantity,
           user: subscription.user,
           isReviewed: false,
-          date: DateTime.now(), status: subscription.status,
+          date: DateTime.now(),
+          status: subscription.status,
         )
       ];
 
@@ -292,7 +289,8 @@ class OrderProvider with ChangeNotifier {
         ),
         items: orderItems,
         date: DateTime.now(),
-        address: user.address, paymentMethod: '',
+        address: user.address,
+        paymentMethod: '',
       );
 
       // Save the order to Firestore

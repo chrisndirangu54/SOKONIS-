@@ -797,10 +797,21 @@ class DashboardScreenState extends State<DashboardScreen> {
 }
 
 class PlatformSwitchManager extends StatefulWidget {
-  const PlatformSwitchManager({super.key});
+  PlatformSwitchManager({super.key});
 
   @override
   PlatformSwitchManagerState createState() => PlatformSwitchManagerState();
+  final Map<String, bool> _platformSwitches = {
+    'tiktok': true,
+    'facebook': true,
+    'instagram': true,
+    'twitter': true,
+    'googleAds': true,
+  };
+
+  bool getSwitch(String platform) {
+    return _platformSwitches[platform.toLowerCase()] ?? false;
+  }
 }
 
 class PlatformSwitchManagerState extends State<PlatformSwitchManager> {
@@ -843,10 +854,6 @@ class PlatformSwitchManagerState extends State<PlatformSwitchManager> {
     } else {
       print('Invalid platform: $platform');
     }
-  }
-
-  bool getSwitch(String platform) {
-    return _platformSwitches[platform.toLowerCase()] ?? false;
   }
 
   Map<String, bool> getAllSwitches() {

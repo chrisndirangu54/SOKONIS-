@@ -27,8 +27,7 @@ class UserProvider with ChangeNotifier {
 
   // Streams
   final _userStreamController = StreamController<User>.broadcast();
-  final _cartStreamController =
-      StreamController<Map<String, CartItem>>.broadcast();
+
 
   var isUploadingProfilePicture;
   var profilePictureUploadError;
@@ -140,7 +139,6 @@ class UserProvider with ChangeNotifier {
   User get user => _user;
 
   Stream<User> get userStream => _userStreamController.stream;
-  Stream<Map<String, CartItem>> get cartStream => _cartStreamController.stream;
 
   get currentUser => _user;
 
@@ -476,16 +474,6 @@ class UserProvider with ChangeNotifier {
             .toList());
   }
 
-  // Set CartProvider
-  void setCartProvider(CartProvider cartProvider) {
-    _cartProvider = cartProvider;
-    _cartProvider.cartStream.listen((cartItem) {
-      // Handle cart item changes
-      print('Cart items updated: $cartItem');
-      _cartStreamController.add(cartItem); // Add cart items to the stream
-      // You can update user-related logic here based on cart changes
-    });
-  }
 
   bool isLoggedIn() {
     return _user.token?.isNotEmpty == true &&
@@ -496,7 +484,6 @@ class UserProvider with ChangeNotifier {
   @override
   void dispose() {
     _userStreamController.close();
-    _cartStreamController.close();
     super.dispose();
   }
 
