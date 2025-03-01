@@ -191,10 +191,11 @@ class GroupBuyService {
         .collection('GroupBuy')
         .where('endTime', isGreaterThan: Timestamp.now())
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => GroupBuy.fromFirestore(doc))
-            .where((groupBuy) => groupBuy.isActive)
-            .toList());
+        .asyncMap((snapshot) async {
+          final groupBuyFutures = snapshot.docs.map((doc) => GroupBuy.fromSnapshot(doc)).toList();
+          final groupBuys = await Future.wait(groupBuyFutures);
+          return groupBuys.where((groupBuy) => groupBuy.isActive).toList();
+        });
   }
 
   // Update the discounted price in the stream
