@@ -11,7 +11,7 @@ import 'package:grocerry/screens/notification_screen.dart';
 import 'package:grocerry/screens/offers_page.dart';
 import 'package:lottie/lottie.dart';
 import 'package:marquee/marquee.dart';
-
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:flutter/material.dart';
 import 'package:grocerry/models/offer.dart';
@@ -2273,9 +2273,9 @@ class HomeScreenState extends State<HomeScreen> {
                                 MediaQuery.of(context).size.height;
                             // Define adaptive sizes (e.g., 25% of screen width, capped at 100)
                             final containerSize =
-                                (screenWidth * 0.25).clamp(50.0, 100.0);
+                                (screenWidth * 0.25).clamp(40.0, 100.0);
                             final lottieSize =
-                                (containerSize * 0.8).clamp(40.0, 80.0);
+                                (containerSize * 0.8).clamp(30.0, 80.0);
 
                             return GlassmorphicContainer(
                               width: containerSize, // Adaptive width
@@ -2324,16 +2324,15 @@ class HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(width: 8), // Spacing between logo and title
-                    Flexible(
-                      child: Text(
-                        'SOKONI\'S!',
-                        style: TextStyle(
-                          fontSize: (MediaQuery.of(context).size.width * 0.05)
-                              .clamp(14.0, 24.0),
-                        ),
-                        overflow: TextOverflow
-                            .ellipsis, // Prevent overflow on small screens
-                      ),
+                    const Flexible(
+                      child: AutoSizeText(
+                            'SOKONI\'S!',
+                            style: TextStyle(fontSize: 36), // Max size
+                            minFontSize: 14,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+
                     ),
                   ],
                 ),
@@ -2354,7 +2353,7 @@ class HomeScreenState extends State<HomeScreen> {
                             setState(() {
                               // Code to modify the background color, if necessary.
                             });
-                            if (_userProvider.isLoggedIn == true) {
+                            if (_userProvider.isLoggedIn() == true) {  // Add parentheses to execute the function
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                     builder: (context) =>
@@ -2541,7 +2540,7 @@ class HomeScreenState extends State<HomeScreen> {
                             setState(() {
                               // Code to modify the background color if required.
                             });
-                            if (_userProvider.isLoggedIn == true) {
+                            if (_userProvider.isLoggedIn() == true) {  // Add parentheses to execute the function
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                     builder: (_) => const CartScreen()),

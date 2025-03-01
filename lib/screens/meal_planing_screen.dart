@@ -35,7 +35,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   List<Meal> _weeklyMeals = [];
   List<String> recipeSuggestions = []; // List to store the recipe suggestions
   Product? product;
-  var quantity;
+  late int quantity;
   final HealthConditionService healthConditionService =
       HealthConditionService();
 
@@ -1069,7 +1069,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
                                                                 Colors.white),
                                                         onPressed: () {
                                                           setState(() {
-                                                            if (quantity > 1) {
+                                                            if (quantity! > 1) {
                                                               quantity--;
                                                             }
                                                           });

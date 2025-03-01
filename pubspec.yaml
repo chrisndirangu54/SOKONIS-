@@ -75,6 +75,8 @@ dependencies:
   # Remove flutter_ffmpeg (no web support)
   flutter_ffmpeg: ^0.4.2
   url_strategy: ^0.3.0
+  auto_size_text: ^3.0.0
+
 
 dependency_overrides:
   archive: ^4.0.4
@@ -86,12 +88,18 @@ dev_dependencies:
   mockito: ^5.4.2  # Already specified latest
   build_runner: ^2.4.0
   build_web_compilers: ^4.0.0
+  webdev: ^3.7.1
+
+
+
+
 flutter:
   uses-material-design: true
 
   assets:
     - assets/images/
     - assets/icons/
+    - assets/3d/
 
   fonts:
     - family: Comfortaa

@@ -266,8 +266,9 @@ class LoginScreenState extends State<LoginScreen>
                         decoration: const InputDecoration(labelText: 'Email'),
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) {
-                          if (value == null || value.isEmpty)
+                          if (value == null || value.isEmpty) {
                             return 'Please enter your email';
+                          }
                           if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
                             return 'Please enter a valid email address';
                           }
@@ -295,8 +296,9 @@ class LoginScreenState extends State<LoginScreen>
                         ),
                         obscureText: !_showPassword,
                         validator: (value) {
-                          if (value == null || value.isEmpty)
+                          if (value == null || value.isEmpty) {
                             return 'Please enter your password';
+                          }
                           return null;
                         },
                         style: TextStyle(

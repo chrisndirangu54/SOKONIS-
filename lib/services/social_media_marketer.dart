@@ -280,6 +280,7 @@ class SocialMediaMarketer {
   Future<String> _createVideoFromImage(
     String imageUrl, {
     String textOverlay = '',
+    String watermarkText = 'SOKONIS © 2025', // Default watermark text
     String musicPrompt = 'upbeat background music',
     double duration = 5.0,
     String resolution = '1280x720',
@@ -321,6 +322,11 @@ class SocialMediaMarketer {
           'x=(w-text_w)/2:y=(h-text_h-50):enable=\'between(t,0,$duration)\'',
         );
       }
+      // Add watermark in bottom-right corner
+      filters.add(
+        'drawtext=text=\'$watermarkText\':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.3:'
+        'x=w-tw-10:y=h-th-10:enable=\'between(t,0,$duration)\'',
+      );
 
       ffmpegCommand.addAll([
         '-vf',
@@ -352,35 +358,50 @@ class SocialMediaMarketer {
     }
   }
 
-  Future<File?> _generateAIMusic(
-      String prompt, double duration, Directory tempDir) async {
-    try {
-      const apiUrl = 'https://example-ai-music-generator.com/api/generate';
-      const apiKey = 'your_free_api_key';
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey'
-        },
-        body: jsonEncode(
-            {'prompt': prompt, 'duration': duration, 'format': 'mp3'}),
-      );
-      if (response.statusCode == 200) {
-        final audioBytes = response.bodyBytes;
-        final audioFileName =
-            'temp_audio_${DateTime.now().millisecondsSinceEpoch}.mp3';
-        final audioFile = File('${tempDir.path}/$audioFileName');
-        await audioFile.writeAsBytes(audioBytes);
-        print('AI music generated successfully at ${audioFile.path}');
-        return audioFile;
-      }
-      return null;
-    } catch (e) {
-      print('Error generating AI music: $e');
-      return null;
+Future<File?> _generateAIMusic(
+    String prompt, double duration, Directory tempDir) async {
+  try {
+    const apiUrl = 'https://example-ai-music-generator.com/api/generate';
+    const apiKey = 'your_free_api_key';
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $apiKey'
+      },
+      body: jsonEncode(
+          {'prompt': prompt, 'duration': duration, 'format': 'mp3'}),
+    );
+    if (response.statusCode == 200) {
+      final audioBytes = response.bodyBytes;
+      final audioFileName =
+          'temp_audio_${DateTime.now().millisecondsSinceEpoch}.mp3';
+      final audioFile = File('${tempDir.path}/$audioFileName');
+      await audioFile.writeAsBytes(audioBytes);
+      print('AI music generated successfully at ${audioFile.path}');
+      return audioFile;
+    } else {
+      print('AI music generation failed with status: ${response.statusCode}');
     }
+  } catch (e) {
+    print('Error generating AI music: $e');
   }
+
+  // Fallback to default audio if API fails
+  try {
+    print('Falling back to default audio...');
+    final defaultAudioBytes = await rootBundle.load('assets/default_music.mp3');
+    final defaultAudioFileName =
+        'default_audio_${DateTime.now().millisecondsSinceEpoch}.mp3';
+    final defaultAudioFile = File('${tempDir.path}/$defaultAudioFileName');
+    await defaultAudioFile.writeAsBytes(defaultAudioBytes.buffer.asUint8List());
+    print('Default audio loaded successfully at ${defaultAudioFile.path}');
+    return defaultAudioFile;
+  } catch (e) {
+    print('Error loading default audio: $e');
+    return null; // Return null if both API and default fail
+  }
+}
 
   Future<img.BitmapFont> loadFont() async {
     // Load the .fnt file as a string
@@ -401,41 +422,73 @@ class SocialMediaMarketer {
     return font;
   }
 
-  Future<String> _embedTextOnContent(String contentUrl, String text) async {
+  Future<String> _embedTextOnContent(String contentUrl, String text,
+      {String watermarkText = 'SOKONIS © 2025'}) async {
     try {
+      // Load font (assuming this method exists and returns a BitmapFont)
       img.BitmapFont font = await loadFont();
 
+      // Download the image from the URL
       final response = await http.get(Uri.parse(contentUrl));
       if (response.statusCode != 200) {
         throw Exception('Failed to download image from $contentUrl');
       }
       final imageBytes = response.bodyBytes;
 
+      // Decode the image
       img.Image? image = img.decodeImage(imageBytes);
       if (image == null) throw Exception('Failed to decode image');
 
+      // Define text styling for main overlay
       const fontSize = 24;
-      const String textColor = '#FFFFFF';
-      final int colorValue = int.parse(textColor.replaceFirst('#', '0xff'));
+      const String textColor = '#FFFFFF'; // White for main text
+      final int textColorValue = int.parse(textColor.replaceFirst('#', '0xff'));
       final imgColor = img.Color.fromRgba(
-        (colorValue >> 16) & 0xFF,
-        (colorValue >> 8) & 0xFF,
-        colorValue & 0xFF,
-        (colorValue >> 24) & 0xFF,
+        (textColorValue >> 16) & 0xFF,
+        (textColorValue >> 8) & 0xFF,
+        textColorValue & 0xFF,
+        (textColorValue >> 24) & 0xFF,
       );
 
-      final textWidth = text.length * 10;
-      final x = (image.width - textWidth) ~/ 2;
-      final y = image.height - fontSize - 10;
+      // Calculate position for main text (centered near bottom)
+      final textWidth = text.length * 10; // Rough estimate
+      final xMain = (image.width - textWidth) ~/ 2;
+      final yMain = image.height - fontSize - 10;
 
-      img.drawString(image, font, x, y, textColor);
+      // Draw main text
+      img.drawString(image, font, xMain, yMain, text, color: imgColor);
 
+      // Define watermark styling
+      const watermarkFontSize = 18; // Smaller for watermark
+      const String watermarkColor = '#FFFFFF'; // White for watermark
+      final int watermarkColorValue =
+          int.parse(watermarkColor.replaceFirst('#', '0xff'));
+      final watermarkImgColor = img.Color.fromRgba(
+        (watermarkColorValue >> 16) & 0xFF,
+        (watermarkColorValue >> 8) & 0xFF,
+        watermarkColorValue & 0xFF,
+        (watermarkColorValue >> 24) & 0xFF,
+      );
+
+      // Calculate position for watermark (bottom-right corner)
+      final watermarkWidth =
+          watermarkText.length * 8; // Rough estimate for smaller font
+      final xWatermark = image.width - watermarkWidth - 10; // 10px from right
+      final yWatermark =
+          image.height - watermarkFontSize - 10; // 10px from bottom
+
+      // Draw watermark
+      img.drawString(image, font, xWatermark, yWatermark, watermarkText,
+          color: watermarkImgColor);
+
+      // Encode and save the edited image
       final editedImageBytes = img.encodePng(image);
       final tempDir = Directory.systemTemp;
       final fileName = 'edited_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(editedImageBytes);
 
+      // Upload to storage (assuming this method exists)
       final storageUrl = await _uploadToStorage(file, 'images/$fileName');
       return storageUrl;
     } catch (e) {
@@ -696,7 +749,7 @@ class SocialMediaMarketer {
             'Content-Type': 'application/json'
           },
           body: jsonEncode({
-            'name': 'Sponsored Post for ${productId}',
+            'name': 'Sponsored Post for $productId',
             'status': 'ACTIVE',
             'campaign_id': '<YOUR_CAMPAIGN_ID>',
             'optimization_goal': 'POST_ENGAGEMENT',
