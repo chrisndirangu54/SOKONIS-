@@ -1187,8 +1187,11 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   }
 }
 
-extension on Stream<Map<String, double?>?>? {
-  toStringAsFixed(int i) {}
+extension StreamMapExtension on Stream<Map<String, double?>?> {
+  String toStringAsFixed(int digits) {
+    return map((map) => map?['variety']?.toStringAsFixed(digits) ?? 'N/A')
+        .toString();
+  }
 }
 
 // models/meal.dart
@@ -1239,6 +1242,8 @@ class GroceryItem {
 
 extension DateTimeExtension on DateTime {
   int get dayOfYear {
-    return int.parse(DateFormat("D").format(this));
+    final yearStart = DateTime(year, 1, 1);
+    final diff = difference(yearStart);
+    return diff.inDays + 1; // Add 1 because Jan 1 is day 1, not day 0
   }
 }

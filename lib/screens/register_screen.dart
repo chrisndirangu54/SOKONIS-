@@ -5,8 +5,8 @@ import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:grocerry/screens/home_screen.dart';
 import 'package:provider/provider.dart';
-import 'package:uni_links/uni_links.dart'; // Import the uni_links package
 // For gestures
+import 'package:app_links/app_links.dart'; // Replace uni_links with app_links
 
 import '../providers/auth_provider.dart';
 
@@ -29,6 +29,7 @@ class RegisterScreenState extends State<RegisterScreen>
   String? _passwordStrength = '';
   String? _referralCode; // Store the referral code
   late String _countryCode = '+254'; // Default country code
+  final AppLinks _appLinks = AppLinks();
 
   late AnimationController _controller;
   late StreamSubscription _linkSubscription;
@@ -59,7 +60,7 @@ class RegisterScreenState extends State<RegisterScreen>
     );
 
     // Listen for incoming links
-    _linkSubscription = linkStream.listen((String? link) {
+      _linkSubscription = _appLinks.stringLinkStream.listen((String? link) {
       if (link != null) {
         _parseReferralCode(link);
       }

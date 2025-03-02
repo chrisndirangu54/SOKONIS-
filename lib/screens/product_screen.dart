@@ -67,15 +67,15 @@ class ProductScreenState extends State<ProductScreen>
   int currentImageIndex = 0;
   Offer? offer;
 
-  var notes;
+  String? notes;
 
   late bool _isFlipped;
 
   Product? selectedProduct;
 
-  var allProducts;
+  List<Product>? allProducts;
 
-  get quantity => null;
+  int? quantity = 0;
 
   @override
   void initState() {
@@ -1149,7 +1149,7 @@ class ProductScreenState extends State<ProductScreen>
                     ),
                     onPressed: () {
                       // Filter products with the selected tag
-                      final filteredProducts = allProducts.where((p) {
+                      final filteredProducts = allProducts!.where((p) {
                         return p.tags.contains(tag);
                       }).toList();
 
@@ -1817,17 +1817,22 @@ class ProductScreenState extends State<ProductScreen>
   }
 }
 
-extension on Stream<Map<String, double?>?> {
-  toStringAsFixed(int i) {}
+extension StreamMapExtension on Stream<Map<String, double?>?> {
+  String toStringAsFixed(int digits) {
+    return map((map) => map?['variety']?.toStringAsFixed(digits) ?? 'N/A')
+        .toString();
+  }
 }
 
-extension on Stream<double?>? {
-  toStringAsFixed(int i) {}
+extension StreamDoubleExtension on Stream<double?>? {
+  Future<String> toStringAsFixed(int digits) async {
+    if (this == null) return 'N/A';
+    final values = await this!.map((value) => value?.toStringAsFixed(digits) ?? 'N/A').toList();
+    return values.join(', ');
+  }
 }
 
-extension on Product {
-  get quantity => null;
-}
+
 
 class IconDetail {
   IconDetail({this.image, required this.head, this.icon});

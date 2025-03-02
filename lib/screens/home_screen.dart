@@ -2925,9 +2925,6 @@ class HomeScreenState extends State<HomeScreen> {
   }
 }
 
-extension on Stream<Map<String, double?>?>? {
-  toStringAsFixed(int i) {}
-}
 
 class IconDetail {
   IconDetail({this.image, required this.head, this.icon});

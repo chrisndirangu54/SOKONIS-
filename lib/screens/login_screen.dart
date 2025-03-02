@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'package:app_links/app_links.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:uni_links/uni_links.dart';
 
 import '../providers/auth_provider.dart';
 import '../screens/home_screen.dart';
@@ -26,6 +26,7 @@ class LoginScreenState extends State<LoginScreen>
   bool _isLoading = false;
   bool _modelLoaded = false;
   String? _referralCode;
+  final AppLinks _appLinks = AppLinks();
 
   late AnimationController _logoController;
   late AnimationController _buttonController;
@@ -62,12 +63,12 @@ class LoginScreenState extends State<LoginScreen>
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    getInitialUri().then((Uri? uri) {
+    _appLinks.getInitialLink().then((Uri? uri) {
       if (uri != null && mounted) _parseReferralCode(uri.toString());
     });
 
-    _linkSubscription = linkStream.listen(
-      (String? link) {
+      _linkSubscription = _appLinks.stringLinkStream.listen((String? link) {
+
         if (link != null && mounted) _parseReferralCode(link);
       },
       onError: (err) {

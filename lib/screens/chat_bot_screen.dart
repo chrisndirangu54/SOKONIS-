@@ -1185,9 +1185,6 @@ bool _isProductMatch(String firestoreProductName, String userInput) {
   }
 }
 
-extension on Stream<Map<String, double?>?>? {
-  toStringAsFixed(int i) {}
-}
 
 
 class IconDetail {

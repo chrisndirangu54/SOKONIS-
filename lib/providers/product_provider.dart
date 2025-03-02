@@ -390,22 +390,20 @@ class StockManager {
   void notifyRoles(Product product) {
     if (_userProvider.user.isAdmin) {
       // Notify Admin
-      _notificationService._showNotification(
+      _notificationService.sendNotification(
         title: 'Product Out of Stock',
-        body: 'Product ${product.name} is out of stock.',
+        body: 'Product ${product.name} is out of stock.', to: _userProvider.user.id, data: {},
       );
     }
 
     if (_userProvider.user.isAttendant) {
       // Notify Attendant
-      _notificationService._showNotification(
+      _notificationService.sendNotification(
         title: 'Product Out of Stock',
-        body: 'Product ${product.name} is out of stock.',
+        body: 'Product ${product.name} is out of stock.', data: {}, to: _userProvider.user.id,
       );
     }
   }
 }
 
-extension on NotificationService {
-  void _showNotification({required String title, required String body}) {}
-}
+

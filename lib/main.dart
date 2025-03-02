@@ -10,12 +10,9 @@ import 'package:grocerry/screens/group_buy_page.dart';
 import 'package:grocerry/screens/order_details_screen.dart';
 import 'package:grocerry/screens/product_screen.dart';
 import 'package:grocerry/screens/profile_screen.dart';
-import 'package:grocerry/utils.dart';
 import 'package:provider/provider.dart';
-import 'package:uni_links/uni_links.dart'
-    if (dart.library.html) 'uni_links_web.dart';
-import 'package:url_strategy/url_strategy.dart';
-import 'package:flutter/foundation.dart';
+import 'package:app_links/app_links.dart'; // Replace uni_links with app_links
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'firebase_options.dart';
 import './screens/home_screen.dart';
 import './screens/login_screen.dart';
@@ -41,8 +38,7 @@ void main() async {
     print("Error initializing Firebase: $e");
   }
 
-  setPathUrlStrategy();
-
+  // Removed url_strategy as it's no longer needed in modern Flutter for web
   runApp(const MyApp());
 }
 
@@ -56,6 +52,7 @@ class MyApp extends StatefulWidget {
 class MyAppState extends State<MyApp> {
   late User user;
   bool _isLightMode = true;
+  final AppLinks _appLinks = AppLinks(); // Initialize AppLinks
 
   @override
   void initState() {
@@ -73,18 +70,20 @@ class MyAppState extends State<MyApp> {
   }
 
   Future<void> _initDeepLinking() async {
-    if (!kIsWeb &&
-        (Theme.of(context).platform == TargetPlatform.iOS ||
-            Theme.of(context).platform == TargetPlatform.android)) {
-      await _initUniLinks();
+    if (!kIsWeb) {
+      // Only initialize deep linking for mobile platforms
+      await _initAppLinks();
     }
   }
 
-  Future<void> _initUniLinks() async {
+  Future<void> _initAppLinks() async {
     try {
-      final initialLink = await getInitialLink();
+      // Handle initial link
+      final String? initialLink = (await _appLinks.getInitialLink()) as String?;
       _handleDeepLink(initialLink);
-      linkStream.listen((String? link) {
+
+      // Listen for subsequent links
+      _appLinks.stringLinkStream.listen((String? link) {
         _handleDeepLink(link);
       });
     } catch (e) {

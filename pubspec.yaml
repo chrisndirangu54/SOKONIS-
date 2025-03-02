@@ -46,7 +46,6 @@ dependencies:
   csv: ^6.0.0
   file_picker: ^9.0.2
   share_plus: ^10.1.4  # Replace share
-  uni_links: ^0.5.1    # Replace uni_links
   collection: ^1.19.1
   fluttertoast: ^8.2.8
   google_mlkit_text_recognition: ^0.14.0  # Replace firebase_ml_vision
@@ -74,8 +73,8 @@ dependencies:
   functions_framework: ^0.4.3+1
   # Remove flutter_ffmpeg (no web support)
   flutter_ffmpeg: ^0.4.2
-  url_strategy: ^0.3.0
   auto_size_text: ^3.0.0
+  app_links: ^6.4.0
 
 
 dependency_overrides:

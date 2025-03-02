@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/order_provider.dart';
 import '../providers/sales_data_provider.dart';
@@ -190,7 +191,7 @@ class AllOrdersScreenState extends State<AllOrdersScreen> {
                                             value.toInt()]
                                         .date; // Assuming a date field exists
                                     return Text(
-                                      dateLabel,
+                                      dateLabel as String,
                                       style: TextStyle(
                                         color: Colors.grey.shade600,
                                         fontWeight: FontWeight.w500,
@@ -394,12 +395,23 @@ class AllOrdersScreenState extends State<AllOrdersScreen> {
   }
 }
 
-// Summation Model for Orders
 class OrderSummation {
   final String period;
   final int amount;
 
   OrderSummation(this.period, this.amount);
 
-  get date => null;
+  DateTime? get date {
+    try {
+      // Attempt to parse period as a year-month (e.g., "2025-03")
+      return DateTime.parse('$period-01'); // Assumes period is "YYYY-MM"
+    } catch (e) {
+      try {
+        // Fallback: parse period as a month-year (e.g., "March 2025")
+        return DateFormat('MMMM yyyy').parse(period);
+      } catch (e) {
+        return null; // Return null if parsing fails
+      }
+    }
+  }
 }
