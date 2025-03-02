@@ -3,6 +3,7 @@ import 'package:app_links/app_links.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:grocerry/screens/login_screen.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -296,6 +297,21 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
       floatingActionButton: Stack(
         alignment: Alignment.bottomRight,
         children: [
+          // Main FAB (toggle button)
+          FloatingActionButton(
+            onPressed: () {
+              setState(() {
+                if (_showAdditionalButtons) {
+                  _fabController.reverse();
+                } else {
+                  _fabController.forward();
+                }
+                _showAdditionalButtons = !_showAdditionalButtons;
+              });
+            },
+            child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
+          ),
+          // "Login" button
           AnimatedBuilder(
             animation: _fabController,
             builder: (context, child) {
@@ -307,7 +323,7 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
                   child: FloatingActionButton.extended(
                     onPressed: _showAdditionalButtons
                         ? () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
+                              MaterialPageRoute(builder: (_) => const LoginScreen()),
                             )
                         : null,
                     label: const Text('Login'),
@@ -317,6 +333,7 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
               );
             },
           ),
+          // "Forgot Password?" button
           AnimatedBuilder(
             animation: _fabController,
             builder: (context, child) {
@@ -338,6 +355,7 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
               );
             },
           ),
+          // "Login with Google" button
           AnimatedBuilder(
             animation: _fabController,
             builder: (context, child) {
@@ -355,23 +373,11 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
               );
             },
           ),
-          FloatingActionButton(
-            onPressed: () {
-              setState(() {
-                if (_showAdditionalButtons) {
-                  _fabController.reverse();
-                } else {
-                  _fabController.forward();
-                }
-                _showAdditionalButtons = !_showAdditionalButtons;
-              });
-            },
-            child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
-          ),
         ],
       ),
     );
   }
+
 
   Color _getPasswordStrengthColor(String strength) {
     switch (strength) {

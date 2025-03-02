@@ -229,6 +229,21 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
       floatingActionButton: Stack(
         alignment: Alignment.bottomRight,
         children: [
+          // Main FAB (toggle button)
+          FloatingActionButton(
+            onPressed: () {
+              setState(() {
+                if (_showAdditionalButtons) {
+                  _fabController.reverse();
+                } else {
+                  _fabController.forward();
+                }
+                _showAdditionalButtons = !_showAdditionalButtons;
+              });
+            },
+            child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
+          ),
+          // "Register" button
           AnimatedBuilder(
             animation: _fabController,
             builder: (context, child) {
@@ -250,6 +265,7 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
               );
             },
           ),
+          // "Forgot Password?" button
           AnimatedBuilder(
             animation: _fabController,
             builder: (context, child) {
@@ -271,6 +287,7 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
               );
             },
           ),
+          // "Login with Google" button
           AnimatedBuilder(
             animation: _fabController,
             builder: (context, child) {
@@ -287,19 +304,6 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
                 ),
               );
             },
-          ),
-          FloatingActionButton(
-            onPressed: () {
-              setState(() {
-                if (_showAdditionalButtons) {
-                  _fabController.reverse();
-                } else {
-                  _fabController.forward();
-                }
-                _showAdditionalButtons = !_showAdditionalButtons;
-              });
-            },
-            child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
           ),
         ],
       ),
