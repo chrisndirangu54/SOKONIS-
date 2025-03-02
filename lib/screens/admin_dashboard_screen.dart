@@ -339,10 +339,10 @@ class AudioAnalysisScreen extends StatefulWidget {
   const AudioAnalysisScreen({super.key});
 
   @override
-  _AudioAnalysisScreenState createState() => _AudioAnalysisScreenState();
+  AudioAnalysisScreenState createState() => AudioAnalysisScreenState();
 }
 
-class _AudioAnalysisScreenState extends State<AudioAnalysisScreen> {
+class AudioAnalysisScreenState extends State<AudioAnalysisScreen> {
   List<AudioAnalysis> analyses = [];
   bool _isLoading = true; // Add loading state
 
