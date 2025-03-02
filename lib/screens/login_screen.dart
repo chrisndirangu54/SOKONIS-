@@ -97,7 +97,6 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
     super.dispose();
   }
 
-  bool get isHomeScreen => ModalRoute.of(context)?.settings.name == '/home';
 
   @override
   Widget build(BuildContext context) {
@@ -140,18 +139,22 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         SizedBox(
-                          height: screenWidth * 0.7.clamp(200.0, 300.0),
-                          width: screenWidth * 0.7.clamp(200.0, 300.0),
+                          height: screenWidth * 0.7, // Removed clamp
+                          width: screenWidth * 0.7,  // Removed clamp
                           child: _modelLoaded
                               ? ModelViewer(
                                   src: 'assets/3d/apple.glb',
                                   alt: "A 3D model of an apple",
-                                  autoRotate: _isLoading,
-                                  cameraControls: !_isLoading,
-                                  disablePan: _isLoading,
-                                  disableZoom: _isLoading,
+                                  autoRotate: true, // Always rotate for visibility
+                                  cameraControls: true,
+                                  disablePan: false,
+                                  disableZoom: false,
                                   autoRotateDelay: 0,
-                                  cameraOrbit: _isLoading ? "0deg 90deg 2.5m" : "0deg 0deg 2.5m",
+                                  cameraOrbit: "0deg 75deg 105%", // Adjusted for better view
+                                  exposure: 1.0, // Default brightness
+                                  shadowIntensity: 1.0, // Add shadows
+                                  backgroundColor: Colors.grey[200]!, // Light background
+
                                 )
                               : const Center(
                                   child: Text(
@@ -235,7 +238,7 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
                 child: Opacity(
                   opacity: _fabController.value,
                   child: FloatingActionButton.extended(
-                    onPressed: _showAdditionalButtons && !isHomeScreen
+                    onPressed: _showAdditionalButtons
                         ? () => Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => const RegisterScreen()),
                             )
@@ -256,7 +259,7 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
                 child: Opacity(
                   opacity: _fabController.value,
                   child: FloatingActionButton.extended(
-                    onPressed: _showAdditionalButtons && !isHomeScreen
+                    onPressed: _showAdditionalButtons
                         ? () => Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
                             )

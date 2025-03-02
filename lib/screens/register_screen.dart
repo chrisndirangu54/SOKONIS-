@@ -129,6 +129,9 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
+
+            child: SizedBox(
+              width: screenWidth * 0.67, // 2/3 of screen width            
             child: Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -143,19 +146,24 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SizedBox(
-                        height: screenWidth * 0.7.clamp(200.0, 300.0),
-                        width: screenWidth * 0.7.clamp(200.0, 300.0),
+                          height: screenWidth * 0.7, // Removed clamp
+                          width: screenWidth * 0.7,  // Removed clamp
+
                         child: _modelLoaded
-                            ? ModelViewer(
-                                src: 'assets/3d/apple.glb',
-                                alt: "A 3D model of an apple",
-                                autoRotate: _isLoading,
-                                cameraControls: !_isLoading,
-                                disablePan: _isLoading,
-                                disableZoom: _isLoading,
-                                autoRotateDelay: 0,
-                                cameraOrbit: _isLoading ? "0deg 90deg 2.5m" : "0deg 0deg 2.5m",
-                              )
+                              ? ModelViewer(
+                                  src: 'assets/3d/apple.glb',
+                                  alt: "A 3D model of an apple",
+                                  autoRotate: true, // Always rotate for visibility
+                                  cameraControls: true,
+                                  disablePan: false,
+                                  disableZoom: false,
+                                  autoRotateDelay: 0,
+                                  cameraOrbit: "0deg 75deg 105%", // Adjusted for better view
+                                  exposure: 1.0, // Default brightness
+                                  shadowIntensity: 1.0, // Add shadows
+                                  backgroundColor: Colors.grey[200]!, // Light background
+
+                                )
                             : const Center(
                                 child: Text(
                                   'Failed to load 3D model',
@@ -284,7 +292,7 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
             ),
           ),
         ),
-      ),
+      ),),
       floatingActionButton: Stack(
         alignment: Alignment.bottomRight,
         children: [
@@ -298,7 +306,9 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
                   opacity: _fabController.value,
                   child: FloatingActionButton.extended(
                     onPressed: _showAdditionalButtons
-                        ? () => Navigator.of(context).pushReplacementNamed('/login')
+                        ? () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
+                            )
                         : null,
                     label: const Text('Login'),
                     icon: const Icon(Icons.login),
