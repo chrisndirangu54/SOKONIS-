@@ -48,11 +48,11 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Stream<double?>? _getPriceStream(CartItem cartItem) {
-    Variety? selectedVariety = cartItem.selectedVariety != null
+    Variety? selectedVariety = (cartItem.selectedVariety != null
         ? cartItem.product.varieties.firstWhere(
             (v) => v.name == cartItem.selectedVariety,
           )
-        : cartItem.product.selectedVariety;
+        : cartItem.selectedVariety) as Variety?;
 
     if (selectedVariety != null &&
         selectedVariety.discountedPriceStream != null) {
@@ -164,7 +164,7 @@ class _CartScreenState extends State<CartScreen> {
                                               text: cartItem.notes),
                                           onChanged: (value) {
                                             cart.updateItemNotes(
-                                                cartItem.product, value);
+                                                cartItem.product, value, );
                                           },
                                         ),
                                         // Add confirmation/rejection buttons if status is 'chargeMore'
@@ -203,8 +203,7 @@ class _CartScreenState extends State<CartScreen> {
                                                           .price =
                                                       cart.calculatePriceToUse(
                                                               product,
-                                                              cartItem.product
-                                                                  .selectedVariety)
+                                                              cartItem.selectedVariety as Variety?)
                                                           as double;
                                                   cart.handleAttendantDecision(
                                                       cartItem.product.id,

@@ -1,224 +1,181 @@
 import 'dart:async';
-import 'package:glassmorphism/glassmorphism.dart';
-import 'package:model_viewer_plus/model_viewer_plus.dart'; // Import ModelViewer
+import 'package:app_links/app_links.dart';
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:grocerry/screens/home_screen.dart';
+import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:provider/provider.dart';
-// For gestures
-import 'package:app_links/app_links.dart'; // Replace uni_links with app_links
 
 import '../providers/auth_provider.dart';
+import '../screens/home_screen.dart';
+import 'password_retrieval_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key, String? link});
+  const RegisterScreen({super.key, this.link});
+
+  final String? link;
 
   @override
   RegisterScreenState createState() => RegisterScreenState();
 }
 
-class RegisterScreenState extends State<RegisterScreen>
-    with SingleTickerProviderStateMixin {
+class RegisterScreenState extends State<RegisterScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _contactController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
-  bool? _isLoading = false;
-  bool? _passwordVisible = false;
-  String? _passwordStrength = '';
-  String? _referralCode; // Store the referral code
-  late String _countryCode = '+254'; // Default country code
+  bool _isLoading = false;
+  bool _passwordVisible = false;
+  bool _modelLoaded = false;
+  bool _showAdditionalButtons = false; // Added for FAB toggle
+  String _passwordStrength = '❤️ Empty';
+  String? _referralCode;
+  String _countryCode = '+254';
   final AppLinks _appLinks = AppLinks();
-
-  late AnimationController _controller;
-  late StreamSubscription _linkSubscription;
-  late AnimationController _logoController;
-  late AnimationController _buttonController;
   late AnimationController _fabController;
+  late StreamSubscription _linkSubscription;
+
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    );
-    _controller.repeat(reverse: true);
-    _logoController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    )..repeat(reverse: true);
-
-    _buttonController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-
     _fabController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
 
-    // Listen for incoming links
-      _linkSubscription = _appLinks.stringLinkStream.listen((String? link) {
-      if (link != null) {
-        _parseReferralCode(link);
-      }
-    }, onError: (err) {
-      print("Error listening for links: $err");
+    _appLinks.getInitialLink().then((Uri? uri) {
+      if (uri != null && mounted) _parseReferralCode(uri.toString());
     });
+
+    _linkSubscription = _appLinks.stringLinkStream.listen(
+      (String? link) {
+        if (link != null && mounted) _parseReferralCode(link);
+      },
+      onError: (err) {
+        if (mounted) {
+          print('Link error: $err');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Link error: $err')),
+          );
+        }
+      },
+      cancelOnError: false,
+    );
+
+    _checkModelAvailability();
   }
 
   void _parseReferralCode(String link) {
     try {
       Uri uri = Uri.parse(link);
-      setState(() {
-        _referralCode = uri.queryParameters['ref'];
-        if (_referralCode != null && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Referral code applied: $_referralCode')),
-          );
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _referralCode = uri.queryParameters['ref'];
+          if (_referralCode != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Referral code applied: $_referralCode')),
+            );
+          }
+        });
+      }
     } catch (e) {
       print('Error parsing referral link: $e');
+    }
+  }
+
+  Future<void> _checkModelAvailability() async {
+    try {
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (mounted) setState(() => _modelLoaded = true);
+    } catch (e) {
+      print('Model availability check failed: $e');
+      if (mounted) setState(() => _modelLoaded = false);
     }
   }
 
   @override
   void dispose() {
     _linkSubscription.cancel();
-    _controller.dispose();
     _fabController.dispose();
-    _logoController.dispose();
-    _buttonController.dispose();
-
+    _emailController.dispose();
+    _contactController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    print('Building RegisterScreen');
     return Scaffold(
       appBar: AppBar(
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            GestureDetector(
-              onTapDown: (_) => _controller.forward(),
-              onTapUp: (_) => _controller.reverse(),
-              child: Container(
-                decoration: BoxDecoration(
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2), // Shadow color
-                      spreadRadius: 2,
-                      blurRadius: 10,
-                      offset: const Offset(
-                          0, 4), // Shadow position (horizontal, vertical)
-                    ),
-                  ],
-                ),
-                child: GlassmorphicContainer(
-                  width: 120,
-                  height: 120,
-                  borderRadius: 20,
-                  blur: 15,
-                  alignment: Alignment.center,
-                  border: 2,
-                  linearGradient: LinearGradient(
-                    colors: [
-                      Colors.white.withOpacity(0.2),
-                      Colors.white.withOpacity(0.05)
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderGradient: LinearGradient(
-                    colors: [
-                      Colors.white.withOpacity(0.4),
-                      Colors.white.withOpacity(0.1)
-                    ],
-                  ),
-                  child: AnimatedBuilder(
-                    animation: _logoController,
-                    builder: (context, child) {
-                      final tiltValue = 0.02 *
-                          Curves.elasticInOut.transform(_logoController.value);
-                      return Transform(
-                        transform: Matrix4.identity()
-                          ..setEntry(3, 2, 0.002) // Perspective for 3D depth
-                          ..rotateY(tiltValue)
-                          ..rotateX(tiltValue),
-                        alignment: Alignment.center,
-                        child: child,
-                      );
-                    },
-                    child: Image.asset(
-                      'assets/images/basket.png',
-                      height: 100,
-                      width: 100,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-              ),
+            Image.asset(
+              'assets/images/basket.png',
+              height: 60,
+              width: 60,
+              errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
             ),
+            const SizedBox(width: 10),
             const Text('Register'),
           ],
         ),
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Card(
-            elevation: 4,
-            color: Colors.grey[300],
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12.0),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.0),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SizedBox(
-                          height: 300, // Set the height of the 3D model
-                          width: 300, // Set the width of the 3D model
-                          child: ModelViewer(
-                            src:
-                                'assets/3d/apple.glb', // Path to your 3D model (GLTF or GLB format)
-                            alt: "A 3D model of a basket",
-                            autoRotate: _isLoading, // Auto-rotate when loading
-                            cameraControls:
-                                !_isLoading!, // Disable camera controls when loading
-                            disablePan:
-                                _isLoading, // Disable panning when loading
-                            disableZoom:
-                                _isLoading, // Disable zooming when loading
-                            autoRotateDelay:
-                                0, // Start rotating immediately when loading
-                            cameraOrbit: _isLoading!
-                                ? "0deg 90deg 2.5m"
-                                : "0deg 0deg 2.5m", // Define camera angle
-                          )),
-
-                      const SizedBox(height: 20),
-
-                      // Welcome Text
-                      Text(
-                        'Create an Account',
-                        style:
-                            Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  color: Colors.orange,
-                                  fontWeight: FontWeight.bold,
+                        height: screenWidth * 0.7.clamp(200.0, 300.0),
+                        width: screenWidth * 0.7.clamp(200.0, 300.0),
+                        child: _modelLoaded
+                            ? ModelViewer(
+                                src: 'assets/3d/apple.glb',
+                                alt: "A 3D model of an apple",
+                                autoRotate: _isLoading,
+                                cameraControls: !_isLoading,
+                                disablePan: _isLoading,
+                                disableZoom: _isLoading,
+                                autoRotateDelay: 0,
+                                cameraOrbit: _isLoading ? "0deg 90deg 2.5m" : "0deg 0deg 2.5m",
+                              )
+                            : const Center(
+                                child: Text(
+                                  'Failed to load 3D model',
+                                  style: TextStyle(color: Colors.red),
                                 ),
+                              ),
+                      ),
+                      const SizedBox(height: 20),
+                      AutoSizeText(
+                        'Create an Account',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              color: Colors.orange,
+                              fontWeight: FontWeight.bold,
+                            ),
+                        maxLines: 1,
+                        minFontSize: 20.0,
+                        maxFontSize: 28.0,
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 20),
-
-                      // Email & Contact TextFormField (unchanged)
                       TextFormField(
                         controller: _emailController,
                         decoration: const InputDecoration(labelText: 'Email'),
@@ -226,23 +183,20 @@ class RegisterScreenState extends State<RegisterScreen>
                         validator: (value) =>
                             value!.isEmpty ? 'Please enter your email' : null,
                       ),
-                      const SizedBox(height: 16.0),
+                      const SizedBox(height: 16),
                       Row(
-                        children: <Widget>[
+                        children: [
                           Expanded(
                             flex: 2,
                             child: CountryCodePicker(
                               onChanged: (code) {
                                 setState(() {
-                                  _countryCode = code.dialCode ?? '+1';
+                                  _countryCode = code.dialCode ?? '+254';
                                 });
                               },
-                              // Initial selection and favorite countries can be customized here
                               initialSelection: 'Kenya',
                               favorite: const ['+254', 'Kenya'],
-                              // Optional. Shows only country name and flag
                               showCountryOnly: false,
-                              // Optional. Shows only country name and flag when popup is closed.
                               showOnlyCountryWhenClosed: false,
                               alignLeft: false,
                             ),
@@ -251,8 +205,7 @@ class RegisterScreenState extends State<RegisterScreen>
                             flex: 4,
                             child: TextFormField(
                               controller: _contactController,
-                              decoration: const InputDecoration(
-                                  labelText: 'Contact Number'),
+                              decoration: const InputDecoration(labelText: 'Contact Number'),
                               keyboardType: TextInputType.phone,
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
@@ -267,11 +220,10 @@ class RegisterScreenState extends State<RegisterScreen>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16.0),
+                      const SizedBox(height: 16),
                       TextFormField(
                         controller: _nameController,
-                        decoration:
-                            const InputDecoration(labelText: 'Full Name'),
+                        decoration: const InputDecoration(labelText: 'Full Name'),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
                             return 'Please enter your name';
@@ -279,27 +231,19 @@ class RegisterScreenState extends State<RegisterScreen>
                           return null;
                         },
                       ),
-                      const SizedBox(height: 16.0),
-
-                      // Password TextFormField with toggle visibility
+                      const SizedBox(height: 16),
                       TextFormField(
                         controller: _passwordController,
                         decoration: InputDecoration(
                           labelText: 'Password',
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _passwordVisible!
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                              color: _passwordVisible!
-                                  ? Colors.orange
-                                  : Colors.black,
+                              _passwordVisible ? Icons.visibility : Icons.visibility_off,
                             ),
-                            onPressed: () => setState(
-                                () => _passwordVisible = !_passwordVisible!),
+                            onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
                           ),
                         ),
-                        obscureText: !_passwordVisible!,
+                        obscureText: !_passwordVisible,
                         validator: (value) => value!.length < 6
                             ? 'Password must be at least 6 characters'
                             : null,
@@ -307,208 +251,118 @@ class RegisterScreenState extends State<RegisterScreen>
                           _passwordStrength = _getPasswordStrength(value);
                         }),
                       ),
-
-                      // Password Strength Indicator
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                            children: [
-                              TextSpan(
-                                text: _passwordStrength!.substring(0,
-                                    2), // Assuming the first two characters are the emoji
-                                style: TextStyle(
-                                    color: _getPasswordStrengthColor(
-                                        _passwordStrength!)),
+                      const SizedBox(height: 8),
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          children: [
+                            TextSpan(
+                              text: _passwordStrength.substring(0, 2),
+                              style: TextStyle(
+                                color: _getPasswordStrengthColor(_passwordStrength),
                               ),
-                              TextSpan(
-                                text: _passwordStrength!.substring(
-                                    2), // The rest of the text after the emoji
-                                style: const TextStyle(
-                                    color: Colors
-                                        .black), // Or any color you prefer for the text part
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16.0),
-                      Container(
-                        decoration: BoxDecoration(
-                          boxShadow: [
-                            BoxShadow(
-                              color: _isLoading!
-                                  ? Colors.orange.withOpacity(0.5)
-                                  : Colors.black.withOpacity(0.2),
-                              spreadRadius: 5,
-                              blurRadius: 15,
-                              offset: const Offset(0, 3), // Shadow position
+                            ),
+                            TextSpan(
+                              text: _passwordStrength.substring(2),
+                              style: const TextStyle(color: Colors.black),
                             ),
                           ],
                         ),
-                        child: GestureDetector(
-                          onTapDown: (_) => setState(() {
-                            _controller.forward();
-                          }),
-                          onTapUp: (_) => setState(() {
-                            _controller.reverse();
-                          }),
-                          child: AnimatedBuilder(
-                            animation: _buttonController,
-                            builder: (context, child) {
-                              final tiltValue = 0.03 *
-                                  _buttonController
-                                      .value; // Slight tilt for 3D effect
-                              final scaleValue = 1 -
-                                  _buttonController.value *
-                                      0.1; // Scale down when pressed
-
-                              return Transform(
-                                transform: Matrix4.identity()
-                                  ..setEntry(3, 2, 0.002) // Perspective effect
-                                  ..rotateX(tiltValue) // 3D tilt on X-axis
-                                  ..rotateY(tiltValue) // 3D tilt on Y-axis
-                                  ..scale(scaleValue), // Scale the button
-                                alignment: Alignment.center,
-                                child: ElevatedButton(
-                                  onPressed:
-                                      _isLoading! ? null : _handleRegistration,
-                                  style: ElevatedButton.styleFrom(
-                                    foregroundColor: Colors.blue,
-                                    backgroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 50, vertical: 18),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(50.0),
-                                    ),
-                                    elevation: 7,
-                                    shadowColor: Colors.grey[700],
-                                    side: const BorderSide(
-                                        color: Colors.blue, width: 1),
-                                  ),
-                                  child: _isLoading!
-                                      ? Stack(
-                                          alignment: Alignment.center,
-                                          children: [
-                                            ScaleTransition(
-                                              scale: Tween<double>(
-                                                begin: 0.7,
-                                                end: 1.0,
-                                              ).animate(
-                                                CurvedAnimation(
-                                                  parent: AnimationController(
-                                                      vsync: this,
-                                                      duration: const Duration(
-                                                          seconds: 2))
-                                                    ..repeat(reverse: true),
-                                                  curve: Curves.easeInOut,
-                                                ),
-                                              ),
-                                              child: Container(
-                                                width: 20,
-                                                height: 20,
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: Colors.orange
-                                                      .withOpacity(0.2),
-                                                ),
-                                              ),
-                                            ),
-                                            const CircularProgressIndicator(
-                                              valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
-                                                      Colors.orange),
-                                              strokeWidth: 3.0,
-                                            ),
-                                          ],
-                                        )
-                                      : const Text(
-                                          'Register',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900,
-                                            color: Colors.blue,
-                                          ),
-                                        ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
                       ),
-                    ]),
+                      const SizedBox(height: 20),
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _handleRegistration,
+                        child: _isLoading
+                            ? const CircularProgressIndicator()
+                            : const Text('Register'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
         ),
       ),
-      floatingActionButton: GestureDetector(
-        onTapDown: (_) => _fabController.forward(), // Start scaling down
-        onTapUp: (_) => _fabController.reverse(), // Scale back up
-        onTapCancel: () =>
-            _fabController.reverse(), // Scale back up if tap canceled
-        child: AnimatedBuilder(
-          animation: _fabController,
-          builder: (context, child) {
-            // Scale the button based on the controller value
-            final scale = 1 - (_fabController.value * 0.1); // Scale down by 10%
-
-            return Transform(
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.001) // Set perspective
-                ..scale(scale), // Apply scaling
-              alignment: Alignment.center,
-              child: FloatingActionButton.extended(
-                onPressed: () async {
-                  setState(() {
-                    _isLoading = true; // Start loading indicator
-                  });
-
-                  try {
-                    await Provider.of<AuthProvider>(context, listen: false)
-                        .signInWithGoogle(_referralCode); // Pass referral code
-
-                    if (Provider.of<AuthProvider>(context, listen: false)
-                        .isLoggedIn) {
-                      if (context.mounted) {
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const HomeScreen()),
-                        );
-                      }
-                    } else {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Google sign-in failed')),
-                        );
-                      }
-                    }
-                  } catch (error) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Google sign-in failed')),
-                      );
-                    }
-                  } finally {
-                    setState(() {
-                      _isLoading = false; // Stop loading indicator
-                    });
-                  }
-                },
-                label: const Text('Login with Google'),
-                icon: const Icon(Icons.g_mobiledata_rounded),
-              ),
-            );
-          },
-        ),
+      floatingActionButton: Stack(
+        alignment: Alignment.bottomRight,
+        children: [
+          AnimatedBuilder(
+            animation: _fabController,
+            builder: (context, child) {
+              final offset = Offset(0, -80 * _fabController.value);
+              return Transform.translate(
+                offset: offset,
+                child: Opacity(
+                  opacity: _fabController.value,
+                  child: FloatingActionButton.extended(
+                    onPressed: _showAdditionalButtons
+                        ? () => Navigator.of(context).pushReplacementNamed('/login')
+                        : null,
+                    label: const Text('Login'),
+                    icon: const Icon(Icons.login),
+                  ),
+                ),
+              );
+            },
+          ),
+          AnimatedBuilder(
+            animation: _fabController,
+            builder: (context, child) {
+              final offset = Offset(-60 * _fabController.value, -60 * _fabController.value);
+              return Transform.translate(
+                offset: offset,
+                child: Opacity(
+                  opacity: _fabController.value,
+                  child: FloatingActionButton.extended(
+                    onPressed: _showAdditionalButtons
+                        ? () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
+                            )
+                        : null,
+                    label: const Text('Forgot Password?'),
+                    icon: const Icon(Icons.lock_reset),
+                  ),
+                ),
+              );
+            },
+          ),
+          AnimatedBuilder(
+            animation: _fabController,
+            builder: (context, child) {
+              final offset = Offset(-80 * _fabController.value, 0);
+              return Transform.translate(
+                offset: offset,
+                child: Opacity(
+                  opacity: _fabController.value,
+                  child: FloatingActionButton.extended(
+                    onPressed: _showAdditionalButtons ? _signInWithGoogle : null,
+                    label: const Text('Login with Google'),
+                    icon: const Icon(Icons.g_mobiledata_rounded),
+                  ),
+                ),
+              );
+            },
+          ),
+          FloatingActionButton(
+            onPressed: () {
+              setState(() {
+                if (_showAdditionalButtons) {
+                  _fabController.reverse();
+                } else {
+                  _fabController.forward();
+                }
+                _showAdditionalButtons = !_showAdditionalButtons;
+              });
+            },
+            child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
+          ),
+        ],
       ),
     );
   }
 
-  // You keep the existing _getPasswordStrengthColor function as is:
   Color _getPasswordStrengthColor(String strength) {
     switch (strength) {
       case '❤️ Empty':
@@ -526,11 +380,10 @@ class RegisterScreenState extends State<RegisterScreen>
       case '💙 Very Strong':
         return Colors.blue;
       default:
-        return Colors.red; // Default color if strength is not recognized
+        return Colors.red;
     }
   }
 
-// Your existing function remains largely the same
   String _getPasswordStrength(String password) {
     if (password.isEmpty) return '❤️ Empty';
 
@@ -561,49 +414,77 @@ class RegisterScreenState extends State<RegisterScreen>
       case 5:
         return '💙 Very Strong';
       default:
-        return '💔';
+        return '💔 Weak';
     }
   }
 
   Future<void> _handleRegistration() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() => _isLoading = true);
       final String email = _emailController.text.trim();
       final String password = _passwordController.text.trim();
-      final String contact = _contactController.text.trim();
+      final String contact = _countryCode + _contactController.text.trim();
       final String name = _nameController.text.trim();
       final String? referralCode = _referralCode;
 
       try {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        await authProvider.register(
-            email, password, name, contact, referralCode);
-        if (authProvider.isLoggedIn) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        await authProvider.register(email, password, name, contact, referralCode);
+        if (authProvider.isLoggedIn && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
               content: Text('Registration successful!'),
               backgroundColor: Colors.green,
-            ));
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const HomeScreen()),
-            );
-          }
+            ),
+          );
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Registration failed')),
+          );
         }
       } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Registration failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ));
+        if (mounted) {
+          print('Registration error: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Registration failed: $e')),
+          );
         }
-        debugPrint("Error during registration: $e");
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.signInWithGoogle(_referralCode);
+      if (authProvider.isLoggedIn && mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Google sign-in failed')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        print('Google sign-in error: $error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google sign-in failed: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+}
+
+extension NumExtension on num {
+  num clamp(num min, num max) => this < min ? min : (this > max ? max : this);
 }

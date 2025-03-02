@@ -2202,8 +2202,7 @@ class HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     User? user;
-    final isHomeScreen = ModalRoute.of(context)?.settings.name ==
-        '/home'; // Adjust the route name as needed
+
 
     Future<List<Product>> predictedProducts = predictProducts(
       recentlyBought,
@@ -2229,16 +2228,7 @@ class HomeScreenState extends State<HomeScreen> {
               SliverAppBar(
                 pinned:
                     true, // Ensures that the app bar remains visible as the user scrolls.
-                leading: isHomeScreen
-                    ? null // No back button if on the home screen.
-                    : IconButton(
-                        tooltip: 'Back', // Tooltip for back navigation.
-                        icon: const Icon(Icons.arrow_back),
-                        onPressed: () {
-                          Navigator.of(context)
-                              .pop(); // Navigate back to the previous screen.
-                        },
-                      ),
+
                 title: Row(
                   children: [
                     GestureDetector(

@@ -3,11 +3,11 @@ import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/subscription_model.dart';
 import 'package:grocerry/models/user.dart';
 import 'package:grocerry/providers/product_provider.dart';
-import 'package:grocerry/services/subscription_service.dart'; // Import SubscriptionService
+import 'package:grocerry/services/subscription_service.dart';
 import 'package:provider/provider.dart';
 
 class ProductSelectionScreen extends StatefulWidget {
-  final User user; // Change the type from String to User
+  final User user;
 
   const ProductSelectionScreen({
     super.key,
@@ -35,85 +35,97 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
     Navigator.pop(context, _selectedVarieties);
   }
 
-  // Ask for subscription dialog
   void _askForSubscription(Product product) {
-    int selectedFrequency = 7; // Default weekly frequency
-    int selectedDay = DateTime.now().weekday; // Default to today’s weekday
-    int quantity = 1; // Default quantity
     final SubscriptionService subscriptionService = SubscriptionService();
+    final varietiesToSubscribe = List.from(_selectedVarieties); // Copy to iterate
 
-    final availableFrequencies = [
-      1,
-      7,
-      14,
-      30
-    ]; // Daily, weekly, bi-weekly, monthly
-    final weekDays = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday'
-    ];
+    // Function to show dialog for the next variety
+    void showNextVarietyDialog(int index) {
+      if (index >= varietiesToSubscribe.length) {
+        // All varieties processed, close the dialog sequence
+        Navigator.pop(context);
+        return;
+      }
 
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Subscribe for Auto-Replenishment?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                  'Would you like to subscribe to auto-replenish this product?'),
-              _buildFrequencyDropdown(
-                  selectedFrequency, availableFrequencies, setState),
-              _buildDayDropdown(selectedDay, weekDays, setState),
-              _buildQuantityControlDialog(quantity, setState),
+      final Variety variety = varietiesToSubscribe[index];
+      int selectedFrequency = 7; // Default weekly frequency
+      int selectedDay = DateTime.now().weekday; // Default to today’s weekday
+      int quantity = 1; // Default quantity
+      final availableFrequencies = [1, 7, 14, 30]; // Daily, weekly, bi-weekly, monthly
+      final weekDays = [
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+        'Sunday'
+      ];
+
+      showDialog(
+        context: context,
+        barrierDismissible: false, // Prevent closing until all are processed
+        builder: (context) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: Text('Subscribe to ${variety.name}?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Set subscription details for ${variety.name}:'),
+                _buildFrequencyDropdown(
+                    selectedFrequency, availableFrequencies, setState),
+                _buildDayDropdown(selectedDay, weekDays, setState),
+                _buildQuantityControlDialog(quantity, setState),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  final nextDelivery = _calculateNextDeliveryDate(selectedFrequency, selectedDay);
+                  final subscription = Subscription(
+                    product: product,
+                    user: widget.user,
+                    quantity: quantity,
+                    nextDelivery: nextDelivery,
+                    frequency: selectedFrequency,
+                    price: variety.price, // Use variety-specific price
+                    variety: variety,
+                  );
+                  subscriptionService.addSubscription(subscription, context);
+                  Navigator.pop(context); // Close current dialog
+                  showNextVarietyDialog(index + 1); // Show next variety
+                },
+                child: const Text('Subscribe'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Skip this variety
+                  showNextVarietyDialog(index + 1); // Move to next
+                },
+                child: const Text('Skip'),
+              ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                final nextDelivery =
-                    _calculateNextDeliveryDate(selectedFrequency, selectedDay);
-                final subscription = Subscription(
-                  product: product, // Assuming product has an id field
-                  user: widget.user, // Assuming user has an id field
-                  quantity: quantity,
-                  nextDelivery: nextDelivery,
-                  frequency: selectedFrequency,
-                  price: product.basePrice, variety: product.selectedVariety,
-                );
-                subscriptionService.addSubscription(subscription, context);
-                Navigator.pop(context);
-              },
-              child: const Text('Yes'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('No'),
-            ),
-          ],
         ),
-      ),
-    );
+      );
+    }
+
+    // Start with the first variety
+    if (varietiesToSubscribe.isNotEmpty) {
+      showNextVarietyDialog(0);
+    }
   }
 
-  // Helper to calculate the next delivery date
+  // Helper methods remain unchanged
   DateTime _calculateNextDeliveryDate(int frequency, int selectedDay) {
     DateTime nextDelivery = DateTime.now();
     while (nextDelivery.weekday != selectedDay) {
       nextDelivery = nextDelivery.add(const Duration(days: 1));
     }
-    return nextDelivery;
+    return nextDelivery.add(Duration(days: frequency)); // Add frequency for first delivery
   }
 
-  // Helper widget for frequency dropdown
-  Widget _buildFrequencyDropdown(int selectedFrequency,
-      List<int> availableFrequencies, StateSetter setState) {
+  Widget _buildFrequencyDropdown(int selectedFrequency, List<int> availableFrequencies, StateSetter setState) {
     return DropdownButton<int>(
       value: selectedFrequency,
       onChanged: (int? newValue) {
@@ -124,21 +136,13 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
       items: availableFrequencies.map<DropdownMenuItem<int>>((int value) {
         return DropdownMenuItem<int>(
           value: value,
-          child: Text(value == 1
-              ? 'Daily'
-              : value == 7
-                  ? 'Weekly'
-                  : value == 14
-                      ? 'Bi-weekly'
-                      : 'Monthly'),
+          child: Text(value == 1 ? 'Daily' : value == 7 ? 'Weekly' : value == 14 ? 'Bi-weekly' : 'Monthly'),
         );
       }).toList(),
     );
   }
 
-  // Helper widget for day dropdown
-  Widget _buildDayDropdown(
-      int selectedDay, List<String> weekDays, StateSetter setState) {
+  Widget _buildDayDropdown(int selectedDay, List<String> weekDays, StateSetter setState) {
     return DropdownButton<int>(
       value: selectedDay,
       onChanged: (int? newValue) {
@@ -155,7 +159,6 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
     );
   }
 
-  // Helper widget for quantity control
   Widget _buildQuantityControlDialog(int quantity, StateSetter setState) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -184,8 +187,7 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final productProvider =
-        Provider.of<ProductProvider>(context, listen: false);
+    final productProvider = Provider.of<ProductProvider>(context, listen: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -198,7 +200,7 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
         ],
       ),
       body: FutureBuilder<List<Product>>(
-        future: productProvider.fetchProducts(), // Fetch all available products
+        future: productProvider.fetchProducts(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -212,7 +214,6 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
 
           final products = snapshot.data!;
 
-          // Group products by category
           Map<String, List<Product>> categoryProducts = {};
           for (var product in products) {
             if (!categoryProducts.containsKey(product.category)) {
@@ -231,13 +232,7 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
                 children: categoryList.map((product) {
                   return ProductTile(
                     product: product,
-                    onSelected: (variety, isSelected) {
-                      _onVarietySelected(variety, isSelected);
-                      if (isSelected) {
-                        // When a product is selected, ask for subscription
-                        _askForSubscription(product);
-                      }
-                    },
+                    onSelected: _onVarietySelected,
                   );
                 }).toList(),
               );
@@ -249,6 +244,7 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
   }
 }
 
+// ProductTile and VarietyTile remain unchanged
 class ProductTile extends StatelessWidget {
   final Product product;
   final Function(Variety, bool) onSelected;
@@ -268,11 +264,9 @@ class ProductTile extends StatelessWidget {
         children: [
           for (var variety in product.varieties)
             VarietyTile(
-                variety: variety,
-                onSelected: (isSelected) {
-                  onSelected(
-                      variety, isSelected); // Pass variety and selection state
-                }),
+              variety: variety,
+              onSelected: (isSelected) => onSelected(variety, isSelected),
+            ),
         ],
       ),
     );
@@ -300,8 +294,7 @@ class VarietyTileState extends State<VarietyTile> {
   Widget build(BuildContext context) {
     return ListTile(
       title: Text(widget.variety.name),
-      subtitle:
-          Text('Color: ${widget.variety.color}, Size: ${widget.variety.size}'),
+      subtitle: Text('Color: ${widget.variety.color}, Size: ${widget.variety.size}'),
       trailing: Text(
         '\$${widget.variety.price.toString()}${widget.variety.discountedPrice != null ? " (Discounted: \$${widget.variety.discountedPrice})" : ""}',
       ),
@@ -311,8 +304,7 @@ class VarietyTileState extends State<VarietyTile> {
         height: 50,
         fit: BoxFit.cover,
       ),
-      tileColor:
-          _isSelected ? Colors.green[100] : null, // Change color if selected
+      tileColor: _isSelected ? Colors.green[100] : null,
       onTap: () {
         setState(() {
           _isSelected = !_isSelected;

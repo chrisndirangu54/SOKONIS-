@@ -527,7 +527,7 @@ class SubscriptionTileState extends State<SubscriptionTile> {
                   nextDelivery: nextDelivery,
                   frequency: selectedFrequency,
                   price: product.basePrice,
-                  variety: product.selectedVariety,
+                  variety: selectedVariety!,
                 );
                 subscriptionService.addSubscription(subscription, context);
                 Navigator.pop(context);

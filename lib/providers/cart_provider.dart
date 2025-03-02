@@ -189,11 +189,12 @@ class CartProvider with ChangeNotifier {
   }
 
   Future<void> updateItemNotes(Product product, String? notes) async {
+    final CartItem? cartItem = items[product.id];
     if (items.containsKey(product.id)) {
       items[product.id]!.notes = notes;
       // Use the Product's selectedVariety (Variety?) instead of CartItem's selectedVariety (String?)
       items[product.id]!.priceToUse =
-          await calculatePriceToUse(product, product.selectedVariety);
+          await calculatePriceToUse(product, cartItem!.selectedVariety);
       notifyListeners();
     }
   }

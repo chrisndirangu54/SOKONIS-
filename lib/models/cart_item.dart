@@ -5,7 +5,7 @@ import 'product.dart';
 class CartItem {
   final Product product;
   int quantity;
-  String? selectedVariety;
+  Variety? selectedVariety;
   double price;
   String? notes;
   double? priceToUse; // Calculated price based on discounts/variety

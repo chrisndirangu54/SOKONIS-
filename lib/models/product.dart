@@ -428,7 +428,6 @@ class Product {
     );
   }
 
-  get selectedVariety => null;
 
   // Add toMap method to map Product fields to a map
   Map<String, dynamic> toMap() {

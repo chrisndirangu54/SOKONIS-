@@ -18,7 +18,7 @@ class TrackingScreen extends StatefulWidget {
   final String orderId;
   final RiderLocationService riderLocationService;
   final UserProvider userProvider;
-  TrackingScreen({
+  const TrackingScreen({
     super.key,
     required this.orderId,
     required this.riderLocationService,
