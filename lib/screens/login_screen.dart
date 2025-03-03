@@ -227,35 +227,16 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
         ),
       ),
 floatingActionButton: Stack(
-  alignment: Alignment.bottomRight,
   children: [
-    // Main FAB Toggle (rendered first so that it is beneath the extra buttons)
-    Container(
-      child: FloatingActionButton(
-        onPressed: () {
-          if (mounted) {
-            setState(() {
-              if (_showAdditionalButtons) {
-                _fabController.reverse();
-              } else {
-                _fabController.forward();
-              }
-              _showAdditionalButtons = !_showAdditionalButtons;
-            });
-          }
-        },
-        child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
-      ),
-    ),
-    // Register Button (rendered on top)
+    // Register Button positioned above the main FAB.
     AnimatedBuilder(
       animation: _fabController,
       builder: (context, child) {
-        final offset = Offset(0, -120 * _fabController.value);
-        return Transform.translate(
-          offset: offset,
+        return Positioned(
+          bottom: 16 + 120 * _fabController.value,
+          right: 16,
           child: Opacity(
-            opacity: _showAdditionalButtons ? _fabController.value : 0.0,
+            opacity: _fabController.value,
             child: FloatingActionButton.extended(
               onPressed: (_showAdditionalButtons && !_isLoading)
                   ? () async {
@@ -285,15 +266,15 @@ floatingActionButton: Stack(
         );
       },
     ),
-    // Forgot Password Button (rendered on top)
+    // Forgot Password Button positioned to the left and above the main FAB.
     AnimatedBuilder(
       animation: _fabController,
       builder: (context, child) {
-        final offset = Offset(-60 * _fabController.value, -60 * _fabController.value);
-        return Transform.translate(
-          offset: offset,
+        return Positioned(
+          bottom: 16 + 60 * _fabController.value,
+          right: 16 + 60 * _fabController.value,
           child: Opacity(
-            opacity: _showAdditionalButtons ? _fabController.value : 0.0,
+            opacity: _fabController.value,
             child: FloatingActionButton.extended(
               onPressed: (_showAdditionalButtons && !_isLoading)
                   ? () async {
@@ -323,15 +304,15 @@ floatingActionButton: Stack(
         );
       },
     ),
-    // Google Sign-in Button (rendered on top)
+    // Google Sign-in Button positioned to the left of the main FAB.
     AnimatedBuilder(
       animation: _fabController,
       builder: (context, child) {
-        final offset = Offset(-80 * _fabController.value, 0);
-        return Transform.translate(
-          offset: offset,
+        return Positioned(
+          bottom: 16,
+          right: 16 + 80 * _fabController.value,
           child: Opacity(
-            opacity: _showAdditionalButtons ? _fabController.value : 0.0,
+            opacity: _fabController.value,
             child: FloatingActionButton.extended(
               onPressed: (_showAdditionalButtons && !_isLoading)
                   ? () async {
@@ -357,6 +338,26 @@ floatingActionButton: Stack(
           ),
         );
       },
+    ),
+    // Main FAB Toggle positioned at the bottom-right.
+    Positioned(
+      bottom: 16,
+      right: 16,
+      child: FloatingActionButton(
+        onPressed: () {
+          if (mounted) {
+            setState(() {
+              if (_showAdditionalButtons) {
+                _fabController.reverse();
+              } else {
+                _fabController.forward();
+              }
+              _showAdditionalButtons = !_showAdditionalButtons;
+            });
+          }
+        },
+        child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
+      ),
     ),
   ],
 ),

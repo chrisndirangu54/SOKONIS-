@@ -59,7 +59,7 @@
     }
   ],
   "storage": {
-    "rules": "y"
+    "rules": "storage.rules"
   },
   "remoteconfig": {
     "template": "remoteconfig.template.json"

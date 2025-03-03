@@ -294,80 +294,89 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
           ),
         ),
       ),),
-      floatingActionButton: Stack(
-        alignment: Alignment.bottomRight,
-        children: [
-          AnimatedBuilder(
-            animation: _fabController,
-            builder: (context, child) {
-              final offset = Offset(0, -80 * _fabController.value);
-              return Transform.translate(
-                offset: offset,
-                child: Opacity(
-                  opacity: _fabController.value,
-                  child: FloatingActionButton.extended(
-                    onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const LoginScreen()),
-                            ),
-                    label: const Text('Login'),
-                    icon: const Icon(Icons.login),
-                  ),
-                ),
-              );
-            },
+floatingActionButton: Stack(
+  children: [
+    // Login Button (moves upwards)
+    AnimatedBuilder(
+      animation: _fabController,
+      builder: (context, child) {
+        return Positioned(
+          bottom: 16 + 120 * _fabController.value,
+          right: 16,
+          child: Opacity(
+            opacity: _fabController.value,
+            child: FloatingActionButton.extended(
+              onPressed: _fabController.value > 0 ? () {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginScreen()));
+              } : null,
+              label: const Text('Login'),
+              icon: const Icon(Icons.login),
+            ),
           ),
-          AnimatedBuilder(
-            animation: _fabController,
-            builder: (context, child) {
-              final offset = Offset(-60 * _fabController.value, -60 * _fabController.value);
-              return Transform.translate(
-                offset: offset,
-                child: Opacity(
-                  opacity: _fabController.value,
-                  child: FloatingActionButton.extended(
-                    onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
-                            ),
-                    label: const Text('Forgot Password?'),
-                    icon: const Icon(Icons.lock_reset),
-                  ),
-                ),
-              );
-            },
+        );
+      },
+    ),
+
+    // Forgot Password Button (moves diagonally up-left)
+    AnimatedBuilder(
+      animation: _fabController,
+      builder: (context, child) {
+        return Positioned(
+          bottom: 16 + 60 * _fabController.value,
+          right: 16 + 60 * _fabController.value,
+          child: Opacity(
+            opacity: _fabController.value,
+            child: FloatingActionButton.extended(
+              onPressed: _fabController.value > 0 ? () {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()));
+              } : null,
+              label: const Text('Forgot Password?'),
+              icon: const Icon(Icons.lock_reset),
+            ),
           ),
-          AnimatedBuilder(
-            animation: _fabController,
-            builder: (context, child) {
-              final offset = Offset(-80 * _fabController.value, 0);
-              return Transform.translate(
-                offset: offset,
-                child: Opacity(
-                  opacity: _fabController.value,
-                  child: FloatingActionButton.extended(
-                    onPressed: _signInWithGoogle,
-                    label: const Text('Login with Google'),
-                    icon: const Icon(Icons.g_mobiledata_rounded),
-                  ),
-                ),
-              );
-            },
+        );
+      },
+    ),
+
+    // Google Sign-in Button (moves left)
+    AnimatedBuilder(
+      animation: _fabController,
+      builder: (context, child) {
+        return Positioned(
+          bottom: 16,
+          right: 16 + 80 * _fabController.value,
+          child: Opacity(
+            opacity: _fabController.value,
+            child: FloatingActionButton.extended(
+              onPressed: _fabController.value > 0 ? _signInWithGoogle : null,
+              label: const Text('Login with Google'),
+              icon: const Icon(Icons.g_mobiledata_rounded),
+            ),
           ),
-          FloatingActionButton(
-            onPressed: () {
-              setState(() {
-                if (_showAdditionalButtons) {
-                  _fabController.reverse();
-                } else {
-                  _fabController.forward();
-                }
-                _showAdditionalButtons = !_showAdditionalButtons;
-              });
-            },
-            child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
-          ),
-        ],
+        );
+      },
+    ),
+
+    // Main FAB toggle button
+    Positioned(
+      bottom: 16,
+      right: 16,
+      child: FloatingActionButton(
+        onPressed: () {
+          setState(() {
+            if (_showAdditionalButtons) {
+              _fabController.reverse();
+            } else {
+              _fabController.forward();
+            }
+            _showAdditionalButtons = !_showAdditionalButtons;
+          });
+        },
+        child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
       ),
-    );
+    ),
+  ],
+),);
   }
 
   Color _getPasswordStrengthColor(String strength) {
