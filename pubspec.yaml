@@ -76,7 +76,6 @@ dependencies:
   auto_size_text: ^3.0.0
   app_links: ^6.4.0
 
-
 dependency_overrides:
   archive: ^4.0.4
   crypto: ^3.0.6
