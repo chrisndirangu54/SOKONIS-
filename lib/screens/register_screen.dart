@@ -161,7 +161,7 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
                                   autoRotateDelay: 0,
                                   cameraOrbit: "0deg 75deg 105%", // Adjusted for better view
                                   exposure: 1.0, // Default brightness
-                                  shadowIntensity: 1.0, // Add shadows
+                                  shadowIntensity: 1, // Add shadows
                                   backgroundColor: Colors.grey[200]!, // Light background
 
                                 )
