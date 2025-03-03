@@ -229,145 +229,7 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
 floatingActionButton: Stack(
   alignment: Alignment.bottomRight,
   children: [
-    // Register Button
-    AnimatedBuilder(
-      animation: _fabController,
-      builder: (context, child) {
-        final offset = Offset(0, -120 * _fabController.value);
-        return Transform.translate(
-          offset: offset,
-          child: Container(
-            child: Opacity(
-              opacity: _showAdditionalButtons ? _fabController.value : 0.0,
-              child: FloatingActionButton.extended(
-                onPressed: (_showAdditionalButtons && !_isLoading)
-                    ? () async {
-                        try {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                          );
-                          if (mounted) {
-                            _fabController.reverse();
-                            setState(() => _showAdditionalButtons = false);
-                          }
-                        } catch (e) {
-                          print('Register navigation error: $e');
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Navigation failed: $e')),
-                            );
-                          }
-                        }
-                      }
-                    : null,
-                label: const Text('Register'),
-                icon: const Icon(Icons.person_add),
-                backgroundColor: _showAdditionalButtons 
-                    ? null 
-                    : Colors.transparent,
-                foregroundColor: _showAdditionalButtons 
-                    ? null 
-                    : Colors.transparent,
-                elevation: _showAdditionalButtons ? 6.0 : 0.0,
-              ),
-            ),
-          ),
-        );
-      },
-    ),
-    // Forgot Password Button
-    AnimatedBuilder(
-      animation: _fabController,
-      builder: (context, child) {
-        final offset = Offset(-60 * _fabController.value, -60 * _fabController.value);
-        return Transform.translate(
-          offset: offset,
-          child: Container(
-            child: Opacity(
-              opacity: _showAdditionalButtons ? _fabController.value : 0.0,
-              child: FloatingActionButton.extended(
-                onPressed: (_showAdditionalButtons && !_isLoading)
-                    ? () async {
-                        try {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
-                          );
-                          if (mounted) {
-                            _fabController.reverse();
-                            setState(() => _showAdditionalButtons = false);
-                          }
-                        } catch (e) {
-                          print('Password reset navigation error: $e');
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Navigation failed: $e')),
-                            );
-                          }
-                        }
-                      }
-                    : null,
-                label: const Text('Forgot Password?'),
-                icon: const Icon(Icons.lock_reset),
-                backgroundColor: _showAdditionalButtons 
-                    ? null 
-                    : Colors.transparent,
-                foregroundColor: _showAdditionalButtons 
-                    ? null 
-                    : Colors.transparent,
-                elevation: _showAdditionalButtons ? 6.0 : 0.0,
-              ),
-            ),
-          ),
-        );
-      },
-    ),
-    // Google Sign-in Button
-    AnimatedBuilder(
-      animation: _fabController,
-      builder: (context, child) {
-        final offset = Offset(-80 * _fabController.value, 0);
-        return Transform.translate(
-          offset: offset,
-          child: Container(
-            child: Opacity(
-              opacity: _showAdditionalButtons ? _fabController.value : 0.0,
-              child: FloatingActionButton.extended(
-                onPressed: (_showAdditionalButtons && !_isLoading)
-                    ? () async {
-                        try {
-                          await _signInWithGoogle();
-                          if (mounted) {
-                            _fabController.reverse();
-                            setState(() => _showAdditionalButtons = false);
-                          }
-                        } catch (e) {
-                          print('Google sign-in error: $e');
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Google sign-in failed: $e')),
-                            );
-                          }
-                        }
-                      }
-                    : null,
-                label: const Text('Login with Google'),
-                icon: const Icon(Icons.g_mobiledata_rounded),
-                backgroundColor: _showAdditionalButtons 
-                    ? null 
-                    : Colors.transparent,
-                foregroundColor: _showAdditionalButtons 
-                    ? null 
-                    : Colors.transparent,
-                elevation: _showAdditionalButtons ? 6.0 : 0.0,
-              ),
-            ),
-          ),
-        );
-      },
-    ),
-    // Main FAB Toggle
+    // Main FAB Toggle (rendered first so that it is beneath the extra buttons)
     Container(
       child: FloatingActionButton(
         onPressed: () {
@@ -385,8 +247,120 @@ floatingActionButton: Stack(
         child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
       ),
     ),
+    // Register Button (rendered on top)
+    AnimatedBuilder(
+      animation: _fabController,
+      builder: (context, child) {
+        final offset = Offset(0, -120 * _fabController.value);
+        return Transform.translate(
+          offset: offset,
+          child: Opacity(
+            opacity: _showAdditionalButtons ? _fabController.value : 0.0,
+            child: FloatingActionButton.extended(
+              onPressed: (_showAdditionalButtons && !_isLoading)
+                  ? () async {
+                      try {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        );
+                        if (mounted) {
+                          _fabController.reverse();
+                          setState(() => _showAdditionalButtons = false);
+                        }
+                      } catch (e) {
+                        print('Register navigation error: $e');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Navigation failed: $e')),
+                          );
+                        }
+                      }
+                    }
+                  : null,
+              label: const Text('Register'),
+              icon: const Icon(Icons.person_add),
+            ),
+          ),
+        );
+      },
+    ),
+    // Forgot Password Button (rendered on top)
+    AnimatedBuilder(
+      animation: _fabController,
+      builder: (context, child) {
+        final offset = Offset(-60 * _fabController.value, -60 * _fabController.value);
+        return Transform.translate(
+          offset: offset,
+          child: Opacity(
+            opacity: _showAdditionalButtons ? _fabController.value : 0.0,
+            child: FloatingActionButton.extended(
+              onPressed: (_showAdditionalButtons && !_isLoading)
+                  ? () async {
+                      try {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
+                        );
+                        if (mounted) {
+                          _fabController.reverse();
+                          setState(() => _showAdditionalButtons = false);
+                        }
+                      } catch (e) {
+                        print('Password reset navigation error: $e');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Navigation failed: $e')),
+                          );
+                        }
+                      }
+                    }
+                  : null,
+              label: const Text('Forgot Password?'),
+              icon: const Icon(Icons.lock_reset),
+            ),
+          ),
+        );
+      },
+    ),
+    // Google Sign-in Button (rendered on top)
+    AnimatedBuilder(
+      animation: _fabController,
+      builder: (context, child) {
+        final offset = Offset(-80 * _fabController.value, 0);
+        return Transform.translate(
+          offset: offset,
+          child: Opacity(
+            opacity: _showAdditionalButtons ? _fabController.value : 0.0,
+            child: FloatingActionButton.extended(
+              onPressed: (_showAdditionalButtons && !_isLoading)
+                  ? () async {
+                      try {
+                        await _signInWithGoogle();
+                        if (mounted) {
+                          _fabController.reverse();
+                          setState(() => _showAdditionalButtons = false);
+                        }
+                      } catch (e) {
+                        print('Google sign-in error: $e');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Google sign-in failed: $e')),
+                          );
+                        }
+                      }
+                    }
+                  : null,
+              label: const Text('Login with Google'),
+              icon: const Icon(Icons.g_mobiledata_rounded),
+            ),
+          ),
+        );
+      },
+    ),
   ],
 ),
+
     );
   }
   Future<void> _login() async {
