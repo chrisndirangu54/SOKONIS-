@@ -297,7 +297,61 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
       floatingActionButton: Stack(
         alignment: Alignment.bottomRight,
         children: [
-          // Main FAB (toggle button)
+          AnimatedBuilder(
+            animation: _fabController,
+            builder: (context, child) {
+              final offset = Offset(0, -80 * _fabController.value);
+              return Transform.translate(
+                offset: offset,
+                child: Opacity(
+                  opacity: _fabController.value,
+                  child: FloatingActionButton.extended(
+                    onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const LoginScreen()),
+                            ),
+                    label: const Text('Login'),
+                    icon: const Icon(Icons.login),
+                  ),
+                ),
+              );
+            },
+          ),
+          AnimatedBuilder(
+            animation: _fabController,
+            builder: (context, child) {
+              final offset = Offset(-60 * _fabController.value, -60 * _fabController.value);
+              return Transform.translate(
+                offset: offset,
+                child: Opacity(
+                  opacity: _fabController.value,
+                  child: FloatingActionButton.extended(
+                    onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
+                            ),
+                    label: const Text('Forgot Password?'),
+                    icon: const Icon(Icons.lock_reset),
+                  ),
+                ),
+              );
+            },
+          ),
+          AnimatedBuilder(
+            animation: _fabController,
+            builder: (context, child) {
+              final offset = Offset(-80 * _fabController.value, 0);
+              return Transform.translate(
+                offset: offset,
+                child: Opacity(
+                  opacity: _fabController.value,
+                  child: FloatingActionButton.extended(
+                    onPressed: _signInWithGoogle,
+                    label: const Text('Login with Google'),
+                    icon: const Icon(Icons.g_mobiledata_rounded),
+                  ),
+                ),
+              );
+            },
+          ),
           FloatingActionButton(
             onPressed: () {
               setState(() {
@@ -311,73 +365,10 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
             },
             child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
           ),
-          // "Login" button
-          AnimatedBuilder(
-            animation: _fabController,
-            builder: (context, child) {
-              final offset = Offset(0, -80 * _fabController.value);
-              return Transform.translate(
-                offset: offset,
-                child: Opacity(
-                  opacity: _fabController.value,
-                  child: FloatingActionButton.extended(
-                    onPressed: _showAdditionalButtons
-                        ? () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const LoginScreen()),
-                            )
-                        : null,
-                    label: const Text('Login'),
-                    icon: const Icon(Icons.login),
-                  ),
-                ),
-              );
-            },
-          ),
-          // "Forgot Password?" button
-          AnimatedBuilder(
-            animation: _fabController,
-            builder: (context, child) {
-              final offset = Offset(-60 * _fabController.value, -60 * _fabController.value);
-              return Transform.translate(
-                offset: offset,
-                child: Opacity(
-                  opacity: _fabController.value,
-                  child: FloatingActionButton.extended(
-                    onPressed: _showAdditionalButtons
-                        ? () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
-                            )
-                        : null,
-                    label: const Text('Forgot Password?'),
-                    icon: const Icon(Icons.lock_reset),
-                  ),
-                ),
-              );
-            },
-          ),
-          // "Login with Google" button
-          AnimatedBuilder(
-            animation: _fabController,
-            builder: (context, child) {
-              final offset = Offset(-80 * _fabController.value, 0);
-              return Transform.translate(
-                offset: offset,
-                child: Opacity(
-                  opacity: _fabController.value,
-                  child: FloatingActionButton.extended(
-                    onPressed: _showAdditionalButtons ? _signInWithGoogle : null,
-                    label: const Text('Login with Google'),
-                    icon: const Icon(Icons.g_mobiledata_rounded),
-                  ),
-                ),
-              );
-            },
-          ),
         ],
       ),
     );
   }
-
 
   Color _getPasswordStrengthColor(String strength) {
     switch (strength) {

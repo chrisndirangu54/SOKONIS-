@@ -226,90 +226,169 @@ class LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin 
           ),
         ),
       ),
-      floatingActionButton: Stack(
-        alignment: Alignment.bottomRight,
-        children: [
-          // Main FAB (toggle button)
-          FloatingActionButton(
-            onPressed: () {
-              setState(() {
-                if (_showAdditionalButtons) {
-                  _fabController.reverse();
-                } else {
-                  _fabController.forward();
-                }
-                _showAdditionalButtons = !_showAdditionalButtons;
-              });
-            },
-            child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
+floatingActionButton: Stack(
+  alignment: Alignment.bottomRight,
+  children: [
+    // Register Button
+    AnimatedBuilder(
+      animation: _fabController,
+      builder: (context, child) {
+        final offset = Offset(0, -120 * _fabController.value);
+        return Transform.translate(
+          offset: offset,
+          child: Container(
+            child: Opacity(
+              opacity: _showAdditionalButtons ? _fabController.value : 0.0,
+              child: FloatingActionButton.extended(
+                onPressed: (_showAdditionalButtons && !_isLoading)
+                    ? () async {
+                        try {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                          );
+                          if (mounted) {
+                            _fabController.reverse();
+                            setState(() => _showAdditionalButtons = false);
+                          }
+                        } catch (e) {
+                          print('Register navigation error: $e');
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Navigation failed: $e')),
+                            );
+                          }
+                        }
+                      }
+                    : null,
+                label: const Text('Register'),
+                icon: const Icon(Icons.person_add),
+                backgroundColor: _showAdditionalButtons 
+                    ? null 
+                    : Colors.transparent,
+                foregroundColor: _showAdditionalButtons 
+                    ? null 
+                    : Colors.transparent,
+                elevation: _showAdditionalButtons ? 6.0 : 0.0,
+              ),
+            ),
           ),
-          // "Register" button
-          AnimatedBuilder(
-            animation: _fabController,
-            builder: (context, child) {
-              final offset = Offset(0, -120 * _fabController.value); // Moved higher
-              return Transform.translate(
-                offset: offset,
-                child: Opacity(
-                  opacity: _fabController.value,
-                  child: FloatingActionButton.extended(
-                    onPressed: _showAdditionalButtons
-                        ? () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                            )
-                        : null,
-                    label: const Text('Register'),
-                    icon: const Icon(Icons.person_add),
-                  ),
-                ),
-              );
-            },
+        );
+      },
+    ),
+    // Forgot Password Button
+    AnimatedBuilder(
+      animation: _fabController,
+      builder: (context, child) {
+        final offset = Offset(-60 * _fabController.value, -60 * _fabController.value);
+        return Transform.translate(
+          offset: offset,
+          child: Container(
+            child: Opacity(
+              opacity: _showAdditionalButtons ? _fabController.value : 0.0,
+              child: FloatingActionButton.extended(
+                onPressed: (_showAdditionalButtons && !_isLoading)
+                    ? () async {
+                        try {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
+                          );
+                          if (mounted) {
+                            _fabController.reverse();
+                            setState(() => _showAdditionalButtons = false);
+                          }
+                        } catch (e) {
+                          print('Password reset navigation error: $e');
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Navigation failed: $e')),
+                            );
+                          }
+                        }
+                      }
+                    : null,
+                label: const Text('Forgot Password?'),
+                icon: const Icon(Icons.lock_reset),
+                backgroundColor: _showAdditionalButtons 
+                    ? null 
+                    : Colors.transparent,
+                foregroundColor: _showAdditionalButtons 
+                    ? null 
+                    : Colors.transparent,
+                elevation: _showAdditionalButtons ? 6.0 : 0.0,
+              ),
+            ),
           ),
-          // "Forgot Password?" button
-          AnimatedBuilder(
-            animation: _fabController,
-            builder: (context, child) {
-              final offset = Offset(-60 * _fabController.value, -60 * _fabController.value);
-              return Transform.translate(
-                offset: offset,
-                child: Opacity(
-                  opacity: _fabController.value,
-                  child: FloatingActionButton.extended(
-                    onPressed: _showAdditionalButtons
-                        ? () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const PasswordRetrievalScreen()),
-                            )
-                        : null,
-                    label: const Text('Forgot Password?'),
-                    icon: const Icon(Icons.lock_reset),
-                  ),
-                ),
-              );
-            },
+        );
+      },
+    ),
+    // Google Sign-in Button
+    AnimatedBuilder(
+      animation: _fabController,
+      builder: (context, child) {
+        final offset = Offset(-80 * _fabController.value, 0);
+        return Transform.translate(
+          offset: offset,
+          child: Container(
+            child: Opacity(
+              opacity: _showAdditionalButtons ? _fabController.value : 0.0,
+              child: FloatingActionButton.extended(
+                onPressed: (_showAdditionalButtons && !_isLoading)
+                    ? () async {
+                        try {
+                          await _signInWithGoogle();
+                          if (mounted) {
+                            _fabController.reverse();
+                            setState(() => _showAdditionalButtons = false);
+                          }
+                        } catch (e) {
+                          print('Google sign-in error: $e');
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Google sign-in failed: $e')),
+                            );
+                          }
+                        }
+                      }
+                    : null,
+                label: const Text('Login with Google'),
+                icon: const Icon(Icons.g_mobiledata_rounded),
+                backgroundColor: _showAdditionalButtons 
+                    ? null 
+                    : Colors.transparent,
+                foregroundColor: _showAdditionalButtons 
+                    ? null 
+                    : Colors.transparent,
+                elevation: _showAdditionalButtons ? 6.0 : 0.0,
+              ),
+            ),
           ),
-          // "Login with Google" button
-          AnimatedBuilder(
-            animation: _fabController,
-            builder: (context, child) {
-              final offset = Offset(-80 * _fabController.value, 0);
-              return Transform.translate(
-                offset: offset,
-                child: Opacity(
-                  opacity: _fabController.value,
-                  child: FloatingActionButton.extended(
-                    onPressed: _showAdditionalButtons ? _signInWithGoogle : null,
-                    label: const Text('Login with Google'),
-                    icon: const Icon(Icons.g_mobiledata_rounded),
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+        );
+      },
+    ),
+    // Main FAB Toggle
+    Container(
+      child: FloatingActionButton(
+        onPressed: () {
+          if (mounted) {
+            setState(() {
+              if (_showAdditionalButtons) {
+                _fabController.reverse();
+              } else {
+                _fabController.forward();
+              }
+              _showAdditionalButtons = !_showAdditionalButtons;
+            });
+          }
+        },
+        child: Icon(_showAdditionalButtons ? Icons.close : Icons.more_vert),
       ),
+    ),
+  ],
+),
     );
   }
-
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);

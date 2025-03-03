@@ -98,7 +98,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
-    - assets/3d/
+    - assets/3d/apple.glb
 
   fonts:
     - family: Comfortaa

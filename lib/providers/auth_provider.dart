@@ -15,7 +15,7 @@ class AuthProvider with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     serverClientId:
-        '492372104602-vv5b5kf132har2bcn527tvt9i8hon6iu.apps.googleusercontent.com',
+        '492372104602-vv5b5kf132har2bcn527tvt9i8hon6iu.apps.googleusercontent.com', // Verify this matches Firebase
   );
 
   final UserProvider? userProvider;
@@ -24,10 +24,9 @@ class AuthProvider with ChangeNotifier {
   bool _isInitializing = true;
 
   AuthProvider(this.userProvider, this.productProvider) {
-    _initializeUser(); // Start initialization immediately
+    _initializeUser();
     _auth.authStateChanges().listen((auth.User? user) async {
-      await _initializationCompleter
-          .future; // Wait for initialization to complete
+      await _initializationCompleter.future;
       if (user != null && (_user == null || _user?.uid != user.uid)) {
         try {
           await _updateUserState(user.uid);
@@ -36,7 +35,7 @@ class AuthProvider with ChangeNotifier {
         }
       } else if (user == null) {
         _user = null;
-        userProvider!.updateUser(null); // Safely handle null user
+        userProvider!.updateUser(null);
         notifyListeners();
       }
       notifyListeners();
@@ -59,8 +58,8 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       _handleAuthError(e);
     } finally {
-      _isInitializing = false; // Mark initialization complete
-      _initializationCompleter.complete(); // Resolve the completer
+      _isInitializing = false;
+      _initializationCompleter.complete();
     }
   }
 
@@ -75,9 +74,8 @@ class AuthProvider with ChangeNotifier {
         await _firestore.collection('users').doc(uid).update({'token': token});
       }
     } catch (e) {
-      if (e is AuthException &&
-          e.message == 'User data not found in Firestore.') {
-        await logout(); // Logout if user data is missing
+      if (e is AuthException && e.message == 'User data not found in Firestore.') {
+        await logout();
       }
       _handleAuthError(e);
     }
@@ -85,20 +83,24 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> login(String email, String password) async {
     try {
-      final auth.UserCredential userCredential = await _auth
-          .signInWithEmailAndPassword(email: email, password: password);
+      final auth.UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
       await _updateUserState(userCredential.user?.uid ?? '');
     } catch (e) {
       _handleAuthError(e);
+      rethrow; // Propagate error to UI
     }
   }
 
   Future<void> register(
-      String email, String password, String name, String contact,
-      [String? referralCode]) async {
+      String email, String password, String name, String contact, [String? referralCode]) async {
     try {
-      final auth.UserCredential userCredential = await _auth
-          .createUserWithEmailAndPassword(email: email, password: password);
+      final auth.UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
       final auth.User? newUser = userCredential.user;
 
       if (newUser != null) {
@@ -120,33 +122,44 @@ class AuthProvider with ChangeNotifier {
       }
     } catch (e) {
       _handleAuthError(e);
+      rethrow;
     }
   }
 
   Future<void> signInWithGoogle(String? referralCode) async {
     try {
-      await _googleSignIn.signOut(); // Ensure fresh sign-in
+      // Sign out from Google to ensure a fresh sign-in
+      await _googleSignIn.signOut();
+      print('Google Sign-In: Starting sign-in process...');
+
+      // Prompt user to sign in
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
+        print('Google Sign-In: User cancelled the sign-in process.');
         throw AuthException('Google Sign-In was cancelled by the user.');
       }
+      print('Google Sign-In: User signed in: ${googleUser.email}');
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+      // Get authentication details
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      print('Google Sign-In: Access Token: ${googleAuth.accessToken}');
+      print('Google Sign-In: ID Token: ${googleAuth.idToken}');
 
+      // Create Firebase credential
       final auth.AuthCredential credential = auth.GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final auth.UserCredential userCredential =
-          await _auth.signInWithCredential(credential);
+      // Sign in to Firebase
+      final auth.UserCredential userCredential = await _auth.signInWithCredential(credential);
       final auth.User? user = userCredential.user;
 
       if (user != null) {
-        final userDoc =
-            await _firestore.collection('users').doc(user.uid).get();
+        print('Google Sign-In: Firebase user signed in: ${user.uid}');
+        final userDoc = await _firestore.collection('users').doc(user.uid).get();
         if (!userDoc.exists) {
+          print('Google Sign-In: Creating new user document in Firestore...');
           await _firestore.collection('users').doc(user.uid).set({
             'email': user.email ?? 'No Email',
             'name': user.displayName ?? 'Unnamed User',
@@ -164,7 +177,9 @@ class AuthProvider with ChangeNotifier {
         throw AuthException('Google Sign-In failed. User is null.');
       }
     } catch (e) {
+      print('Google Sign-In error: $e');
       _handleAuthError(e);
+      rethrow; // Propagate error to UI
     }
   }
 
@@ -173,10 +188,11 @@ class AuthProvider with ChangeNotifier {
       await _auth.signOut();
       await _googleSignIn.signOut();
       _user = null;
-      userProvider!.updateUser(null); // Safely clear user data
+      userProvider!.updateUser(null);
       notifyListeners();
     } catch (e) {
       _handleAuthError(e);
+      rethrow;
     }
   }
 
@@ -191,8 +207,7 @@ class AuthProvider with ChangeNotifier {
         address: data['address'] ?? 'No Address',
         profilePictureUrl: data['profilePictureUrl'] ?? '',
         favoriteProductIds: List<String>.from(data['favoriteProductIds'] ?? []),
-        recentlyBoughtProductIds:
-            List<String>.from(data['recentlyBoughtProductIds'] ?? []),
+        recentlyBoughtProductIds: List<String>.from(data['recentlyBoughtProductIds'] ?? []),
         lastLoginDate: (data['lastLoginDate'] as Timestamp?)?.toDate(),
         id: data['id'] ?? '',
         contact: data['contact'] ?? 'No Contact',
@@ -206,20 +221,15 @@ class AuthProvider with ChangeNotifier {
 
   Future<String?> _fetchNotificationToken() async {
     try {
-      // Initialize Firebase Messaging instance
       final messaging = FirebaseMessaging.instance;
-
-      // Request permission for notifications (iOS requires this explicitly)
       NotificationSettings settings = await messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
 
-      // Check if permission is granted
       if (settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional) {
-        // Fetch the FCM token
         String? token = await messaging.getToken();
         if (token != null) {
           debugPrint('FCM Token fetched successfully: $token');
@@ -234,7 +244,7 @@ class AuthProvider with ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error fetching FCM token: $e');
-      return null; // Return null on any error to avoid breaking the auth flow
+      return null;
     }
   }
 
@@ -246,7 +256,7 @@ class AuthProvider with ChangeNotifier {
       errorMessage = 'Authentication Error: ${error.message}';
     }
     debugPrint(errorMessage);
-    // Optionally notify UI of errors (e.g., via a callback or state)
+    // Errors are now rethrown to be handled by callers
   }
 }
 
