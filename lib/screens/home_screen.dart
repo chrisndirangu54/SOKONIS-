@@ -60,7 +60,6 @@ class HomeScreenState extends State<HomeScreen> {
   List<Product> filteredProducts2 = [];
   // Define all possible tags here or load them dynamically
   final List<String> tags = [];
-  final List<Product> _genomicAlternatives = [];
   bool? isSearching = false;
   List<Product> nearbyUsersBought = [];
   List<NotificationModel>? notifications = [];
@@ -104,7 +103,6 @@ class HomeScreenState extends State<HomeScreen> {
   int? _currentIndex = 0;
   String? _dynamicJourney;
   String? _joke;
-  bool? _isLoading = false;
   Stream<Map<String, double?>?>? discountedPriceStream;
   Stream<double?>? discountedPriceStream2;
   // OpenAI API details
@@ -124,6 +122,8 @@ class HomeScreenState extends State<HomeScreen> {
   Timer? _hintTimer;
 
   static var _searchDebouncer;
+  
+  var selectedSubcategories;
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -155,7 +155,7 @@ class HomeScreenState extends State<HomeScreen> {
           widget.product!.discountedPriceStream2?.listen(
         (price) {
           setState(() {
-            discountedPriceStream2 = price as Stream<double?>?;
+            discountedPrice = price;
           });
         },
       );
@@ -178,8 +178,8 @@ class HomeScreenState extends State<HomeScreen> {
       stream.listen((newPrice) {
         setState(() {
           // Extract the value for the 'variety' key
-          discountedPriceStream =
-              newPrice?['variety'] as Stream<Map<String, double?>?>?;
+          discountedPrice =
+              newPrice?['variety'];
         });
       });
     }
@@ -262,12 +262,11 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget buildLists(BuildContext context) {
-    Map<String, List<Product>> categoryProducts =
-        groupBy(products, (Product p) => p.category);
+
 
     return selectedCategory == null
-        ? _buildCategorySelector(categoryProducts)
-        : _buildProductGrid(selectedCategory, categoryProducts);
+        ? _buildCategorySelector()
+        : _buildProductGrid();
   }
 
   String _getGreeting() {
@@ -422,129 +421,83 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _filterProducts() {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
+void _filterProducts() {
+  String query = searchController.text.toLowerCase();
 
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      String query = searchController.text.toLowerCase();
+  if (query.isNotEmpty) {
+    setState(() {
+      // Extract unique tags, subcategories, and categories
+      List<String> allTags = products.expand((p) => p.tags).toSet().toList();
+      List<String> allSubcategories = products
+          .expand((p) => p.categories)
+          .expand((c) => c.subcategories.map((s) => s.name))
+          .toSet()
+          .toList();
+      List<String> allCategories = products.expand((p) => p.categories.map((c) => c.name)).toSet().toList();
 
-      if (query.isNotEmpty) {
-        setState(() {
-          // Create FuzzyOptions for Product, Offer, Category, and SubCategory
-          final fuzzyOptionsForProducts =
-              FuzzyOptions<Product>(shouldSort: true);
-          final fuzzyOptionsForOffers = FuzzyOptions<Offer>(shouldSort: true);
-          final fuzzyOptionsForCategories =
-              FuzzyOptions<String>(shouldSort: true);
-          final fuzzyOptionsFortags = FuzzyOptions<String>(shouldSort: true);
+      // Define fuzzy search options
+      final fuzzyOptions = FuzzyOptions<String>(shouldSort: true);
 
-          // Create Fuzzy objects for products, offers, categories, and tags
-          final fuzzyProducts = Fuzzy<Product>(
-            products,
-            options: FuzzyOptions(
-              keys: [
-                WeightedKey(
-                  name: 'name',
-                  weight: 0.7,
-                  getter: (p) => p.name,
-                ),
-                WeightedKey(
-                  name: 'varieties',
-                  weight: 0.3,
-                  getter: (p) => p.varieties.map((v) => v.name).join(' ') ?? '',
-                ),
-              ],
-            ),
-          );
-          final fuzzyOffers =
-              Fuzzy<Offer>(offers, options: fuzzyOptionsForOffers);
-          final fuzzyCategories =
-              Fuzzy<String>(categories, options: fuzzyOptionsForCategories);
-          final fuzzytags = Fuzzy<String>(tags, options: fuzzyOptionsFortags);
+      // Create fuzzy search objects
+      final fuzzyTags = Fuzzy<String>(allTags, options: fuzzyOptions);
+      final fuzzySubcategories = Fuzzy<String>(allSubcategories, options: fuzzyOptions);
+      final fuzzyCategories = Fuzzy<String>(allCategories, options: fuzzyOptions);
 
-          // Similarity check on products (direct name/variety matching)
-          List<Product> similarityResults = products
-              .where((product) =>
-                  product.name.similarityTo(query) > 0.5 ||
-                  product.varieties
-                      .any((variety) => variety.name.similarityTo(query) > 0.5))
-              .toList();
+      // Perform fuzzy searches
+      List<String> matchingTags = fuzzyTags.search(query).map((result) => result.item).toList();
+      List<String> matchingSubcategories = fuzzySubcategories.search(query).map((result) => result.item).toList();
+      List<String> categoryResults = fuzzyCategories.search(query).map((result) => result.item).toList();
 
-          // Fuzzy matching on products (weighted multi-field search)
-          List<Product> fuzzyProductResults =
-              fuzzyProducts.search(query).map((result) => result.item).toList();
+      // Filter products by tags
+      List<Product> productsFromTags = products.where((product) {
+        return product.tags.any((tag) => matchingTags.contains(tag));
+      }).toList();
 
-          // Use fuzzy matching to filter offers based on offer title
-          List<Offer> offerResults =
-              fuzzyOffers.search(query).map((result) => result.item).toList();
-
-          // Extract products based on offer IDs
-          List<Product> productsFromOffers = offerResults.expand((offer) {
-            return products
-                .where((product) => product.id == offer.productId)
-                .toList();
-          }).toList();
-
-          // Use fuzzy matching to filter categories based on category name
-          List<String> categoryResults = fuzzyCategories
-              .search(query)
-              .map((result) => result.item)
-              .toList();
-
-          // Map categories from product.categories for filtering
-          List<Product> productsFromCategories =
-              categoryResults.expand((category) {
-            return products
-                .where((product) => product.category == category)
-                .toList();
-          }).toList();
-
-          // Use fuzzy matching to filter tags based on subcategory name
-          List<String> subCategoryResults =
-              fuzzytags.search(query).map((result) => result.item).toList();
-
-          // Map tags from product.subCategory for filtering
-          List<Product> productsFromtags =
-              subCategoryResults.expand((subCategory) {
-            return products
-                .where((product) => product.tags == subCategory)
-                .toList();
-          }).toList();
-
-          // Combine all results and remove duplicates using a Set
-          filteredProducts = [
-            ...similarityResults,
-            ...fuzzyProductResults,
-            ...productsFromOffers,
-            ...productsFromCategories,
-            ...productsFromtags,
-          ]
-              .toSet()
-              .toList(); // toSet() removes duplicates based on Product equality
-
-          // Update searchSuggestions with products, offer titles, category names, and subcategory names
-          searchSuggestions = [
-            ...filteredProducts.map((product) => product.name),
-            ...filteredProducts.expand((p) => p.varieties.map((v) => v.name)),
-            ...offerResults.map((offer) => offer.title),
-            ...categoryResults,
-            ...subCategoryResults,
-          ]
-              .toSet()
-              .toList(); // toSet() removes duplicates based on Product equality
-
-          if (!_hasInitialSuggestions) {
-            _hasInitialSuggestions = true;
-          }
+      // Filter products by subcategories
+      List<Product> productsFromSubcategories = products.where((product) {
+        return product.categories.any((category) {
+          return category.subcategories.any((subcategory) {
+            return matchingSubcategories.contains(subcategory.name);
+          });
         });
-      } else {
-        setState(() {
-          searchSuggestions = [];
-          filteredProducts = []; // Clear filtered products if query is empty
-        });
-      }
+      }).toList();
+
+      // Filter products by categories
+      List<Product> productsFromCategories = products.where((product) {
+        return product.categories.any((category) => categoryResults.contains(category.name));
+      }).toList();
+
+      // Add similarity check for product names and varieties
+      List<Product> similarityResults = products.where((product) {
+        bool nameMatch = product.name.similarityTo(query) > 0.5;
+        bool varietyMatch = product.varieties.any((variety) => variety.name.similarityTo(query) > 0.5);
+        return nameMatch || varietyMatch;
+      }).toList();
+
+      // Combine all filtered results, removing duplicates
+      filteredProducts = [
+        ...productsFromCategories,
+        ...productsFromSubcategories,
+        ...productsFromTags,
+        ...similarityResults,
+      ].toSet().toList();
+
+      // Update search suggestions
+      searchSuggestions = [
+        ...matchingTags,
+        ...matchingSubcategories,
+        ...categoryResults,
+        ...similarityResults.map((p) => p.name),
+        ...similarityResults.expand((p) => p.varieties.map((v) => v.name)),
+      ].toSet().toList();
+    });
+  } else {
+    setState(() {
+      filteredProducts = [];
+      searchSuggestions = [];
     });
   }
+}
 
   // Helper method to search in both product names and varieties
 
@@ -630,83 +583,186 @@ class HomeScreenState extends State<HomeScreen> {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
-
-  List<Product> _applyFiltersAndSort(List<Product>? products) {
-    List<Product>? filteredProducts2 = products!.where((Product? product) {
-      // Filter by price
-      if (product!.basePrice < minPrice! || product.basePrice > maxPrice!) {
-        return false;
-      }
-      // Filter by subcategory
-      if (selectedtags.isNotEmpty &&
-          !product.tags.any((subcat) => selectedtags.contains(subcat))) {
-        return false;
-      }
-
-      return true;
-    }).toList();
-
-    // Apply sorting
-    switch (sortBy) {
-      case 'priceLow':
-        filteredProducts.sort((a, b) => a.basePrice.compareTo(b.basePrice));
-        break;
-      case 'priceHigh':
-        filteredProducts.sort((a, b) => b.basePrice.compareTo(a.basePrice));
-        break;
-      // Add more sorting options here if needed
-      default:
-        // No sorting applied
-        break;
-    }
-
-    return filteredProducts2;
+  // Category Selection UI
+  Widget _buildCategorySelector() {
+    Set<String> categories = products.expand((p) => p.categories.map((c) => c.name)).toSet();
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10.0,
+        mainAxisSpacing: 10.0,
+        childAspectRatio: 3,
+      ),
+      itemCount: categories.length,
+      itemBuilder: (context, index) {
+        String category = categories.elementAt(index);
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              selectedCategory = category;
+              selectedSubcategories.clear(); // Reset subcategories when category changes
+            });
+          },
+          child: Card(child: Center(child: Text(category, style: const TextStyle(fontSize: 18)))),
+        );
+      },
+    );
   }
 
-  // Widget to display categories as selectable options
-  Widget _buildCategorySelector(Map<String, List<Product>>? categoryProducts) {
-    Map<String, List<Product>> categoryProducts =
-        groupBy(products, (Product p) => p.category);
-
-    List<String> categories = categoryProducts.keys.toList();
-
-    return categories.isEmpty
-        ? _buildEmptyState()
-        : GridView.builder(
+  // Product Grid UI with Filters
+  Widget _buildProductGrid() {
+    List<Product> productsToShow = _applyFiltersAndSort(products);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Text(selectedCategory!, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  setState(() {
+                    selectedCategory = null;
+                    selectedSubcategories.clear();
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+        _buildFilterAndSortControls(),
+        Expanded(
+          child: GridView.builder(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               crossAxisSpacing: 10.0,
               mainAxisSpacing: 10.0,
-              childAspectRatio: 3,
+              childAspectRatio: 0.75,
             ),
-            itemCount: categories.length,
-            itemBuilder: (context, index) {
-              String category = categories[index];
-              return GestureDetector(
-                onTap: () => setState(() => selectedCategory = category),
-                child: Card(
-                  elevation: 4,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Text(
-                        category,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
+            itemCount: productsToShow.length,
+            itemBuilder: (context, index) => Card(
+              child: Column(
+                children: [
+                  Image.network(productsToShow[index].pictureUrl, height: 100, fit: BoxFit.cover),
+                  Text(productsToShow[index].name),
+                  Text('\$${productsToShow[index].basePrice.toStringAsFixed(2)}'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
+
+  // Filter and Sort Controls (including Subcategory Selector)
+  Widget _buildFilterAndSortControls() {
+    // Fetch subcategories for the selected category
+    List<String> subcategories = products
+        .where((p) => p.categories.any((c) => c.name == selectedCategory))
+        .expand((p) => p.categories
+            .firstWhere((c) => c.name == selectedCategory)
+            .subcategories
+            .map((s) => s.name))
+        .toSet()
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Subcategory Selector
+        if (subcategories.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Text("Subcategories", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Wrap(
+            spacing: 8.0,
+            children: subcategories.map((subcategory) => ChoiceChip(
+              label: Text(subcategory),
+              selected: selectedSubcategories.contains(subcategory),
+              onSelected: (selected) {
+                setState(() {
+                  if (selected) {
+                    selectedSubcategories.add(subcategory);
+                  } else {
+                    selectedSubcategories.remove(subcategory);
+                  }
+                });
+              },
+            )).toList(),
+          ),
+        ],
+        // Price Filter
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8.0),
+          child: Text("Price Range", style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        RangeSlider(
+          values: RangeValues(minPrice!, maxPrice!),
+          min: 0.0,
+          max: 1000.0,
+          onChanged: (values) {
+            setState(() {
+              minPrice = values.start;
+              maxPrice = values.end;
+            });
+          },
+        ),
+        Text('Price: \$${minPrice!.toStringAsFixed(2)} - \$${maxPrice!.toStringAsFixed(2)}'),
+        // Sort Dropdown
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8.0),
+          child: Text("Sort By", style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        DropdownButton<String>(
+          value: sortBy,
+          onChanged: (newValue) {
+            setState(() {
+              sortBy = newValue!;
+            });
+          },
+          items: ['default', 'priceLow', 'priceHigh'].map((value) => DropdownMenuItem(
+            value: value,
+            child: Text(
+              value == 'default'
+                  ? 'Default'
+                  : value == 'priceLow'
+                      ? 'Price: Low to High'
+                      : 'Price: High to Low',
+            ),
+          )).toList(),
+        ),
+      ],
+    );
+  }
+
+  // Filtering and Sorting Logic
+  List<Product> _applyFiltersAndSort(List<Product> products) {
+    return products.where((product) {
+      // Filter by category
+      if (!product.categories.any((c) => c.name == selectedCategory)) return false;
+      // Filter by price
+      if (product.basePrice < minPrice! || product.basePrice > maxPrice!) return false;
+      // Filter by subcategories if any are selected
+      if (selectedSubcategories.isNotEmpty) {
+        Category category = product.categories.firstWhere((c) => c.name == selectedCategory!);
+        if (!category.subcategories.any((s) => selectedSubcategories.contains(s.name))) return false;
+      }
+      return true;
+    }).toList()
+      ..sort((a, b) => sortBy == 'priceLow'
+          ? a.basePrice.compareTo(b.basePrice)
+          : sortBy == 'priceHigh'
+              ? b.basePrice.compareTo(a.basePrice)
+              : 0);
+  }
+
 
   Future<void> fetchHealthBenefits(Product? product) async {
     setState(() {
-      _isLoading = true;
     });
 
     final response = await http.post(
@@ -731,19 +787,16 @@ class HomeScreenState extends State<HomeScreen> {
       final data = jsonDecode(response.body);
       setState(() {
         _healthBenefits = data['choices'][0]['message']['content'];
-        _isLoading = false;
       });
     } else {
       setState(() {
         _healthBenefits = "Failed to fetch health benefits. Try again!";
-        _isLoading = false;
       });
     }
   }
 
   Future<void> fetchJoke(Product? product) async {
     setState(() {
-      _isLoading = true;
     });
 
     final response = await http.post(
@@ -768,12 +821,10 @@ class HomeScreenState extends State<HomeScreen> {
       final data = jsonDecode(response.body);
       setState(() {
         _joke = data['choices'][0]['message']['content'];
-        _isLoading = false;
       });
     } else {
       setState(() {
         _joke = "Failed to fetch a joke. Try again!";
-        _isLoading = false;
       });
     }
   }
@@ -781,7 +832,6 @@ class HomeScreenState extends State<HomeScreen> {
   Future<void> fetchProductJourney(Product? product) async {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(() {
-        _isLoading = true;
       });
     });
 
@@ -807,12 +857,10 @@ class HomeScreenState extends State<HomeScreen> {
       final data = jsonDecode(response.body);
       setState(() {
         _dynamicJourney = data['choices'][0]['message']['content'];
-        _isLoading = false;
       });
     } else {
       setState(() {
         _dynamicJourney = "Failed to fetch product journey. Try again!";
-        _isLoading = false;
       });
     }
   }
@@ -889,8 +937,7 @@ class HomeScreenState extends State<HomeScreen> {
                 pictureUrl: 'assets/images/basket.png',
                 basePrice: 0.0,
                 description: '',
-                category: '',
-                categoryImageUrl: '',
+                categories: [],
                 units: '',
                 discountedPrice: 0.0,
               )
@@ -1024,8 +1071,7 @@ class HomeScreenState extends State<HomeScreen> {
         pictureUrl: 'assets/images/basket.png',
         basePrice: 0.0,
         description: '',
-        category: '',
-        categoryImageUrl: '',
+        categories: [],
         units: '',
         discountedPrice: 0.0,
       );
@@ -1254,130 +1300,6 @@ class HomeScreenState extends State<HomeScreen> {
     print('Requesting notification for product: $productId');
   }
 
-  Widget _buildProductGrid(
-      String? currentCategory, Map<String, List<Product>> categoryProducts) {
-    Map<String, List<Product>> categoryProducts =
-        groupBy(products, (Product p) => p.category);
-
-    List<Product> productsToShow =
-        currentCategory != null ? categoryProducts[currentCategory] ?? [] : [];
-
-    // Apply filters and sort
-    productsToShow = _applyFiltersAndSort(productsToShow);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (currentCategory != null)
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
-            child: Row(
-              children: [
-                Text(
-                  currentCategory,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => setState(() => selectedCategory = null),
-                ),
-                const Spacer(),
-                Column(
-                  children: [
-                    if (productsToShow.isNotEmpty)
-                      _buildFilterAndSortControls(),
-                  ],
-                )
-              ],
-            ),
-          ),
-        if (productsToShow.isEmpty)
-          _buildEmptyState()
-        else
-          Expanded(
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 10.0,
-                mainAxisSpacing: 10.0,
-                childAspectRatio: 0.75,
-              ),
-              itemCount: productsToShow.length,
-              itemBuilder: (context, index) =>
-                  _buildProductCard(productsToShow[index], isGrid: true),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildFilterAndSortControls() {
-    return Column(
-      children: [
-        // Price Range Slider
-        RangeSlider(
-          values: RangeValues(minPrice!, maxPrice!),
-          min: 0.0,
-          max: 1000.0, // Adjust max price based on your product range
-          onChanged: (RangeValues values) {
-            setState(() {
-              minPrice = values.start;
-              maxPrice = values.end;
-            });
-          },
-        ),
-        Text(
-            'Price: \$ ${minPrice!.toStringAsFixed(2)} - \$ ${maxPrice!.toStringAsFixed(2)}'),
-
-        // Subcategory Filter (assuming tags are predefined)
-        Wrap(
-          children: List.generate(
-            tags.length,
-            (index) => ChoiceChip(
-              label: Text(tags[index]),
-              selected: selectedtags.contains(tags[index]),
-              onSelected: (bool selected) {
-                setState(() {
-                  if (selected) {
-                    selectedtags.add(tags[index]);
-                  } else {
-                    selectedtags.remove(tags[index]);
-                  }
-                });
-              },
-            ),
-          ),
-        ),
-
-        // Sorting Dropdown
-        DropdownButton<String>(
-          value: sortBy,
-          onChanged: (String? newValue) {
-            setState(() {
-              sortBy = newValue!;
-            });
-          },
-          items: <String>['default', 'priceLow', 'priceHigh']
-              .map<DropdownMenuItem<String>>((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value == 'default'
-                  ? 'Default'
-                  : value == 'priceLow'
-                      ? 'Price: Low to High'
-                      : 'Price: High to Low'),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
   Widget _buildHorizontalProductList(List<Product> products) {
     return products.isEmpty
         ? _buildEmptyState()
@@ -1409,11 +1331,13 @@ class HomeScreenState extends State<HomeScreen> {
         ? product.pictureUrl
         : 'assets/images/basket.png';
     final productName = product.name.isNotEmpty ? product.name : 'Mystery Item';
-    final productCategory = product.category;
+    final productCategory = product.categories.isNotEmpty
+        ? product.categories.first.name
+        : 'General';
     final productReviewCount = product.reviewCount;
     final productUnits = product.units;
     final productPrice = product.discountedPriceStream2 != null
-        ? '\$${product.discountedPriceStream2}'
+        ? '\$${product.discountedPrice}'
         : 'Discover';
     double? originalPrice =
         product.basePrice; // Assuming you have an original price
@@ -1426,9 +1350,9 @@ class HomeScreenState extends State<HomeScreen> {
     // Check variety's discounted price first
     if (product.variety != null &&
         product.variety!.discountedPriceStream != null) {
-      discountedPrice = product.variety!.discountedPriceStream as double?;
+      discountedPrice = product.variety!.discountedPrice;
     } else if (product.discountedPriceStream2 != null) {
-      discountedPrice = product.discountedPriceStream2 as double?;
+      discountedPrice = product.discountedPrice as double?;
     }
 
     if (discountedPrice != null && originalPrice > discountedPrice) {
@@ -1719,8 +1643,8 @@ class HomeScreenState extends State<HomeScreen> {
                                   ),
                                 Text(
                                   selectedVariety != null &&
-                                          selectedVariety?.price != null
-                                      ? '\$${selectedVariety!.price}'
+                                          selectedVariety?.discountedPrice != null
+                                      ? '\$${selectedVariety!.discountedPrice}'
                                       : productPrice,
                                   style: TextStyle(
                                       color: Colors.orange.withOpacity(0.75),
@@ -1828,7 +1752,7 @@ class HomeScreenState extends State<HomeScreen> {
                                                         selectedVariety!
                                                                 .discountedPriceStream! !=
                                                             0.0
-                                                    ? ' \$${selectedVariety!.discountedPriceStream?.toStringAsFixed(2) ?? 'N/A'}'
+                                                    ? ' \$${selectedVariety!.discountedPrice?.toStringAsFixed(2) ?? 'N/A'}'
                                                     : selectedVariety!.price !=
                                                             null
                                                         ? ' \$${selectedVariety!.price.toStringAsFixed(2)}'
@@ -2211,15 +2135,7 @@ class HomeScreenState extends State<HomeScreen> {
       seasonallyAvailable,
     );
 
-    // Group products by category
-    Map<String, List<Product>>? categoryProducts = {};
-    for (var product in products) {
-      // Use all products, not filtered ones, for categories
-      if (!categoryProducts.containsKey(product.category)) {
-        categoryProducts[product.category] = [];
-      }
-      categoryProducts[product.category]!.add(product);
-    }
+
 
     return Scaffold(
       body: NestedScrollView(
@@ -2896,10 +2812,9 @@ class HomeScreenState extends State<HomeScreen> {
                   _buildHorizontalProductList(favorites),
 
                   _buildSectionTitle('Products by Category'),
-                  for (String category in categoryProducts.keys) ...[
+                  for (String category in categoryProducts!.keys) ...[
                     _buildSectionTitle(category),
-                    _buildCategorySelector(categoryProducts[category]!
-                        as Map<String, List<Product>>),
+                    _buildCategorySelector(),
                   ],
                 ],
               ],

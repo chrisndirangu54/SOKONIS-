@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:grocerry/models/product.dart';
@@ -38,6 +40,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   late int quantity;
   final HealthConditionService healthConditionService =
       HealthConditionService();
+  late StreamSubscription<double?>? _discountedPriceSubscription;
 
   @override
   void initState() {
@@ -48,17 +51,27 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     for (var variety in product!.varieties) {
       _listenToDiscountedPriceStream(variety.discountedPriceStream);
     }
+    // Check if widget.product is not null before accessing its properties
+    if (product != null) {
+      _discountedPriceSubscription = product!.discountedPriceStream2?.listen(
+        (price) {
+          setState(() {
+            discountedPrice = price;
+          });
+        },
+      );
+    }
   }
 
   List<String> mealRecommendations = [];
-  double? _currentDiscountedPrice;
+  double? discountedPrice;
 
   void _listenToDiscountedPriceStream(Stream<Map<String, double?>?>? stream) {
     if (stream != null) {
       stream.listen((newPrice) {
         setState(() {
           // Extract the value for the 'variety' key
-          _currentDiscountedPrice = newPrice?['variety'];
+          discountedPrice = newPrice?['variety'];
         });
       });
     }
@@ -930,7 +943,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
                                                   : null),
                                           title: Text(product.name),
                                           subtitle: Text(
-                                              'Price: \$${selectedVariety?.discountedPriceStream != null ? selectedVariety!.discountedPriceStream!.firstWhere((value) => value != null, orElse: () => null).then((map) => map?.values.first?.toStringAsFixed(2) ?? groceryItem!.product.basePrice.toStringAsFixed(2)) : groceryItem!.product.basePrice.toStringAsFixed(2)}'),
+                                              'Price: \$${selectedVariety?.discountedPriceStream != null ? selectedVariety!.discountedPrice!.firstWhere((value) => value != null, orElse: () => null).then((map) => map?.values.first?.toStringAsFixed(2) ?? groceryItem!.product.discountedPrice.toStringAsFixed(2)) : groceryItem!.product.basePrice.toStringAsFixed(2)}'),
                                           children: [
                                             if (groceryItem!
                                                 .product.varieties.isNotEmpty)
@@ -1032,7 +1045,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
                                                                             ),
                                                                           TextSpan(
                                                                             text: variety.discountedPriceStream != null && variety.discountedPriceStream! != 0.0
-                                                                                ? ' \$${variety.discountedPriceStream?.toStringAsFixed(2) ?? 'N/A'}'
+                                                                                ? ' \$${variety.discountedPrice?.toStringAsFixed(2) ?? 'N/A'}'
                                                                                 : variety.price != null
                                                                                     ? ' \$${variety.price.toStringAsFixed(2)}'
                                                                                     : ' Price not available',
@@ -1185,6 +1198,11 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
           ),
         ));
   }
+}
+
+extension on double {
+  firstWhere(bool Function(dynamic value) param0,
+      {required Null Function() orElse}) {}
 }
 
 extension StreamMapExtension on Stream<Map<String, double?>?> {

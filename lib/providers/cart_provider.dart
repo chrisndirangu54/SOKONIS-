@@ -824,7 +824,7 @@ Future<void> calculateDeliveryFee(LatLng origin, LatLng destination) async {
     // Extract product IDs and categories from the cart items
     final cartProductIds = cartItems.map((item) => item.product.id).toList();
     final cartProductCategories =
-        cartItems.map((item) => item.product.category).toList();
+        cartItems.map((item) => item.product.categories).toList();
 
     for (var doc in couponSnapshot.docs) {
       final couponData = doc.data() as Map<String, dynamic>;

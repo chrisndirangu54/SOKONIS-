@@ -126,11 +126,9 @@ class Product {
 
   final double basePrice;
   final String description;
-  late final String category;
+  final List<Category> categories; // Updated to List<Category>
   final String units;
-  final String categoryImageUrl;
   final List<String> tags;
-  final List<String> subcategoryImageUrls;
   final List<Variety> varieties;
   final String pictureUrl;
   final DateTime? lastPurchaseDate;
@@ -174,11 +172,9 @@ class Product {
     required this.name,
     required this.basePrice,
     required this.description,
-    required this.category,
-    required this.categoryImageUrl,
+    required this.categories,
     required this.units,
     this.tags = const [],
-    this.subcategoryImageUrls = const [],
     this.varieties = const [],
     required this.pictureUrl,
     this.lastPurchaseDate,
@@ -258,8 +254,10 @@ class Product {
 
     // Handle lists safely
     List<String> tags = List<String>.from(data['tags'] ?? []);
-    List<String> subcategoryImageUrls =
-        List<String>.from(data['subcategoryImageUrls'] ?? []);
+    List<Category> categories = (data['categories'] as List<Category>?)
+            ?.map((v) => Category.fromMap(v as Map<String, Category>))
+            .toList() ??
+        [];
     List<Variety> varieties = (data['varieties'] as List<Variety>?)
             ?.map((v) => Variety.fromMap(v as Map<String, Variety>))
             .toList() ??
@@ -275,10 +273,8 @@ class Product {
       name: data['name'] as String? ?? 'Unknown Product',
       basePrice: basePrice,
       description: data['description'] as String? ?? '',
-      category: data['category'] as String? ?? '',
-      categoryImageUrl: data['categoryImageUrl'] as String? ?? '',
+      categories: categories,
       tags: tags,
-      subcategoryImageUrls: subcategoryImageUrls,
       varieties: varieties,
       pictureUrl: data['pictureUrl'] as String? ?? '',
       lastPurchaseDate: lastPurchaseDate,
@@ -352,8 +348,7 @@ class Product {
       name: '',
       basePrice: 0.0,
       description: '',
-      category: '',
-      categoryImageUrl: '',
+      categories: [],
       units: '',
       varieties: [],
       pictureUrl: '',
@@ -377,11 +372,9 @@ class Product {
       name: data['name'] ?? '',
       basePrice: data['basePrice'] ?? 0.0,
       description: data['description'] ?? '',
-      category: data['category'] ?? '',
-      categoryImageUrl: data['categoryImageUrl'] ?? '',
+      categories: 
+          List<Category>.from(data['subcategoryImageUrls'] ?? []),
       tags: List<String>.from(data['tags'] ?? []),
-      subcategoryImageUrls:
-          List<String>.from(data['subcategoryImageUrls'] ?? []),
       varieties: (data['varieties'] as List?)
               ?.map((v) => Variety.fromMap(v))
               .toList() ??
@@ -436,10 +429,9 @@ class Product {
       'name': name,
       'basePrice': basePrice,
       'description': description,
-      'category': category,
-      'categoryImageUrl': categoryImageUrl,
+      'category': categories.map((c) => c.toMap()).toList(),
+      'units': units,
       'tags': tags,
-      'subcategoryImageUrls': subcategoryImageUrls,
       'varieties': varieties.map((v) => v.toMap()).toList(),
       'pictureUrl': pictureUrl,
       'lastPurchaseDate': lastPurchaseDate?.toIso8601String(),
@@ -489,6 +481,63 @@ class Product {
   }
 
   copyWith({required Variety variety, required int quantity}) {}
+}
+
+// New Category class
+class Category {
+  final String name;
+  final String imageUrl;
+  final List<Subcategory> subcategories;
+
+  Category({
+    required this.name,
+    required this.imageUrl,
+    this.subcategories = const [],
+  });
+
+  factory Category.fromMap(Map<String, dynamic> map) {
+    return Category(
+      name: map['name'] as String? ?? '',
+      imageUrl: map['imageUrl'] as String? ?? '',
+      subcategories: (map['subcategories'] as List<dynamic>?)
+              ?.map((sub) => Subcategory.fromMap(sub as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'imageUrl': imageUrl,
+      'subcategories': subcategories.map((s) => s.toMap()).toList(),
+    };
+  }
+}
+
+// New Subcategory class
+class Subcategory {
+  final String name;
+  final String imageUrl;
+
+  Subcategory({
+    required this.name,
+    required this.imageUrl,
+  });
+
+  factory Subcategory.fromMap(Map<String, dynamic> map) {
+    return Subcategory(
+      name: map['name'] as String? ?? '',
+      imageUrl: map['imageUrl'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'imageUrl': imageUrl,
+    };
+  }
 }
 
 class Variety {

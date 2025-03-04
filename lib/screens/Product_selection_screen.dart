@@ -35,36 +35,26 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
     Navigator.pop(context, _selectedVarieties);
   }
 
-  void _askForSubscription(Product product) {
+  void _askForSubscription(Product product, List<Variety> varietiesToSubscribe) {
     final SubscriptionService subscriptionService = SubscriptionService();
-    final varietiesToSubscribe = List.from(_selectedVarieties); // Copy to iterate
+    final varieties = List.from(varietiesToSubscribe);
 
-    // Function to show dialog for the next variety
     void showNextVarietyDialog(int index) {
-      if (index >= varietiesToSubscribe.length) {
-        // All varieties processed, close the dialog sequence
+      if (index >= varieties.length) {
         Navigator.pop(context);
         return;
       }
 
-      final Variety variety = varietiesToSubscribe[index];
-      int selectedFrequency = 7; // Default weekly frequency
-      int selectedDay = DateTime.now().weekday; // Default to today’s weekday
+      final Variety variety = varieties[index];
+      int selectedFrequency = 7; // Default weekly
+      int selectedDay = DateTime.now().weekday; // Default to today
       int quantity = 1; // Default quantity
-      final availableFrequencies = [1, 7, 14, 30]; // Daily, weekly, bi-weekly, monthly
-      final weekDays = [
-        'Monday',
-        'Tuesday',
-        'Wednesday',
-        'Thursday',
-        'Friday',
-        'Saturday',
-        'Sunday'
-      ];
+      final availableFrequencies = [1, 7, 14, 30];
+      final weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
       showDialog(
         context: context,
-        barrierDismissible: false, // Prevent closing until all are processed
+        barrierDismissible: false,
         builder: (context) => StatefulBuilder(
           builder: (context, setState) => AlertDialog(
             title: Text('Subscribe to ${variety.name}?'),
@@ -72,8 +62,7 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('Set subscription details for ${variety.name}:'),
-                _buildFrequencyDropdown(
-                    selectedFrequency, availableFrequencies, setState),
+                _buildFrequencyDropdown(selectedFrequency, availableFrequencies, setState),
                 _buildDayDropdown(selectedDay, weekDays, setState),
                 _buildQuantityControlDialog(quantity, setState),
               ],
@@ -88,19 +77,19 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
                     quantity: quantity,
                     nextDelivery: nextDelivery,
                     frequency: selectedFrequency,
-                    price: variety.price, // Use variety-specific price
+                    price: variety.price,
                     variety: variety,
                   );
                   subscriptionService.addSubscription(subscription, context);
-                  Navigator.pop(context); // Close current dialog
-                  showNextVarietyDialog(index + 1); // Show next variety
+                  Navigator.pop(context);
+                  showNextVarietyDialog(index + 1);
                 },
                 child: const Text('Subscribe'),
               ),
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context); // Skip this variety
-                  showNextVarietyDialog(index + 1); // Move to next
+                  Navigator.pop(context);
+                  showNextVarietyDialog(index + 1);
                 },
                 child: const Text('Skip'),
               ),
@@ -110,19 +99,17 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
       );
     }
 
-    // Start with the first variety
-    if (varietiesToSubscribe.isNotEmpty) {
+    if (varieties.isNotEmpty) {
       showNextVarietyDialog(0);
     }
   }
 
-  // Helper methods remain unchanged
   DateTime _calculateNextDeliveryDate(int frequency, int selectedDay) {
     DateTime nextDelivery = DateTime.now();
     while (nextDelivery.weekday != selectedDay) {
       nextDelivery = nextDelivery.add(const Duration(days: 1));
     }
-    return nextDelivery.add(Duration(days: frequency)); // Add frequency for first delivery
+    return nextDelivery.add(Duration(days: frequency));
   }
 
   Widget _buildFrequencyDropdown(int selectedFrequency, List<int> availableFrequencies, StateSetter setState) {
@@ -195,7 +182,7 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.check),
-            onPressed: _confirmSelection,
+            onPressed: _selectedVarieties.isNotEmpty ? _confirmSelection : null,
           ),
         ],
       ),
@@ -214,25 +201,46 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
 
           final products = snapshot.data!;
 
-          Map<String, List<Product>> categoryProducts = {};
+          // Group products by category and subcategory
+          Map<String, Map<String, List<Product>>> categorySubcategoryProducts = {};
           for (var product in products) {
-            if (!categoryProducts.containsKey(product.category)) {
-              categoryProducts[product.category] = [];
+            for (var category in product.categories) {
+              categorySubcategoryProducts.putIfAbsent(category.name, () => {});
+              for (var subcategory in category.subcategories) {
+                categorySubcategoryProducts[category.name]!.putIfAbsent(subcategory.name, () => []).add(product);
+              }
+              if (category.subcategories.isEmpty) {
+                categorySubcategoryProducts[category.name]!.putIfAbsent('General', () => []).add(product);
+              }
             }
-            categoryProducts[product.category]!.add(product);
           }
 
           return ListView(
-            children: categoryProducts.entries.map((entry) {
-              String category = entry.key;
-              List<Product> categoryList = entry.value;
+            children: categorySubcategoryProducts.entries.map((categoryEntry) {
+              String categoryName = categoryEntry.key;
+              Map<String, List<Product>> subcategoryProducts = categoryEntry.value;
 
               return ExpansionTile(
-                title: Text(category),
-                children: categoryList.map((product) {
-                  return ProductTile(
-                    product: product,
-                    onSelected: _onVarietySelected,
+                title: Text(categoryName),
+                children: subcategoryProducts.entries.map((subcategoryEntry) {
+                  String subcategoryName = subcategoryEntry.key;
+                  List<Product> productList = subcategoryEntry.value;
+
+                  return ExpansionTile(
+                    title: Text(subcategoryName),
+                    children: productList.map((product) {
+                      return ProductTile(
+                        product: product,
+                        onSelected: _onVarietySelected,
+                        onSubscribe: () {
+                          // Filter selected varieties for this product
+                          final productVarieties = _selectedVarieties.where((v) => product.varieties.contains(v)).toList();
+                          if (productVarieties.isNotEmpty) {
+                            _askForSubscription(product, productVarieties);
+                          }
+                        },
+                      );
+                    }).toList(),
                   );
                 }).toList(),
               );
@@ -244,15 +252,16 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
   }
 }
 
-// ProductTile and VarietyTile remain unchanged
 class ProductTile extends StatelessWidget {
   final Product product;
   final Function(Variety, bool) onSelected;
+  final VoidCallback onSubscribe;
 
   const ProductTile({
     super.key,
     required this.product,
     required this.onSelected,
+    required this.onSubscribe,
   });
 
   @override
@@ -265,9 +274,14 @@ class ProductTile extends StatelessWidget {
           for (var variety in product.varieties)
             VarietyTile(
               variety: variety,
+              product: product,
               onSelected: (isSelected) => onSelected(variety, isSelected),
             ),
         ],
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.subscriptions),
+        onPressed: onSubscribe,
       ),
     );
   }
@@ -275,11 +289,13 @@ class ProductTile extends StatelessWidget {
 
 class VarietyTile extends StatefulWidget {
   final Variety variety;
+  final Product? product;
   final Function(bool) onSelected;
 
   const VarietyTile({
     super.key,
     required this.variety,
+    this.product,
     required this.onSelected,
   });
 
@@ -303,6 +319,7 @@ class VarietyTileState extends State<VarietyTile> {
         width: 50,
         height: 50,
         fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
       ),
       tileColor: _isSelected ? Colors.green[100] : null,
       onTap: () {

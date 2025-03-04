@@ -8,6 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:grocerry/models/offer.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/subscription_model.dart';
+import 'package:grocerry/models/user.dart';
 import 'package:grocerry/services/notification_service.dart';
 import 'package:grocerry/services/subscription_service.dart';
 import 'package:grocerry/utils.dart';
@@ -101,7 +102,7 @@ class ProductScreenState extends State<ProductScreen>
           widget.product!.discountedPriceStream2?.listen(
         (price) {
           setState(() {
-            discountedPriceStream2 = price as Stream<double?>?;
+            discountedPrice = price;
           });
         },
       );
@@ -139,8 +140,7 @@ class ProductScreenState extends State<ProductScreen>
       stream.listen((newPrice) {
         setState(() {
           // Extract the value for the 'variety' key
-          discountedPriceStream =
-              newPrice?['variety'] as Stream<Map<String, double?>?>?;
+          discountedPrice = newPrice?['variety'];
         });
       });
     }
@@ -260,7 +260,9 @@ class ProductScreenState extends State<ProductScreen>
         ? product.pictureUrl
         : 'assets/images/basket.png';
     final productName = product.name.isNotEmpty ? product.name : 'Mystery Item';
-    final productCategory = product.category;
+    final productCategory = product.categories.isNotEmpty
+        ? product.categories.first.name
+        : 'General'; // Assuming you have a category
     final productReviewCount = product.reviewCount;
     final productUnits = product.units;
     final productPrice = product.discountedPriceStream2 != null
@@ -447,16 +449,12 @@ class ProductScreenState extends State<ProductScreen>
     Function(Variety)? onVarietySelected; // New callback for selecting variety
     Function(int)? onQuantityChanged; // New callback for changing quantity
     int? initialQuantity = 1; // Initial quantity for the selector
-
+    User? user;
     onAddToCart() {
       // Assuming you have a CartProvider or similar for managing cart
       var notes;
       Provider.of<CartProvider>(context, listen: false).addItem(
-          product!,
-          Provider.of<UserProvider>(context, listen: false).user,
-          selectedVariety,
-          initialQuantity,
-          notes ?? '');
+          product!, user!, selectedVariety, initialQuantity, notes ?? '');
       // Optionally show a snackbar or update UI
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${product!.name} added to cart')),
@@ -575,8 +573,9 @@ class ProductScreenState extends State<ProductScreen>
                                   ),
                                 Text(
                                   selectedVariety != null &&
-                                          selectedVariety?.price != null
-                                      ? '\$${selectedVariety!.price}'
+                                          selectedVariety?.discountedPrice !=
+                                              null
+                                      ? '\$${selectedVariety!.discountedPrice}'
                                       : productPrice,
                                   style: TextStyle(
                                       color: Colors.orange.withOpacity(0.75),
@@ -684,7 +683,7 @@ class ProductScreenState extends State<ProductScreen>
                                                         selectedVariety!
                                                                 .discountedPriceStream! !=
                                                             0.0
-                                                    ? ' \$${selectedVariety!.discountedPriceStream?.toStringAsFixed(2) ?? 'N/A'}'
+                                                    ? ' \$${selectedVariety!.discountedPrice?.toStringAsFixed(2) ?? 'N/A'}'
                                                     : selectedVariety!.price !=
                                                             null
                                                         ? ' \$${selectedVariety!.price.toStringAsFixed(2)}'
@@ -1098,15 +1097,13 @@ class ProductScreenState extends State<ProductScreen>
             children: [
               const SizedBox(height: 30),
               Text(
-                product.category,
+                product.categories.isNotEmpty
+                    ? product.categories.first.name
+                    : 'General',
                 style: TextStyle(
                     fontSize: 20, color: mainColor, letterSpacing: 10),
               ),
-              Image.network(
-                product.categoryImageUrl,
-                height: 60,
-                width: 60,
-              ),
+
               const SizedBox(height: 10),
 
               // Product name
@@ -1827,12 +1824,12 @@ extension StreamMapExtension on Stream<Map<String, double?>?> {
 extension StreamDoubleExtension on Stream<double?>? {
   Future<String> toStringAsFixed(int digits) async {
     if (this == null) return 'N/A';
-    final values = await this!.map((value) => value?.toStringAsFixed(digits) ?? 'N/A').toList();
+    final values = await this!
+        .map((value) => value?.toStringAsFixed(digits) ?? 'N/A')
+        .toList();
     return values.join(', ');
   }
 }
-
-
 
 class IconDetail {
   IconDetail({this.image, required this.head, this.icon});

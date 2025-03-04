@@ -72,32 +72,28 @@ class OrderDetailsScreenState extends State<OrderDetailsScreen> {
     }
   }
 
-  // Function to calculate category percentages from items' products
-  Map<String, double> calculateCategoryPercentages(model.Order order) {
-    final categoryCounts = <String, int>{};
-    int totalProducts = 0;
+Map<String, double> calculateCategoryPercentages(model.Order order) {
+  final categoryCounts = <String, int>{};
+  int totalCategoryOccurrences = 0;
 
-    // Count how many products belong to each category
-    for (var product in order.items) {
-      final category =
-          product.product.category; // Assuming category is a String
-      if (categoryCounts.containsKey(category)) {
-        categoryCounts[category] = categoryCounts[category]! + 1;
-      } else {
-        categoryCounts[category] = 1;
-      }
-      totalProducts++;
+  // Count how many times each category appears across all products
+  for (var item in order.items) {
+    final product = item.product;
+    for (var category in product.categories) {
+      final categoryName = category.name;
+      categoryCounts[categoryName] = (categoryCounts[categoryName] ?? 0) + 1;
+      totalCategoryOccurrences++;
     }
-
-    // Convert category counts to percentages
-    final categoryPercentages = <String, double>{};
-    categoryCounts.forEach((category, count) {
-      categoryPercentages[category] = count / totalProducts;
-    });
-
-    return categoryPercentages;
   }
 
+  // Convert category counts to percentages
+  final categoryPercentages = <String, double>{};
+  categoryCounts.forEach((category, count) {
+    categoryPercentages[category] = (count / totalCategoryOccurrences) * 100;
+  });
+
+  return categoryPercentages;
+}
   // Load the user's budget from Firestore
   Future<void> _loadBudget() async {
     final user = FirebaseAuth.instance.currentUser;

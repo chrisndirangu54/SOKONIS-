@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:grocerry/models/product.dart';
 import 'package:grocerry/services/groupbuy_service.dart';
 import 'package:grocerry/services/product_service.dart';
 import 'package:grocerry/models/product.dart';
@@ -21,11 +22,11 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _basePriceController = TextEditingController();
-  final _categoryController = TextEditingController();
+  // final _categoryController = TextEditingController();
   final _unitsController = TextEditingController();
   final _categoryImageUrlController = TextEditingController();
   final _tagsController = TextEditingController();
-  final _subcategoryImageUrlsController = TextEditingController();
+  //final _subcategoryController = TextEditingController();
   final _pictureUrlController = TextEditingController();
   final _discountedPriceController = TextEditingController();
   final _complementaryProductIdsController = TextEditingController();
@@ -39,6 +40,9 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
   final _genomicAlternativesController = TextEditingController();
   // Variety fields
   final List<Map<String, TextEditingController>> _varietyControllers = [];
+  final List<Map<String, TextEditingController>> _categoryController = [];
+    final List<Map<String, TextEditingController>> _subcategoryController = [];
+
 
   bool _isFresh = false;
   bool _isLocallySourced = false;
@@ -85,12 +89,24 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
         _nameController.text = data?['name'] ?? '';
         _descriptionController.text = data?['description'] ?? '';
         _basePriceController.text = (data?['basePrice'] ?? 0.0).toString();
-        _categoryController.text = data?['category'] ?? '';
+        final categories = data?['categories'] as List<Category>? ?? [];
+        final subcategories = data?['subCategories'] as List<Subcategory>? ?? [];
+
+        _categoryController.clear();
+        for (var categoryData in categories) {
+          final category =
+              Category.fromMap(categoryData as Map<String, Category>);
+          _addCategoryField(name: category.name, imageUrl: category.imageUrl, subcategories: subcategories);
+        _subcategoryController.clear();
+        for (var subcategoryData in subcategories) {
+          final subcategory =
+              Subcategory.fromMap(subcategoryData as Map<String, Subcategory>);
+          _addSubcategoryField(name: subcategory.name, imageUrl: subcategory.imageUrl, );
+        }}
+
         _unitsController.text = data?['units'] ?? '';
-        _categoryImageUrlController.text = data?['categoryImageUrl'] ?? '';
         _tagsController.text = (data?['tags'] ?? []).join(', ');
-        _subcategoryImageUrlsController.text =
-            (data?['subcategoryImageUrls'] ?? []).join(', ');
+
         _pictureUrlController.text = data?['pictureUrl'] ?? '';
         _discountedPriceController.text =
             (data?['discountedPrice'] ?? 0.0).toString();
@@ -163,7 +179,35 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
       });
     });
   }
+  void _addCategoryField({
+    String? name,
+    String? imageUrl,
+    List<Subcategory>? subcategories, 
 
+  }) {
+    setState(() {
+      _categoryController.add({
+        'name': TextEditingController(text: name ?? ''),
+
+        'imageUrl': TextEditingController(text: imageUrl ?? ''),
+
+      });
+    });
+  }
+    void _addSubcategoryField({
+    String? name,
+    String? imageUrl,
+
+  }) {
+    setState(() {
+      _subcategoryController.add({
+        'name': TextEditingController(text: name ?? ''),
+
+        'imageUrl': TextEditingController(text: imageUrl ?? ''),
+
+      });
+    });
+  }
   Future<void> _pickAndUploadCSV() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -198,19 +242,21 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
                 'price': double.tryParse(vc['price']!.text) ?? 0.0,
                 'discountedPrice':
                     double.tryParse(vc['discountedPrice']!.text) ?? 0.0,
+
               })
           .toList();
+      final categories = _categoryController
+          .map((c) => {'name': c['name']!.text,
+                        'imageUrl': c['imageUrl']!.text,
+                        'subcategories': List<Subcategory>.from(c['subcategory']!.text as Iterable),}).toList();
 
       final productData = {
         'name': productName,
         'description': _descriptionController.text,
         'basePrice': double.tryParse(_basePriceController.text) ?? 0.0,
-        'category': _categoryController.text,
+        'category': categories,
         'units': _unitsController.text,
-        'categoryImageUrl': _categoryImageUrlController.text,
         'tags': _tagsController.text.split(', '),
-        'subcategoryImageUrls':
-            _subcategoryImageUrlsController.text.split(', '),
         'varieties': varieties,
         'pictureUrl': _pictureUrlController.text,
         'isFresh': _isFresh,
@@ -334,7 +380,7 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
                 'name': p.name,
                 'basePrice': p.basePrice,
                 'description': p.description,
-                'category': p.category,
+                'category': p.categories,
                 // Include other fields as needed
               })
           .toList(),
@@ -348,11 +394,9 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
         '- **Name**: [String]\n'
         '- **Base Price**: [double]\n'
         '- **Description**: [String]\n'
-        '- **Category**: [String]\n'
+        '- **Categories**: [Category]\n'
         '- **Units**: [String]\n'
-        '- **Category Image URL**: [String]\n'
         '- **tags**: [List<String>]\n'
-        '- **Subcategory Image URLs**: [List<String>]\n'
         '- **Varieties**: [List<Variety>]\n'
         '  - **Name**: [String]\n'
         '  - **Color**: [String]\n'
@@ -422,6 +466,12 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
 
   void _saveProduct() async {
     try {
+      final subcategories = _subcategoryController
+          .map((sc) => Subcategory(imageUrl: sc['imageUrl']!.text, name: sc['name']!.text))
+          .toList();
+      final categories = _categoryController
+          .map((c) => Category(imageUrl: c['imageUrl']!.text, name: c['name']!.text, subcategories: subcategories))
+          .toList();
       final varieties = _varietyControllers
           .map((vc) => Variety(
                 name: vc['name']!.text,
@@ -441,12 +491,9 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
           name: _nameController.text,
           basePrice: double.tryParse(_basePriceController.text) ?? 0.0,
           description: _descriptionController.text,
-          category: _categoryController.text,
+          categories: categories,
           units: _unitsController.text,
-          categoryImageUrl: _categoryImageUrlController.text,
           tags: _tagsController.text.split(', '),
-          subcategoryImageUrls:
-              _subcategoryImageUrlsController.text.split(', '),
           varieties: varieties,
           pictureUrl: _pictureUrlController.text,
           isComplementary: _isComplementary,
@@ -507,7 +554,7 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
     _unitsController.clear();
     _categoryImageUrlController.clear();
     _tagsController.clear();
-    _subcategoryImageUrlsController.clear();
+    _subcategoryController.clear();
     _pictureUrlController.clear();
     _discountedPriceController.clear();
     _complementaryProductIdsController.clear();
@@ -549,8 +596,7 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
                   units: '',
                   basePrice: 0.0,
                   description: '',
-                  category: '',
-                  categoryImageUrl: '',
+                  categories: [],
                   pictureUrl: '',
                   discountedPrice: 0.0), // Fallback if not found
             ))
@@ -641,26 +687,16 @@ class AdminAddProductScreenState extends State<AdminAddProductScreen> {
                         decoration:
                             const InputDecoration(labelText: 'Base Price'),
                         keyboardType: TextInputType.number),
-                    TextField(
-                        controller: _categoryController,
-                        decoration:
-                            const InputDecoration(labelText: 'Category')),
+
                     TextField(
                         controller: _unitsController,
                         decoration: const InputDecoration(labelText: 'Units')),
-                    TextField(
-                        controller: _categoryImageUrlController,
-                        decoration: const InputDecoration(
-                            labelText: 'Category Image URL')),
+
                     TextField(
                         controller: _tagsController,
                         decoration: const InputDecoration(
                             labelText: 'tags (comma-separated)')),
-                    TextField(
-                        controller: _subcategoryImageUrlsController,
-                        decoration: const InputDecoration(
-                            labelText:
-                                'Subcategory Image URLs (comma-separated)')),
+
                     TextField(
                         controller: _pictureUrlController,
                         decoration:

@@ -154,7 +154,9 @@ class RegisterScreenState extends State<RegisterScreen> with TickerProviderState
                               ? ModelViewer(
                                   src: 'assets/3d/apple.glb',
                                   alt: "A 3D model of an apple",
-                                  autoRotate: true, // Always rotate for visibility
+                                  autoRotate: _isLoading
+                            ? true
+                            : false, 
                                   cameraControls: true,
                                   disablePan: false,
                                   disableZoom: false,

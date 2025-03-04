@@ -61,7 +61,7 @@ Offer? offer;
           product!.discountedPriceStream2?.listen(
         (price) {
           setState(() {
-            discountedPriceStream2 = price as Stream<double?>?;
+            discountedPrice = price;
           });
         },
       );
@@ -95,8 +95,8 @@ void dispose() {
       stream.listen((newPrice) {
         setState(() {
           // Extract the value for the 'variety' key
-          discountedPriceStream =
-              newPrice?['variety'] as Stream<Map<String, double?>?>?;
+          discountedPrice =
+              newPrice?['variety'];
         });
       });
     }
@@ -169,7 +169,9 @@ void dispose() {
         ? product.pictureUrl
         : 'assets/images/basket.png';
     final productName = product.name.isNotEmpty ? product.name : 'Mystery Item';
-    final productCategory = product.category;
+    final productCategory = product.categories.isNotEmpty
+        ? product.categories.first.name
+        : 'General';
     final productReviewCount = product.reviewCount;
     final productUnits = product.units;
     final productPrice = product.discountedPriceStream2 != null
@@ -330,7 +332,7 @@ void dispose() {
                   originalPrice,
                   inStock,
                   couponDiscount,
-                  productCategory,
+                  productCategory as String?,
                   productReviewCount,
                   productUnits,
                 ),
@@ -362,7 +364,7 @@ void dispose() {
       // Assuming you have a CartProvider or similar for managing cart
       var notes;
       Provider.of<CartProvider>(context, listen: false).addItem(
-          product!, user, selectedVariety, initialQuantity, notes ?? '');
+          product!, user!, selectedVariety, initialQuantity, notes ?? '');
       // Optionally show a snackbar or update UI
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${product!.name} added to cart')),
@@ -430,7 +432,7 @@ void dispose() {
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
                             Text(
-                              productCategory!,
+                              productCategory! as String,
                               style: const TextStyle(
                                   fontSize: 10,
                                   letterSpacing: 5,
@@ -481,8 +483,8 @@ void dispose() {
                                   ),
                                 Text(
                                   selectedVariety != null &&
-                                          selectedVariety?.price != null
-                                      ? '\$${selectedVariety!.price}'
+                                          selectedVariety?.discountedPrice != null
+                                      ? '\$${selectedVariety!.discountedPrice}'
                                       : productPrice,
                                   style: TextStyle(
                                       color: Colors.orange.withOpacity(0.75),
@@ -547,18 +549,16 @@ void dispose() {
                                     Container(
                                       width: 25,
                                       height: 25,
-                                      margin:
-                                          const EdgeInsets.only(right: 8.0),
+                                      margin: const EdgeInsets.only(right: 8.0),
                                       child: ClipRRect(
                                         borderRadius:
                                             BorderRadius.circular(8.0),
                                         child: Image.network(
                                           variety.imageUrl,
                                           fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (context, error, stackTrace) =>
-                                                  const Icon(Icons.error,
-                                                      size: 24),
+                                          errorBuilder: (context, error,
+                                                  stackTrace) =>
+                                              const Icon(Icons.error, size: 24),
                                         ),
                                       ),
                                     ),
@@ -592,7 +592,7 @@ void dispose() {
                                                         selectedVariety!
                                                                 .discountedPriceStream! !=
                                                             0.0
-                                                    ? ' \$${selectedVariety!.discountedPriceStream?.toStringAsFixed(2) ?? 'N/A'}'
+                                                    ? ' \$${selectedVariety!.discountedPrice?.toStringAsFixed(2) ?? 'N/A'}'
                                                     : selectedVariety!.price !=
                                                             null
                                                         ? ' \$${selectedVariety!.price.toStringAsFixed(2)}'
@@ -731,7 +731,8 @@ void dispose() {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                ...product!.genomicAlternatives.map((alternative) {
+                                ...product!.genomicAlternatives
+                                    .map((alternative) {
                                   return ListTile(
                                     leading: Image.network(
                                       alternative.pictureUrl,
@@ -755,7 +756,7 @@ void dispose() {
                                               productId: alternative.id),
                                         ),
                                       );
-                                                                        },
+                                    },
                                   );
                                 }),
                               ],

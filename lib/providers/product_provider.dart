@@ -336,7 +336,7 @@ class ProductProvider with ChangeNotifier {
           'name': product.name, // Product Name
           'purchaseCount': product.purchaseCount, // Number of purchases
           'stockLevel': product.itemQuantity, // Current stock level
-          'category': product.category, // Product category
+          'category': product.categories, // Product category
           'seasonStart': product.seasonStart
               ?.toIso8601String(), // Optional: Seasonal start (if applicable)
           'seasonEnd': product.seasonEnd

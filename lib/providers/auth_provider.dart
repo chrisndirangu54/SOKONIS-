@@ -18,7 +18,7 @@ class AuthProvider with ChangeNotifier {
         '492372104602-vv5b5kf132har2bcn527tvt9i8hon6iu.apps.googleusercontent.com', // Verify this matches Firebase
   );
 
-  final UserProvider? userProvider;
+  final UserProvider userProvider;
   final ProductProvider? productProvider;
   final Completer<void> _initializationCompleter = Completer<void>();
   bool _isInitializing = true;
@@ -35,7 +35,7 @@ class AuthProvider with ChangeNotifier {
         }
       } else if (user == null) {
         _user = null;
-        userProvider!.updateUser(null);
+        userProvider.updateUser(null);
         notifyListeners();
       }
       notifyListeners();
@@ -67,7 +67,7 @@ class AuthProvider with ChangeNotifier {
     try {
       final userData = await _fetchUserDataFromFirestore(uid);
       _user = _auth.currentUser;
-      userProvider!.updateUser(userData);
+      userProvider.updateUser(userData);
 
       final token = await _fetchNotificationToken();
       if (token != null && token != userData.token) {
@@ -126,7 +126,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<void> signInWithGoogle(String? referralCode) async {
+  Future<void> signInWithGoogle([String? referralCode]) async {
     try {
       // Sign out from Google to ensure a fresh sign-in
       await _googleSignIn.signOut();
@@ -188,7 +188,7 @@ class AuthProvider with ChangeNotifier {
       await _auth.signOut();
       await _googleSignIn.signOut();
       _user = null;
-      userProvider!.updateUser(null);
+      userProvider.updateUser(null);
       notifyListeners();
     } catch (e) {
       _handleAuthError(e);
