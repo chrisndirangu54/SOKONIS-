@@ -163,8 +163,8 @@ class Product {
   int? currentGroupMembers = 0;
   double? minPrice = 0.0; // Buying price
   List<Review>? reviews;
-  late int userViews;
-  late int userTimeSpent;
+  int? userViews;
+  int? userTimeSpent;
   List<String>? weather;
   List<Product> genomicAlternatives;
   Product({

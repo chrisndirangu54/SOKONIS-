@@ -85,7 +85,6 @@ class HomeScreenState extends State<HomeScreen> {
   Product? product;
   Timer? _autoScrollTimer;
   Timer? _debounce;
-  bool _hasInitialSuggestions = false;
   bool? _isFlipped = false;
   bool _isPressed = false;
   final NotificationService _notificationService = NotificationService();
@@ -123,7 +122,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   static var _searchDebouncer;
   
-  var selectedSubcategories;
+  late List<String> selectedSubcategories;
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -251,9 +250,9 @@ class HomeScreenState extends State<HomeScreen> {
       if (b.userClicks != a.userClicks) {
         return b.userClicks.compareTo(a.userClicks);
       } else if (b.userTimeSpent != a.userTimeSpent) {
-        return b.userTimeSpent.compareTo(a.userTimeSpent as num);
+        return b.userTimeSpent!.compareTo(a.userTimeSpent as num);
       } else {
-        return b.userViews.compareTo(a.userViews as num);
+        return b.userViews!.compareTo(a.userViews as num);
       }
     });
 

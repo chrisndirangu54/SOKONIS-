@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/services/groupbuy_service.dart';
 import 'package:grocerry/services/product_service.dart';
-import 'package:grocerry/models/product.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
