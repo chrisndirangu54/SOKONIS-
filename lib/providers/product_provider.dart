@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:grocerry/models/user.dart';
 import 'package:grocerry/providers/user_provider.dart';
 import 'package:grocerry/services/notification_service.dart';
+import 'package:latlong2/latlong.dart' as LatLng;
 import '../models/product.dart'; // Import the Product class
 import 'package:http/http.dart' as http;
 
@@ -45,26 +47,49 @@ class ProductProvider with ChangeNotifier {
 
   Future<List<Product>> fetchNearbyUsersBought() async {
     try {
-      // Simulate fetching data (could be from Firestore or another API)
+      User? user;
+      LatLng.LatLng? userPinLocation = user!.pinLocation as LatLng.LatLng?;
+      double maxDistanceKm = 10.0;
       final querySnapshot = await _firestore
           .collection('products')
-          .where('nearby', isEqualTo: true)
+          .orderBy('purchaseCount', descending: true)
           .get();
 
-      final List<Product> nearbyProducts = querySnapshot.docs.map((doc) {
-        final data = doc.data();
-        return Product.fromFirestore(doc: doc); // Handle data safely here
+      final List<Product> allProducts = querySnapshot.docs.map((doc) {
+        return Product.fromFirestore(doc: doc);
       }).toList();
 
-      // Update the stream controller with valid data
-      _nearbyProductsStreamController.add(nearbyProducts);
+      // Filter by proximity to mostPurchasedLocation
+      final List<Product> nearbyProducts = allProducts.where((product) {
+        if (product.mostPurchasedLocation == null) return false;
+        return _calculateDistance(
+                userPinLocation!, product.mostPurchasedLocation!) <=
+            maxDistanceKm;
+      }).toList();
 
+      _nearbyProductsStreamController.add(nearbyProducts);
       return nearbyProducts;
     } catch (e) {
       print('Error fetching nearby products: $e');
       _nearbyProductsStreamController.add([]);
-      return []; // Return an empty list in case of an error
+      return [];
     }
+  }
+
+  double _calculateDistance(LatLng.LatLng point1, LatLng.LatLng point2) {
+    const double earthRadius = 6371;
+    final double lat1 = point1.latitude * pi / 180;
+    final double lon1 = point1.longitude * pi / 180;
+    final double lat2 = point2.latitude * pi / 180;
+    final double lon2 = point2.longitude * pi / 180;
+
+    final double dLat = lat2 - lat1;
+    final double dLon = lon2 - lon1;
+
+    final double a =
+        pow(sin(dLat / 2), 2) + cos(lat1) * cos(lat2) * pow(sin(dLon / 2), 2);
+    final double c = 2 * asin(sqrt(a));
+    return earthRadius * c;
   }
 
   // Fetch complementary products for a given product
@@ -79,9 +104,6 @@ class ProductProvider with ChangeNotifier {
       _seasonallyAvailableStreamController.stream;
   Stream<List<Product>> get nearbyUsersBoughtStream =>
       _nearbyProductsStreamController.stream;
-
-  Stream<List<Product>> get categoryProductsStream =>
-      _categoryProductsStreamController.stream;
 
   Future<List<Product>> fetchProducts() async {
     try {
@@ -107,51 +129,6 @@ class ProductProvider with ChangeNotifier {
       _productsStreamController.add([]);
 
       return []; // Return empty list instead of null
-    }
-  }
-
-  // Update the purchase count of a product in Firestore
-  Future<void> updatePurchaseCount(
-      Product product, int newPurchaseCount) async {
-    try {
-      // Reference to the specific product document in Firestore
-      final productDoc = _firestore.collection('products').doc(product.id);
-
-      // Update the 'purchaseCount' field in the Firestore document
-      await productDoc.update({
-        'purchaseCount': newPurchaseCount,
-      });
-
-      // Optionally, you can also update the cached product
-      final productIndex =
-          _products.indexWhere((product) => product.id == product.id);
-      if (productIndex != -1) {
-        _products[productIndex].purchaseCount = newPurchaseCount;
-        _productsStreamController.add(_products); // Update the product stream
-      }
-
-      print('Purchase count updated successfully for product: $product');
-    } catch (e) {
-      print('Error updating purchase count: $e');
-    }
-  }
-
-  // Real-time Firestore stream for category-based products
-  Future<void> fetchCategoryProducts(String category) async {
-    try {
-      _firestore
-          .collection('products')
-          .where('category', isEqualTo: category)
-          .snapshots()
-          .listen((querySnapshot) {
-        final categoryProducts = querySnapshot.docs
-            .map((doc) => Product.fromFirestore(doc: doc))
-            .toList();
-        _categoryProductsStreamController.add(categoryProducts);
-      });
-    } catch (e) {
-      print("Error fetching products by category: $e");
-      _categoryProductsStreamController.add([]);
     }
   }
 
@@ -392,7 +369,9 @@ class StockManager {
       // Notify Admin
       _notificationService.sendNotification(
         title: 'Product Out of Stock',
-        body: 'Product ${product.name} is out of stock.', to: _userProvider.user.id, data: {},
+        body: 'Product ${product.name} is out of stock.',
+        to: _userProvider.user.id,
+        data: {},
       );
     }
 
@@ -400,10 +379,10 @@ class StockManager {
       // Notify Attendant
       _notificationService.sendNotification(
         title: 'Product Out of Stock',
-        body: 'Product ${product.name} is out of stock.', data: {}, to: _userProvider.user.id,
+        body: 'Product ${product.name} is out of stock.',
+        data: {},
+        to: _userProvider.user.id,
       );
     }
   }
 }
-
-

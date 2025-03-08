@@ -6,7 +6,9 @@ import 'package:grocerry/models/subscription_model.dart';
 import 'package:grocerry/models/user.dart';
 import 'package:grocerry/providers/user_provider.dart';
 import 'package:grocerry/services/notification_service.dart';
-import 'dart:math'; // For generating random coupon codes
+import 'dart:math';
+
+import 'package:latlong2/latlong.dart'; // For generating random coupon codes
 
 class OrderProvider with ChangeNotifier {
   final List<Order> _allOrders = [];
@@ -39,27 +41,101 @@ class OrderProvider with ChangeNotifier {
     }
   }
 
-  void addOrder(Order newOrder) {
-    _allOrders.add(newOrder);
-    _updatePendingOrders();
-    _notificationService.showOrderNotification(
-      'New Order',
-      'You have a new order: ${newOrder.orderId}',
-    );
+void addOrder(Order newOrder, ) async {
+  final User user = newOrder.user;
+  final LatLng? userPinLocation = user.pinLocation as LatLng?;
 
-    notifyListeners();
+  _allOrders.add(newOrder);
 
-    _handleLoyaltyPoints(newOrder.user as String, newOrder.totalAmount);
+  _updatePendingOrders();
+  _notificationService.showOrderNotification(
+    'New Order',
+    'You have a new order: ${newOrder.orderId}',
+  );
 
-    // Fetch user's total loyalty points and order count to check for badge eligibility
-    _checkAndAwardBadges(
-        newOrder.user as String, newOrder.totalAmount, _allOrders.length);
+  notifyListeners();
 
-    notifyListeners();
+  // Update purchase count and store order with user location
+  await _updateProductPurchaseCount(newOrder, userPinLocation!);
 
-    _handleReferralCoupon(newOrder.user as String, newOrder.totalAmount);
+  _handleLoyaltyPoints(newOrder.user as String, newOrder.totalAmount);
+  _checkAndAwardBadges(
+      newOrder.user as String, newOrder.totalAmount, _allOrders.length);
+
+  notifyListeners();
+  _handleReferralCoupon(newOrder.user as String, newOrder.totalAmount);
+}
+
+Future<void> _updateProductPurchaseCount(Order order, LatLng userLocation) async {
+  for (var item in order.items) {
+    Product? product;
+    int quantity = 1;
+
+    if (item is OrderItem && item.product != null) {
+      product = item.product;
+      quantity = item.quantity ?? 1;
+    } else if (item is Product) {
+      product = item as Product?;
+    }
+
+    if (product != null) {
+      product.purchaseCount = (product.purchaseCount ?? 0) + quantity;
+
+      await firestore.FirebaseFirestore.instance.collection('orders').add({
+        'orderId': order.orderId,
+        'userId': order.user,
+        'productId': product.id,
+        'userLocation': {
+          'latitude': userLocation.latitude,
+          'longitude': userLocation.longitude,
+        },
+        'totalAmount': order.totalAmount,
+        'timestamp': firestore.FieldValue.serverTimestamp(),
+      });
+
+      await _updateMostPurchasedLocation(product.id);
+    }
+  }
+}
+
+Future<void> _updateMostPurchasedLocation(String productId) async {
+  final ordersSnapshot = await firestore.FirebaseFirestore.instance
+      .collection('orders')
+      .where('productId', isEqualTo: productId)
+      .get();
+
+  final locationCounts = <String, int>{};
+  for (var doc in ordersSnapshot.docs) {
+    final data = doc.data();
+    final location = data['userLocation'] as Map<String, dynamic>?;
+    if (location != null) {
+      final key = '${location['latitude']},${location['longitude']}';
+      locationCounts[key] = (locationCounts[key] ?? 0) + 1;
+    }
   }
 
+  if (locationCounts.isNotEmpty) {
+    final mostFrequent = locationCounts.entries
+        .reduce((a, b) => a.value > b.value ? a : b)
+        .key
+        .split(',');
+    final mostPurchasedLocation = LatLng(
+      double.parse(mostFrequent[0]),
+      double.parse(mostFrequent[1]),
+    );
+
+    await firestore.FirebaseFirestore.instance
+        .collection('products')
+        .doc(productId)
+        .update({
+          'mostPurchasedLocation': {
+            'latitude': mostPurchasedLocation.latitude,
+            'longitude': mostPurchasedLocation.longitude,
+          },
+          'purchaseCount': firestore.FieldValue.increment(1), // Adjust for quantity if needed
+        });
+  }
+}
   Future<void> _handleLoyaltyPoints(String user, double orderTotal) async {
     try {
       // Fetch the user's document from Firestore

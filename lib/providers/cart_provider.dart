@@ -704,10 +704,7 @@ List<model.OrderItem> _convertToOrderItems(List<CartItem> cartItems, BuildContex
               );
 
               for (var product in orderedProducts) {
-                productProvider.updatePurchaseCount(
-                  product,
-                  product.purchaseCount + cart.items[product.id]!.quantity,
-                );
+
                 userProvider.addRecentlyBoughtProduct(product);
               }
 

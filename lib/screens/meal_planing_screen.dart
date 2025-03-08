@@ -1,24 +1,26 @@
 import 'dart:async';
-
+import 'dart:convert';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:grocerry/models/product.dart';
+import 'package:grocerry/screens/health_screen.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:grocerry/models/subscription_model.dart';
 import 'package:grocerry/models/user.dart';
 import 'package:grocerry/providers/cart_provider.dart';
 import 'package:grocerry/providers/order_provider.dart';
-import 'package:grocerry/screens/health_screen.dart';
 import 'package:grocerry/services/chatgpt_service.dart';
 import 'package:grocerry/services/subscription_service.dart';
 import 'package:grocerry/services/recipe_service.dart';
 import 'package:grocerry/services/ml_service.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart'; // For date handling
 
 class MealPlanningScreen extends StatefulWidget {
-  const MealPlanningScreen({super.key});
+  final User user;
+
+  const MealPlanningScreen({super.key, required this.user});
 
   @override
   MealPlanningScreenState createState() => MealPlanningScreenState();
@@ -29,29 +31,29 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   final SubscriptionService _subscriptionService = SubscriptionService();
   final RecipeService _recipeService = RecipeService();
   final MLService _mlService = MLService();
+  final HealthConditionService _healthConditionService = HealthConditionService();
   Variety? selectedVariety;
   bool _isLoading = false;
-  User? user; // Replace with actual user ID
-  late String selectedHealthCondition;
   List<GroceryItem> _linkedProducts = [];
   List<Meal> _weeklyMeals = [];
-  List<String> recipeSuggestions = []; // List to store the recipe suggestions
+  List<String> recipeSuggestions = [];
   Product? product;
-  late int quantity;
-  final HealthConditionService healthConditionService =
-      HealthConditionService();
+  late int quantity = 1;
   late StreamSubscription<double?>? _discountedPriceSubscription;
+  int? _defaultNumberOfPeople;
+  List<Meal> mealRecommendations = [];
+  double? discountedPrice;
 
   @override
   void initState() {
     super.initState();
     _loadWeeklyMealPlan();
-    _recommendMeals(user!.id);
+    _recommendMeals(widget.user.id);
     _loadMealRecommendations();
+    product ??= Product(name: 'Sample', basePrice: 0.0, varieties: [], id: 'sample', categories: [], description: 'Sample description', units: 'kg', pictureUrl: 'https://via.placeholder.com/150', discountedPrice: 0.0);
     for (var variety in product!.varieties) {
       _listenToDiscountedPriceStream(variety.discountedPriceStream);
     }
-    // Check if widget.product is not null before accessing its properties
     if (product != null) {
       _discountedPriceSubscription = product!.discountedPriceStream2?.listen(
         (price) {
@@ -63,23 +65,79 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     }
   }
 
-  List<String> mealRecommendations = [];
-  double? discountedPrice;
+  @override
+  void dispose() {
+    _discountedPriceSubscription?.cancel();
+    super.dispose();
+  }
 
   void _listenToDiscountedPriceStream(Stream<Map<String, double?>?>? stream) {
     if (stream != null) {
       stream.listen((newPrice) {
         setState(() {
-          // Extract the value for the 'variety' key
           discountedPrice = newPrice?['variety'];
         });
       });
     }
   }
 
+  Future<int?> _promptForNumberOfPeople(String action, {int? defaultValue}) async {
+    TextEditingController controller = TextEditingController(text: defaultValue?.toString() ?? '');
+    return await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Number of People for $action'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: 'e.g., 4'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text);
+              if (value != null && value > 0) {
+                Navigator.pop(context, value);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a valid number')),
+                );
+              }
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadMealRecommendations() async {
     mealRecommendations = await _getSavedMealRecommendations();
     setState(() {});
+  }
+
+  Future<List<Meal>> _getSavedMealRecommendations() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.user.id)
+          .collection('mealRecommendations')
+          .doc('current')
+          .get();
+
+      if (doc.exists) {
+        final List<dynamic> mealsData = doc.data()!['meals'];
+        return mealsData.map((mealMap) => Meal.fromMap(mealMap)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error loading meal recommendations: $e');
+      return [];
+    }
   }
 
   Future<void> _loadWeeklyMealPlan() async {
@@ -94,21 +152,19 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
       DocumentSnapshot<Map<String, dynamic>> doc = await FirebaseFirestore
           .instance
           .collection('users')
-          .doc(user!.id)
+          .doc(widget.user.id)
           .collection('mealPlans')
           .doc(weekIdentifier)
           .get();
 
       if (doc.exists) {
         List<dynamic> mealsData = doc.data()!['meals'];
-        _weeklyMeals =
-            mealsData.map((mealMap) => Meal.fromMap(mealMap)).toList();
+        _weeklyMeals = mealsData.map((mealMap) => Meal.fromMap(mealMap)).toList();
+        _defaultNumberOfPeople = doc.data()!['numberOfPeople'] as int?;
       } else {
-        // Initialize with empty meals for the week
         _weeklyMeals = _initializeEmptyWeeklyMeals();
       }
     } catch (e) {
-      // Handle error, possibly initialize empty meals
       _weeklyMeals = _initializeEmptyWeeklyMeals();
     } finally {
       setState(() {
@@ -117,49 +173,212 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     }
   }
 
+  Future<void> _generateGroceryList() async {
+    int? numberOfPeople = await _promptForNumberOfPeople('Grocery List', defaultValue: _defaultNumberOfPeople);
+    if (numberOfPeople == null) return;
+
+    String allMeals = _weeklyMeals.map((meal) {
+      return '${meal.breakfast}, ${meal.lunch}, ${meal.dinner}';
+    }).join(', ');
+
+    final holidays = widget.user.importantHolidays ?? [];
+    final customHolidays = widget.user.customHolidays ?? [];
+    final cuisines = widget.user.importantCuisines ?? [];
+    final preferredCuisines = widget.user.preferredCuisines ?? [];
+    final purchaseHistory = await _fetchPurchaseHistory(widget.user.id);
+    final frequentlyBought = await _extractFrequentProducts(purchaseHistory);
+    final dynamicHolidays = await _fetchDynamicHolidaysForWeek(DateTime.now());
+
+    String context = "Generate ingredients for meal plan: $allMeals. ";
+    final allHolidays = [...holidays, ...customHolidays, ...dynamicHolidays.keys];
+    if (allHolidays.isNotEmpty) {
+      context += "Consider holidays: ${allHolidays.join(', ')} (Kenyan, Hindu, Muslim, custom). ";
+    }
+    if (cuisines.isNotEmpty) {
+      context += "Focus on Kenyan cuisines: ${cuisines.join(', ')}. ";
+    }
+    if (preferredCuisines.isNotEmpty) {
+      context += "Incorporate cuisines: ${preferredCuisines.join(', ')}. ";
+    }
+    if (frequentlyBought.isNotEmpty) {
+      context += "Use frequently bought: ${frequentlyBought.join(', ')}. ";
+    }
+    if (numberOfPeople != null) {
+      context += "Scale ingredient quantities for $numberOfPeople people. ";
+    }
+
+    try {
+      final ingredients = await _chatGPTService.generateIngredients(context);
+      await _fetchProductsMatchingIngredients(ingredients, numberOfPeople);
+      await _saveGroceryList(ingredients, numberOfPeople);
+    } catch (e) {
+      print('Error generating grocery list: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchPurchaseHistory(String userId) async {
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('userId', isEqualTo: userId)
+          .orderBy('timestamp', descending: true)
+          .limit(50)
+          .get();
+      return querySnapshot.docs.map((doc) => doc.data()).toList();
+    } catch (e) {
+      print('Error fetching purchase history: $e');
+      return [];
+    }
+  }
+
+  Future<List<String>> _extractFrequentProducts(List<Map<String, dynamic>> purchaseHistory) async {
+    final productCounts = <String, int>{};
+    for (var order in purchaseHistory) {
+      final productId = order['productId'] as String?;
+      if (productId != null) {
+        productCounts[productId] = (productCounts[productId] ?? 0) + 1;
+      }
+    }
+
+    final topProducts = productCounts.entries
+        .toList()
+        .sorted((a, b) => b.value.compareTo(a.value))
+        .take(5)
+        .map((e) => e.key)
+        .toList();
+
+    final productNames = <String>[];
+    for (var productId in topProducts) {
+      final doc = await FirebaseFirestore.instance.collection('products').doc(productId).get();
+      if (doc.exists) {
+        productNames.add(doc.data()!['name'] as String? ?? productId);
+      }
+    }
+    return productNames;
+  }
+
+  Future<Map<String, DateTime>> _fetchDynamicHolidaysForWeek(DateTime currentDate) async {
+    final weekBefore = currentDate.subtract(const Duration(days: 7));
+    try {
+      final response = await http.get(
+        Uri.parse('https://newsapi.org/v2/everything?q=holiday+announcement+2025+Muslim+Easter+Chinese+American&from=${weekBefore.toIso8601String().split('T')[0]}&to=${currentDate.toIso8601String().split('T')[0]}&apiKey=YOUR_NEWSAPI_KEY'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final holidays = <String, DateTime>{};
+        for (var article in data['articles']) {
+          final title = article['title'].toString().toLowerCase();
+          final pubDate = DateTime.parse(article['publishedAt']);
+          if (title.contains('eid al-fitr')) holidays['Eid al-Fitr'] = pubDate.add(const Duration(days: 7));
+          else if (title.contains('eid al-adha')) holidays['Eid al-Adha'] = pubDate.add(const Duration(days: 7));
+          else if (title.contains('ashura')) holidays['Ashura'] = pubDate.add(const Duration(days: 7));
+          else if (title.contains('easter sunday')) holidays['Easter Sunday'] = pubDate.add(const Duration(days: 7));
+          else if (title.contains('good friday')) holidays['Good Friday'] = pubDate.add(const Duration(days: 7));
+          else if (title.contains('easter monday')) holidays['Easter Monday'] = pubDate.add(const Duration(days: 7));
+          else if (title.contains('chinese new year')) holidays['Chinese New Year'] = pubDate.add(const Duration(days: 7));
+          else if (title.contains('thanksgiving')) holidays['Thanksgiving'] = pubDate.add(const Duration(days: 7));
+          else if (title.contains('independence day') && title.contains('usa')) holidays['Independence Day (USA)'] = pubDate.add(const Duration(days: 7));
+        }
+        return holidays.isNotEmpty ? holidays : await _fetchFallbackDynamicHolidays();
+      }
+    } catch (e) {
+      print('Error fetching dynamic holidays: $e');
+    }
+    return await _fetchFallbackDynamicHolidays();
+  }
+
+  Future<Map<String, DateTime>> _fetchFallbackDynamicHolidays() async {
+    final now = DateTime.now();
+    return {
+      'Eid al-Fitr': DateTime(now.year, 3, 31),
+      'Eid al-Adha': DateTime(now.year, 6, 7),
+      'Ashura': DateTime(now.year, 7, 15),
+      'Easter Sunday': DateTime(now.year, 4, 12),
+      'Good Friday': DateTime(now.year, 4, 10),
+      'Easter Monday': DateTime(now.year, 4, 13),
+      'Chinese New Year': DateTime(now.year, 2, 1),
+      'Thanksgiving': DateTime(now.year, 11, 28),
+      'Independence Day (USA)': DateTime(now.year, 7, 4),
+    };
+  }
+
+  Future<DateTime?> _parseHoliday(String holiday) async {
+    final now = DateTime.now();
+    final staticHolidays = {
+      'new year\'s day': DateTime(now.year, 1, 1),
+      'labour day': DateTime(now.year, 5, 1),
+      'madaraka day': DateTime(now.year, 6, 1),
+      'mashujaa day': DateTime(now.year, 10, 20),
+      'jamhuri day': DateTime(now.year, 12, 12),
+      'christmas day': DateTime(now.year, 12, 25),
+      'boxing day': DateTime(now.year, 12, 26),
+      'holi': DateTime(now.year, 3, 14),
+      'diwali': DateTime(now.year, 10, 20),
+      'raksha bandhan': DateTime(now.year, 8, 19),
+      'navratri': DateTime(now.year, 10, 3),
+    };
+
+    final lowerHoliday = holiday.toLowerCase();
+    if (staticHolidays.containsKey(lowerHoliday)) {
+      return staticHolidays[lowerHoliday];
+    }
+
+    if (holiday.contains(': ')) {
+      final parts = holiday.split(': ');
+      try {
+        return DateTime.parse(parts[1]);
+      } catch (e) {
+        print('Error parsing custom holiday date: $e');
+      }
+    }
+
+    final dynamicHolidays = await _fetchDynamicHolidaysForWeek(now);
+    if (dynamicHolidays.containsKey(holiday)) {
+      return dynamicHolidays[holiday];
+    }
+
+    return null;
+  }
+
   String _getWeekIdentifier(DateTime date) {
-    // You can customize the week identifier as needed
-    // Here, we'll use year and week number
     int weekNumber = ((date.dayOfYear - date.weekday + 10) / 7).floor();
     return '${date.year}-W$weekNumber';
   }
 
   List<Meal> _initializeEmptyWeeklyMeals() {
-    List<String> days = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday'
-    ];
+    List<String> days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     return days.map((day) => Meal(day: day)).toList();
   }
 
   Future<void> _saveWeeklyMealPlan() async {
+    int? numberOfPeople = await _promptForNumberOfPeople('Meal Plan', defaultValue: _defaultNumberOfPeople);
+    if (numberOfPeople == null) return;
+
     setState(() {
       _isLoading = true;
+      _defaultNumberOfPeople = numberOfPeople;
     });
 
     try {
       DateTime now = DateTime.now();
       String weekIdentifier = _getWeekIdentifier(now);
 
-      List<Map<String, dynamic>> mealsData =
-          _weeklyMeals.map((meal) => meal.toMap()).toList();
+      List<Map<String, dynamic>> mealsData = _weeklyMeals.map((meal) => meal.toMap()).toList();
 
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(user!.id)
+          .doc(widget.user.id)
           .collection('mealPlans')
           .doc(weekIdentifier)
-          .set({'meals': mealsData});
+          .set({
+        'meals': mealsData,
+        'numberOfPeople': numberOfPeople,
+      });
 
-      // Generate ingredients and fetch linked products
       await _generateGroceryList();
     } catch (e) {
-      // Handle error
+      print('Error saving meal plan: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -167,41 +386,31 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     }
   }
 
-  Future<void> _generateGroceryList() async {
-    String allMeals = _weeklyMeals.map((meal) {
-      return '${meal.breakfast}, ${meal.lunch}, ${meal.dinner}';
-    }).join(', ');
-
-    try {
-      final ingredients = await _chatGPTService.generateIngredients(allMeals);
-      // Fetch products matching the generated ingredients
-      await _fetchProductsMatchingIngredients(ingredients);
-      // Save the grocery list
-      await _saveGroceryList(ingredients);
-    } catch (e) {
-      // Handle error
-    }
-  }
-
-  Future<void> _fetchProductsMatchingIngredients(String ingredients) async {
-    List<String> ingredientList =
-        ingredients.split(', ').map((e) => e.trim()).toList();
+  Future<void> _fetchProductsMatchingIngredients(String ingredients, int numberOfPeople) async {
+    List<String> ingredientList = ingredients.split(', ').map((e) => e.trim()).toList();
     List<GroceryItem> linkedProducts = [];
 
     for (String ingredient in ingredientList) {
+      // Parse quantity and name (e.g., "10kg rice" -> {quantity: 10, unit: "kg", name: "rice"})
+      final match = RegExp(r'(\d+\.?\d*)([a-zA-Z]+)?\s*(.*)').firstMatch(ingredient);
+      double? quantity = match != null ? double.tryParse(match.group(1)!) : null;
+      String? unit = match?.group(2);
+      String name = match?.group(3) ?? ingredient;
+
       final querySnapshot = await FirebaseFirestore.instance
           .collection('products')
-          .where('name', isEqualTo: ingredient)
+          .where('name', isEqualTo: name)
           .get();
 
       if (querySnapshot.docs.isNotEmpty) {
         for (var doc in querySnapshot.docs) {
-          Product product =
-              Product.fromFirestore(doc: doc); // Use named parameter
+          Product product = Product.fromFirestore(doc: doc);
           linkedProducts.add(GroceryItem(
             name: product.name,
             price: product.basePrice,
             product: product,
+            suggestedQuantity: quantity?.toInt(), // Store suggested quantity
+            unit: unit, // Store unit (e.g., "kg")
           ));
         }
       }
@@ -212,40 +421,56 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     });
   }
 
-  Future<void> _saveGroceryList(String ingredients) async {
+  Future<void> _saveGroceryList(String ingredients, int numberOfPeople) async {
     try {
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(user!.id)
+          .doc(widget.user.id)
           .collection('groceryLists')
           .add({
         'ingredients': ingredients.split(', ').map((e) => e.trim()).toList(),
         'createdAt': DateTime.now(),
+        'numberOfPeople': numberOfPeople,
       });
     } catch (e) {
-      // Handle error
+      print('Error saving grocery list: $e');
     }
   }
 
-  void _askForSubscription(product, variety) {
-    int selectedFrequency = 7; // Default to weekly
-    int selectedDay = DateTime.now().weekday; // Default to today’s weekday
-    final List<int> availableFrequencies = [
-      1,
-      7,
-      14,
-      30
-    ]; // Daily, Weekly, Bi-weekly, Monthly
-    final List<String> weekDays = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday'
-    ];
-    int quantity = 1; // Default quantity
+  Future<void> _fetchTodaysGroceryList() async {
+    int? numberOfPeople = await _promptForNumberOfPeople('Today\'s Grocery List', defaultValue: _defaultNumberOfPeople);
+    if (numberOfPeople == null) return;
+
+    final now = DateTime.now();
+    final currentDayOfWeek = now.weekday;
+
+    final todayMeals = _weeklyMeals[currentDayOfWeek - 1];
+    List<String> mealsToday = [];
+    if (todayMeals.breakfast.isNotEmpty) mealsToday.add(todayMeals.breakfast);
+    if (todayMeals.lunch.isNotEmpty) mealsToday.add(todayMeals.lunch);
+    if (todayMeals.dinner.isNotEmpty) mealsToday.add(todayMeals.dinner);
+
+    String allMeals = mealsToday.join(', ');
+    String context = "Generate ingredients for today's meals: $allMeals. ";
+    if (numberOfPeople != null) {
+      context += "Scale ingredient quantities for $numberOfPeople people. ";
+    }
+
+    try {
+      final ingredients = await _chatGPTService.generateIngredients(context);
+      await _fetchProductsMatchingIngredients(ingredients, numberOfPeople);
+      await _saveGroceryList(ingredients, numberOfPeople);
+    } catch (e) {
+      print('Error generating grocery list for today: $e');
+    }
+  }
+
+  void _askForSubscription(Product product, Variety? variety, {int? suggestedQuantity}) {
+    int selectedFrequency = 7;
+    int selectedDay = DateTime.now().weekday;
+    final List<int> availableFrequencies = [1, 7, 14, 30];
+    final List<String> weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    int quantity = suggestedQuantity ?? _defaultNumberOfPeople ?? 1; // Use ChatGPT suggestion or fallback
 
     showDialog(
       context: context,
@@ -255,84 +480,40 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                  'Would you like to subscribe to auto-replenish this ingredient?'),
-
-              // Frequency Selection
+              const Text('Would you like to subscribe to auto-replenish this ingredient?'),
               const SizedBox(height: 16),
               const Text('Select Delivery Frequency:'),
               DropdownButton<int>(
                 value: selectedFrequency,
-                onChanged: (newValue) {
-                  setState(() {
-                    selectedFrequency = newValue!;
-                  });
-                },
-                items: availableFrequencies
-                    .map<DropdownMenuItem<int>>((int value) {
-                  return DropdownMenuItem<int>(
-                    value: value,
-                    child: Text(value == 1 ? 'Daily' : '$value days'),
-                  );
-                }).toList(),
+                onChanged: (newValue) => setState(() => selectedFrequency = newValue!),
+                items: availableFrequencies.map((value) => DropdownMenuItem<int>(
+                  value: value,
+                  child: Text(value == 1 ? 'Daily' : '$value days'),
+                )).toList(),
               ),
-
-              // Day Selection
               const SizedBox(height: 16),
               const Text('Select Delivery Day of the Week:'),
               DropdownButton<int>(
                 value: selectedDay,
-                onChanged: (newValue) {
-                  setState(() {
-                    selectedDay = newValue!;
-                  });
-                },
-                items: weekDays
-                    .asMap()
-                    .entries
-                    .map<DropdownMenuItem<int>>((entry) {
-                  int idx = entry.key;
-                  String day = entry.value;
-                  return DropdownMenuItem<int>(
-                    value: idx + 1, // Weekdays are from 1 to 7
-                    child: Text(day),
-                  );
-                }).toList(),
+                onChanged: (newValue) => setState(() => selectedDay = newValue!),
+                items: weekDays.asMap().entries.map((entry) => DropdownMenuItem<int>(
+                  value: entry.key + 1,
+                  child: Text(entry.value),
+                )).toList(),
               ),
-
-              // Quantity Selection
               const SizedBox(height: 16),
               const Text('Select Quantity:'),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Decrement Button
                   IconButton(
-                    icon: const Icon(Icons.remove, color: Colors.black),
-                    onPressed: () {
-                      setState(() {
-                        if (quantity > 1) {
-                          quantity--; // Decrease quantity
-                        }
-                      });
-                    },
+                    icon: const Icon(Icons.remove),
+                    onPressed: () => setState(() => quantity = quantity > 1 ? quantity - 1 : 1),
                   ),
-                  // Quantity Display
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Text(
-                      '$quantity',
-                      style: const TextStyle(color: Colors.black, fontSize: 20),
-                    ),
-                  ),
-                  // Increment Button
+                  Text('$quantity', style: const TextStyle(fontSize: 20)),
                   IconButton(
-                    icon: const Icon(Icons.add, color: Colors.black),
-                    onPressed: () {
-                      setState(() {
-                        quantity++; // Increase quantity
-                      });
-                    },
+                    icon: const Icon(Icons.add),
+                    onPressed: () => setState(() => quantity++),
                   ),
                 ],
               ),
@@ -341,17 +522,15 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                final nextDeliveryDate =
-                    _calculateNextDeliveryDate(selectedFrequency, selectedDay);
+                final nextDeliveryDate = _calculateNextDeliveryDate(selectedFrequency, selectedDay);
                 final subscription = Subscription(
                   product: product,
-                  user: user!,
-                  quantity: quantity, // Adjusted quantity
+                  user: widget.user,
+                  quantity: quantity,
                   nextDelivery: nextDeliveryDate,
-                  frequency: selectedFrequency, // User-selected frequency
-                  variety: variety,
-                  price:
-                      product.variety!.price != null ? product.basePrice : 0.0,
+                  frequency: selectedFrequency,
+                  variety: variety!,
+                  price: product.basePrice,
                 );
                 _subscriptionService.addSubscription(subscription, context);
                 Navigator.pop(context);
@@ -368,17 +547,14 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     );
   }
 
-// Helper method to calculate the next delivery date based on frequency and selected day
   DateTime _calculateNextDeliveryDate(int frequency, int selectedDay) {
     DateTime now = DateTime.now();
     DateTime nextDelivery = now;
 
-    // Calculate the next delivery date based on the selected day of the week
     while (nextDelivery.weekday != selectedDay) {
       nextDelivery = nextDelivery.add(const Duration(days: 1));
     }
 
-    // Add frequency days to the next delivery date
     if (frequency > 1) {
       nextDelivery = nextDelivery.add(Duration(days: frequency));
     }
@@ -387,50 +563,40 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   }
 
   Future<void> _recommendMeals(String userId) async {
+    int? numberOfPeople = await _promptForNumberOfPeople('Meal Recommendations', defaultValue: _defaultNumberOfPeople);
+    if (numberOfPeople == null) return;
+
     final orderProvider = Provider.of<OrderProvider>(context, listen: false);
 
-    // Check if a health condition is already selected
     bool hasHealthCondition = await _checkHealthConditionSelected(userId);
 
     if (!hasHealthCondition) {
-      // Show a dialog asking if they want to select a health condition
       bool? wantsToSelectCondition = await _askToSelectHealthCondition();
       if (wantsToSelectCondition == true) {
-        List<String> conditions =
-            await healthConditionService.fetchHealthConditions(userId);
+        List<String> conditions = await _healthConditionService.fetchHealthConditions(userId);
         if (conditions.isNotEmpty) {
-          String? selectedCondition =
-              await _showHealthConditionSelectionDialog(conditions);
+          String? selectedCondition = await _showHealthConditionSelectionDialog(conditions);
           if (selectedCondition != null) {
-            // Update the condition in the service or state management
-            healthConditionService
-                .updateSelectedHealthCondition(selectedCondition);
-
-            // Now proceed with recommendations using the new condition
-            _proceedWithMealRecommendations(userId, selectedCondition);
+            _healthConditionService.updateSelectedHealthCondition(selectedCondition);
+            _proceedWithMealRecommendations(userId, selectedCondition, numberOfPeople);
           } else {
-            // If user cancels selection or no condition chosen, proceed without condition
-            _proceedWithMealRecommendations(userId, null);
+            _proceedWithMealRecommendations(userId, null, numberOfPeople);
           }
         } else {
-          // No conditions available, proceed without condition
-          _proceedWithMealRecommendations(userId, null);
+          _proceedWithMealRecommendations(userId, null, numberOfPeople);
         }
       } else {
-        // User doesn't want to select a condition, proceed without one
-        _proceedWithMealRecommendations(userId, null);
+        _proceedWithMealRecommendations(userId, null, numberOfPeople);
       }
     } else {
-      // Health condition already selected, proceed with recommendations
-      healthConditionService.healthConditionStream
-          .listen((selectedHealthCondition) async {
-        _proceedWithMealRecommendations(userId, selectedHealthCondition);
+      _healthConditionService.healthConditionStream.listen((selectedHealthCondition) async {
+        _proceedWithMealRecommendations(userId, selectedHealthCondition, numberOfPeople);
       });
     }
   }
 
   Future<bool> _checkHealthConditionSelected(String userId) async {
-    return await healthConditionService.healthConditionStream
+    return await _healthConditionService.healthConditionStream
             .firstWhere((condition) => condition != null, orElse: () => '') !=
         '';
   }
@@ -441,8 +607,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Select a Health Condition?'),
-          content: const Text(
-              'Would you like to select a health condition for personalized meal recommendations?'),
+          content: const Text('Would you like to select a health condition for personalized meal recommendations?'),
           actions: [
             TextButton(
               child: const Text('No'),
@@ -458,8 +623,7 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     );
   }
 
-  Future<String?> _showHealthConditionSelectionDialog(
-      List<String> conditions) async {
+  Future<String?> _showHealthConditionSelectionDialog(List<String> conditions) async {
     return await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
@@ -470,19 +634,15 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
               children: conditions
                   .map((condition) => ListTile(
                         title: Text(condition),
-                        onTap: () {
-                          Navigator.pop(context, condition);
-                        },
+                        onTap: () => Navigator.pop(context, condition),
                       ))
                   .toList(),
             ),
           ),
-          actions: <Widget>[
+          actions: [
             TextButton(
               child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.pop(context);
-              },
+              onPressed: () => Navigator.pop(context),
             ),
           ],
         );
@@ -490,58 +650,66 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
     );
   }
 
-  void _proceedWithMealRecommendations(
-      String userId, String? healthCondition) async {
+  void _proceedWithMealRecommendations(String userId, String? healthCondition, int numberOfPeople) async {
     final orderProvider = Provider.of<OrderProvider>(context, listen: false);
     final pastPurchases = await orderProvider.getPastPurchases(userId);
 
     final recommendations = await _mlService.recommendMeals(
       pastPurchases.cast<String>(),
-      healthCondition,
+      numberOfPeople,
+      healthCondition!,
+
     );
 
-    // Save meal recommendations
-    await _saveMealRecommendations(recommendations);
-
+    await _saveMealRecommendations(recommendations, numberOfPeople);
     setState(() {
-      // Trigger a UI update
+      mealRecommendations = recommendations.map((meal) => Meal(
+        day: meal['day'] ?? 'Unknown',
+        breakfast: meal['breakfast'] ?? '',
+        lunch: meal['lunch'] ?? '',
+        dinner: meal['dinner'] ?? '',
+      )).toList();
     });
   }
 
-  // Helper method to save meal recommendations
-  Future<void> _saveMealRecommendations(List<String> recommendations) async {
-    // Example: Using SharedPreferences to store the recommendations locally
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('mealRecommendations', recommendations);
-  }
-
-  Future<List<String>> _getSavedMealRecommendations() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList('mealRecommendations') ?? [];
+  Future<void> _saveMealRecommendations(List<Map<String, dynamic>> recommendations, int numberOfPeople) async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.user.id)
+        .collection('mealRecommendations')
+        .doc('current')
+        .set({
+      'meals': recommendations,
+      'numberOfPeople': numberOfPeople,
+    });
   }
 
   void _suggestRecipesBasedOnPantry() async {
+    int? numberOfPeople = await _promptForNumberOfPeople('Pantry Recipes', defaultValue: _defaultNumberOfPeople);
+    if (numberOfPeople == null) return;
+
     final now = DateTime.now();
     final twoWeeksAgo = now.subtract(const Duration(days: 14));
 
-    // Fetch the user's orders from the last two weeks
     final ordersSnapshot = await FirebaseFirestore.instance
         .collection('users')
-        .doc(user!.id)
+        .doc(widget.user.id)
         .collection('orders')
         .where('orderDate', isGreaterThan: twoWeeksAgo)
         .get();
 
-    // Extract the list of items from all the orders
     final orderItems = ordersSnapshot.docs
         .expand((doc) => List<String>.from(doc['items'] as List))
         .toList();
 
-    // Fetch recipes based on the pantry items
-    final recipes = await _recipeService.getRecipesByPantryItems(orderItems);
+    final recipes = await _recipeService.getRecipesByPantryItems(
+      orderItems,
+      numberOfPeople: numberOfPeople,
+    );
 
-    // Update the UI with the suggested recipes
-    setState(() {});
+    setState(() {
+      recipeSuggestions = recipes;
+    });
   }
 
   void _suggestRecipesBasedOnGroceryList() {
@@ -556,38 +724,38 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
               ListTile(
                 title: const Text('Recommended Meals'),
                 onTap: () {
-                  Navigator.of(context).pop(); // Close the dialog
-                  _recommendMeals(
-                      user!.id); // Your existing method for recommended meals
+                  Navigator.of(context).pop();
+                  _recommendMeals(widget.user.id);
                 },
               ),
               ListTile(
                 title: const Text('Random Meal'),
                 onTap: () async {
-                  Navigator.of(context).pop(); // Close the dialog
-                  final recipes = await _recipeService.getRandomMeal();
+                  int? numberOfPeople = await _promptForNumberOfPeople('Random Meal', defaultValue: _defaultNumberOfPeople);
+                  if (numberOfPeople == null) return;
+                  Navigator.of(context).pop();
+                  final recipes = await _recipeService.getRandomMeal(
+                    numberOfPeople: numberOfPeople,
+                  );
                   setState(() {
-                    recipeSuggestions =
-                        recipes; // Update UI with random meal suggestions
+                    recipeSuggestions = recipes;
                   });
                 },
               ),
               ListTile(
                 title: const Text('Your Own Ingredients'),
                 onTap: () async {
-                  Navigator.of(context).pop(); // Close the main dialog
-                  final userInput = await _getUserIngredientsInput(
-                      context); // Get user input through the dialog
-
+                  Navigator.of(context).pop();
+                  final userInput = await _getUserIngredientsInput(context);
                   if (userInput != null && userInput.isNotEmpty) {
-                    final recipes =
-                        await _recipeService.getRecipesByPantryItems(
+                    int? numberOfPeople = await _promptForNumberOfPeople('Custom Ingredients Recipes', defaultValue: _defaultNumberOfPeople);
+                    if (numberOfPeople == null) return;
+                    final recipes = await _recipeService.getRecipesByPantryItems(
                       userInput.split(', ').map((e) => e.trim()).toList(),
+                      numberOfPeople: numberOfPeople,
                     );
-
                     setState(() {
-                      recipeSuggestions =
-                          recipes; // Update UI with recipes based on user input
+                      recipeSuggestions = recipes;
                     });
                   }
                 },
@@ -595,18 +763,17 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
               ListTile(
                 title: const Text('Suggest a Meal'),
                 onTap: () async {
-                  Navigator.of(context).pop(); // Close the main dialog
-                  final userSuggestions = await _getUserMealInput(
-                      context); // Get user-suggested meal
-
+                  Navigator.of(context).pop();
+                  final userSuggestions = await _getUserMealInput(context);
                   if (userSuggestions != null && userSuggestions.isNotEmpty) {
+                    int? numberOfPeople = await _promptForNumberOfPeople('Suggested Meal', defaultValue: _defaultNumberOfPeople);
+                    if (numberOfPeople == null) return;
                     final recipes = await _recipeService.getUserSuggestedMeals(
                       userSuggestions.split(', ').map((e) => e.trim()).toList(),
+                      numberOfPeople: numberOfPeople,
                     );
-
                     setState(() {
-                      recipeSuggestions =
-                          recipes; // Update UI with user-suggested meals
+                      recipeSuggestions = recipes;
                     });
                   }
                 },
@@ -614,15 +781,15 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
               ListTile(
                 title: const Text('Today\'s Grocery List'),
                 onTap: () async {
-                  Navigator.of(context).pop(); // Close the dialog
-                  _fetchTodaysGroceryList(); // Call the method to fetch today's grocery list
+                  Navigator.of(context).pop();
+                  _fetchTodaysGroceryList();
                 },
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(), // Close the dialog
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('Cancel'),
             ),
           ],
@@ -633,118 +800,56 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
 
   Future<String?> _getUserIngredientsInput(BuildContext context) async {
     TextEditingController ingredientsController = TextEditingController();
-
     return showDialog<String>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Enter Your Ingredients'),
-          content: TextField(
-            controller: ingredientsController,
-            decoration: const InputDecoration(
-                hintText: 'e.g., tomatoes, chicken, rice'),
+      builder: (context) => AlertDialog(
+        title: const Text('Enter Your Ingredients'),
+        content: TextField(
+          controller: ingredientsController,
+          decoration: const InputDecoration(hintText: 'e.g., tomatoes, chicken, rice'),
+        ),
+        actions: [
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(),
           ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context)
-                    .pop(); // Close dialog without returning any input
-              },
-            ),
-            TextButton(
-              child: const Text('Submit'),
-              onPressed: () {
-                Navigator.of(context)
-                    .pop(ingredientsController.text); // Return the user input
-              },
-            ),
-          ],
-        );
-      },
+          TextButton(
+            child: const Text('Submit'),
+            onPressed: () => Navigator.of(context).pop(ingredientsController.text),
+          ),
+        ],
+      ),
     );
   }
 
   Future<String?> _getUserMealInput(BuildContext context) async {
     TextEditingController mealController = TextEditingController();
-
     return showDialog<String>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Suggest a Meal'),
-          content: TextField(
-            controller: mealController,
-            decoration:
-                const InputDecoration(hintText: 'e.g., pasta, salad, curry'),
+      builder: (context) => AlertDialog(
+        title: const Text('Suggest a Meal'),
+        content: TextField(
+          controller: mealController,
+          decoration: const InputDecoration(hintText: 'e.g., pasta, salad, curry'),
+        ),
+        actions: [
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(),
           ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context)
-                    .pop(); // Close dialog without returning any input
-              },
-            ),
-            TextButton(
-              child: const Text('Submit'),
-              onPressed: () {
-                Navigator.of(context)
-                    .pop(mealController.text); // Return the user input
-              },
-            ),
-          ],
-        );
-      },
+          TextButton(
+            child: const Text('Submit'),
+            onPressed: () => Navigator.of(context).pop(mealController.text),
+          ),
+        ],
+      ),
     );
   }
 
-  Future<void> _fetchTodaysGroceryList() async {
-    final now = DateTime.now();
-    final currentDayOfWeek = now.weekday; // 1 = Monday, 7 = Sunday
-
-    // Fetch today's meals based on the weekly meal plan
-    final todayMeals = _weeklyMeals[
-        currentDayOfWeek - 1]; // Assuming _weeklyMeals is indexed by weekday
-
-    // Prepare a list of all meals for today
-    List<String> mealsToday = [];
-    if (todayMeals.breakfast.isNotEmpty) {
-      mealsToday.add(todayMeals.breakfast);
-    }
-    if (todayMeals.lunch.isNotEmpty) {
-      mealsToday.add(todayMeals.lunch);
-    }
-    if (todayMeals.dinner.isNotEmpty) {
-      mealsToday.add(todayMeals.dinner);
-    }
-
-    // Join meals into a single string for ingredient generation
-    String allMeals = mealsToday.join(', ');
-
-    try {
-      // Generate ingredients using ChatGPT service
-      final ingredients = await _chatGPTService.generateIngredients(allMeals);
-
-      // Fetch products matching the generated ingredients
-      await _fetchProductsMatchingIngredients(ingredients);
-
-      // Save the grocery list for today
-      await _saveGroceryList(ingredients);
-    } catch (e) {
-      // Handle error appropriately
-      print('Error generating grocery list for today: $e');
-    }
-  }
-
   void _editMeal(int index, Meal meal) async {
-    // Open a dialog to edit the meal
-    TextEditingController breakfastController =
-        TextEditingController(text: meal.breakfast);
-    TextEditingController lunchController =
-        TextEditingController(text: meal.lunch);
-    TextEditingController dinnerController =
-        TextEditingController(text: meal.dinner);
+    TextEditingController breakfastController = TextEditingController(text: meal.breakfast);
+    TextEditingController lunchController = TextEditingController(text: meal.lunch);
+    TextEditingController dinnerController = TextEditingController(text: meal.dinner);
 
     await showDialog(
       context: context,
@@ -784,22 +889,21 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
             child: const Text('Save'),
           ),
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
         ],
       ),
     );
   }
 
   void _createOrEditMealPlan() async {
-    // For simplicity, we'll open a dialog to confirm reset and edit
     bool reset = false;
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Create/Edit Meal Plan'),
-        content: const Text(
-            'Would you like to create a new meal plan for this week? This will reset the current plan.'),
+        content: const Text('Would you like to create a new meal plan for this week? This will reset the current plan.'),
         actions: [
           TextButton(
             onPressed: () {
@@ -809,7 +913,9 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
             child: const Text('Yes'),
           ),
           TextButton(
-              onPressed: () => Navigator.pop(context), child: const Text('No')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No'),
+          ),
         ],
       ),
     );
@@ -825,394 +931,149 @@ class MealPlanningScreenState extends State<MealPlanningScreen> {
   @override
   Widget build(BuildContext context) {
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    GroceryItem? groceryItem;
-    String? notes;
-    // Display loading indicator if necessary
+
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Meal Planning & Grocery List'),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+        appBar: AppBar(title: const Text('Meal Planning & Grocery List')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-        appBar: AppBar(
-          title: const Text('Meal Planning & Grocery List'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: _createOrEditMealPlan,
-              tooltip: 'Create/Edit Meal Plan',
+      appBar: AppBar(
+        title: const Text('Meal Planning & Grocery List'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: _createOrEditMealPlan,
+            tooltip: 'Create/Edit Meal Plan',
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextFormField(
+              decoration: const InputDecoration(labelText: 'Default Number of People'),
+              keyboardType: TextInputType.number,
+              initialValue: _defaultNumberOfPeople?.toString(),
+              validator: (value) => value!.isEmpty || int.parse(value) <= 0 ? 'Enter a valid number' : null,
+              onChanged: (value) {
+                setState(() {
+                  _defaultNumberOfPeople = int.tryParse(value);
+                });
+              },
             ),
-          ],
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              // Weekly Meal Plan Table
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('Day')),
-                      DataColumn(label: Text('Breakfast')),
-                      DataColumn(label: Text('Lunch')),
-                      DataColumn(label: Text('Dinner')),
-                      DataColumn(label: Text('Actions')),
-                    ],
-                    rows: List<DataRow>.generate(_weeklyMeals.length, (index) {
-                      final meal = _weeklyMeals[index];
-                      return DataRow(cells: [
-                        DataCell(Text(meal.day)),
-                        DataCell(Text(meal.breakfast)),
-                        DataCell(Text(meal.lunch)),
-                        DataCell(Text(meal.dinner)),
-                        DataCell(
-                          IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => _editMeal(index, meal),
-                          ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('Day')),
+                    DataColumn(label: Text('Breakfast')),
+                    DataColumn(label: Text('Lunch')),
+                    DataColumn(label: Text('Dinner')),
+                    DataColumn(label: Text('Actions')),
+                  ],
+                  rows: List<DataRow>.generate(_weeklyMeals.length, (index) {
+                    final meal = _weeklyMeals[index];
+                    return DataRow(cells: [
+                      DataCell(Text(meal.day)),
+                      DataCell(Text(meal.breakfast)),
+                      DataCell(Text(meal.lunch)),
+                      DataCell(Text(meal.dinner)),
+                      DataCell(
+                        IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () => _editMeal(index, meal),
                         ),
-                      ]);
-                    }),
-                  ),
+                      ),
+                    ]);
+                  }),
                 ),
               ),
-              const SizedBox(height: 20),
-              // Grocery List Section
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Grocery List:',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: _linkedProducts.isNotEmpty
-                          ? ListView.builder(
-                              itemCount: _linkedProducts.length,
-                              itemBuilder: (context, index) {
-                                final product = _linkedProducts[index];
-                                return Column(
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Grocery List:',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: _linkedProducts.isNotEmpty
+                        ? ListView.builder(
+                            itemCount: _linkedProducts.length,
+                            itemBuilder: (context, index) {
+                              final groceryItem = _linkedProducts[index];
+                              return ListTile(
+                                title: Text(groceryItem.name),
+                                subtitle: Text('Price: \$${groceryItem.price.toStringAsFixed(2)}${groceryItem.suggestedQuantity != null ? ' (Suggested: ${groceryItem.suggestedQuantity} ${groceryItem.unit ?? ''})' : ''}'),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    ValueListenableBuilder(
-                                      valueListenable:
-                                          ValueNotifier(selectedVariety),
-                                      builder: (context,
-                                          Variety? selectedVariety, _) {
-                                        return ExpansionTile(
-                                          leading: selectedVariety?.imageUrl !=
-                                                  null
-                                              ? Image.network(
-                                                  selectedVariety!.imageUrl,
-                                                  width: 40,
-                                                  height: 40,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (context, error,
-                                                          stackTrace) =>
-                                                      const Icon(
-                                                          Icons.error_outline,
-                                                          size: 40),
-                                                )
-                                              : (groceryItem!
-                                                          .product.pictureUrl !=
-                                                      null
-                                                  ? Image.network(
-                                                      groceryItem
-                                                          .product.pictureUrl,
-                                                      width: 40,
-                                                      height: 40,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (context,
-                                                              error,
-                                                              stackTrace) =>
-                                                          const Icon(
-                                                              Icons
-                                                                  .error_outline,
-                                                              size: 40),
-                                                    )
-                                                  : null),
-                                          title: Text(product.name),
-                                          subtitle: Text(
-                                              'Price: \$${selectedVariety?.discountedPriceStream != null ? selectedVariety!.discountedPrice!.firstWhere((value) => value != null, orElse: () => null).then((map) => map?.values.first?.toStringAsFixed(2) ?? groceryItem!.product.discountedPrice.toStringAsFixed(2)) : groceryItem!.product.basePrice.toStringAsFixed(2)}'),
-                                          children: [
-                                            if (groceryItem!
-                                                .product.varieties.isNotEmpty)
-                                              SizedBox(
-                                                height:
-                                                    200, // Adjust height as needed
-                                                child: ListView.builder(
-                                                  scrollDirection:
-                                                      Axis.horizontal,
-                                                  itemCount: groceryItem
-                                                      .product.varieties.length,
-                                                  itemBuilder:
-                                                      (context, varietyIndex) {
-                                                    var variety = groceryItem
-                                                            .product.varieties[
-                                                        varietyIndex];
-                                                    return Padding(
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                              8.0),
-                                                      child: GestureDetector(
-                                                        onTap: () {
-                                                          setState(() {
-                                                            this.selectedVariety =
-                                                                variety;
-                                                          });
-                                                        },
-                                                        child: Container(
-                                                          width: 200,
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            border: Border.all(
-                                                                color: this.selectedVariety ==
-                                                                        variety
-                                                                    ? Colors
-                                                                        .green
-                                                                    : Colors
-                                                                        .grey),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        8),
-                                                          ),
-                                                          child: Column(
-                                                            mainAxisSize:
-                                                                MainAxisSize
-                                                                    .min,
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                              variety.imageUrl !=
-                                                                      null
-                                                                  ? ClipRRect(
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                              8.0),
-                                                                      child: Image
-                                                                          .network(
-                                                                        variety
-                                                                            .imageUrl,
-                                                                        width:
-                                                                            100,
-                                                                        height:
-                                                                            100,
-                                                                        fit: BoxFit
-                                                                            .cover,
-                                                                        errorBuilder: (context, error, stackTrace) => const Icon(
-                                                                            Icons
-                                                                                .error_outline,
-                                                                            size:
-                                                                                40),
-                                                                      ),
-                                                                    )
-                                                                  : Container(),
-                                                              Padding(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .all(
-                                                                        8.0),
-                                                                child: Column(
-                                                                  crossAxisAlignment:
-                                                                      CrossAxisAlignment
-                                                                          .start,
-                                                                  children: [
-                                                                    Text(variety
-                                                                        .name),
-                                                                    Text.rich(
-                                                                      TextSpan(
-                                                                        children: [
-                                                                          if (variety.discountedPriceStream != null &&
-                                                                              variety.discountedPriceStream! != 0.0)
-                                                                            TextSpan(
-                                                                              text: ' \$${variety.price.toStringAsFixed(2) ?? 'N/A'}',
-                                                                              style: const TextStyle(
-                                                                                decoration: TextDecoration.lineThrough,
-                                                                                color: Colors.grey,
-                                                                              ),
-                                                                            ),
-                                                                          TextSpan(
-                                                                            text: variety.discountedPriceStream != null && variety.discountedPriceStream! != 0.0
-                                                                                ? ' \$${variety.discountedPrice?.toStringAsFixed(2) ?? 'N/A'}'
-                                                                                : variety.price != null
-                                                                                    ? ' \$${variety.price.toStringAsFixed(2)}'
-                                                                                    : ' Price not available',
-                                                                          ),
-                                                                        ],
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.all(8.0),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                children: [
-                                                  // Quantity controls
-                                                  Row(
-                                                    children: [
-                                                      IconButton(
-                                                        icon: const Icon(
-                                                            Icons.remove,
-                                                            color:
-                                                                Colors.white),
-                                                        onPressed: () {
-                                                          setState(() {
-                                                            if (quantity! > 1) {
-                                                              quantity--;
-                                                            }
-                                                          });
-                                                        },
-                                                      ),
-                                                      Text(
-                                                        '$quantity',
-                                                        style: const TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 20),
-                                                      ),
-                                                      IconButton(
-                                                        icon: const Icon(
-                                                            Icons.add,
-                                                            color:
-                                                                Colors.white),
-                                                        onPressed: () {
-                                                          setState(() {
-                                                            quantity++;
-                                                          });
-                                                        },
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  // Add to Cart button
-
-                                                  ElevatedButton(
-                                                    onPressed: () {
-                                                      if (selectedVariety !=
-                                                          null) {
-                                                        cartProvider.addItem(
-                                                          groceryItem
-                                                              .product, // assuming product context
-                                                          user!, // assuming you have access to user data
-                                                          selectedVariety,
-                                                          quantity,
-
-                                                          '', // or whatever notes you want to pass
-                                                        );
-                                                        // Optionally, you might want to show a snackbar or some feedback
-                                                      } else {
-                                                        // Show an error or info message if no variety is selected
-                                                        ScaffoldMessenger.of(
-                                                                context)
-                                                            .showSnackBar(
-                                                          const SnackBar(
-                                                              content: Text(
-                                                                  'Please select a variety')),
-                                                        );
-                                                      }
-                                                    },
-                                                    child: const Text(
-                                                        'Add to Cart'),
-                                                  ),
-                                                  // Ask for Subscription button
-                                                  ElevatedButton(
-                                                    onPressed: () {
-                                                      if (selectedVariety !=
-                                                          null) {
-                                                        _askForSubscription(
-                                                          groceryItem
-                                                              .product, // assuming product context
-                                                          selectedVariety,
-                                                        );
-                                                      } else {
-                                                        // Show an error or info message if no variety is selected
-                                                        ScaffoldMessenger.of(
-                                                                context)
-                                                            .showSnackBar(
-                                                          const SnackBar(
-                                                              content: Text(
-                                                                  'Please select a variety')),
-                                                        );
-                                                      }
-                                                    },
-                                                    child:
-                                                        const Text('Subscribe'),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        int? numberOfPeople = await _promptForNumberOfPeople('Add to Cart', defaultValue: _defaultNumberOfPeople);
+                                        if (numberOfPeople == null) return;
+                                        cartProvider.addItem(
+                                          groceryItem.product,
+                                          widget.user,
+                                          selectedVariety,
+                                          numberOfPeople,
+                                          '',
+                                        );
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Added to cart')),
                                         );
                                       },
+                                      child: const Text('Add to Cart'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton(
+                                      onPressed: () => _askForSubscription(
+                                        groceryItem.product,
+                                        null,
+                                        suggestedQuantity: groceryItem.suggestedQuantity,
+                                      ),
+                                      child: const Text('Subscribe'),
                                     ),
                                   ],
-                                );
-                              },
-                            )
-                          : const Text('No grocery items generated.'),
-                    ),
-                  ],
-                ),
+                                ),
+                              );
+                            },
+                          )
+                        : const Text('No grocery items generated.'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              // Additional Buttons or Information
-              ElevatedButton(
-                onPressed: _suggestRecipesBasedOnPantry,
-                child: const Text('Suggest Recipes from Pantry'),
-              ),
-              // Additional Buttons or Information
-              ElevatedButton(
-                onPressed: _suggestRecipesBasedOnGroceryList,
-                child: const Text('Generate Recipes'),
-              ),
-              const SizedBox(height: 16),
-              // Display Recommendations if any
-              if (mealRecommendations.isNotEmpty)
-                Text('Recommended Meals: ${mealRecommendations.join(', ')}'),
-              if (recipeSuggestions.isNotEmpty)
-                Text('Recipe Suggestions: $recipeSuggestions'),
-            ],
-          ),
-        ));
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _suggestRecipesBasedOnPantry,
+              child: const Text('Suggest Recipes from Pantry'),
+            ),
+            ElevatedButton(
+              onPressed: _suggestRecipesBasedOnGroceryList,
+              child: const Text('Generate Recipes'),
+            ),
+            const SizedBox(height: 16),
+            if (mealRecommendations.isNotEmpty)
+              Text('Recommended Meals: ${mealRecommendations.map((m) => "${m.day}: ${m.breakfast}, ${m.lunch}, ${m.dinner}").join('; ')}'),
+            if (recipeSuggestions.isNotEmpty)
+              Text('Recipe Suggestions: ${recipeSuggestions.join(', ')}'),
+          ],
+        ),
+      ),
+    );
   }
 }
 
-extension on double {
-  firstWhere(bool Function(dynamic value) param0,
-      {required Null Function() orElse}) {}
-}
-
-extension StreamMapExtension on Stream<Map<String, double?>?> {
-  String toStringAsFixed(int digits) {
-    return map((map) => map?['variety']?.toStringAsFixed(digits) ?? 'N/A')
-        .toString();
-  }
-}
-
-// models/meal.dart
 class Meal {
   String day;
   String breakfast;
@@ -1245,16 +1106,19 @@ class Meal {
   }
 }
 
-// models/grocery_item.dart
 class GroceryItem {
   String name;
   double price;
   Product product;
+  int? suggestedQuantity; // Added to store ChatGPT-suggested quantity
+  String? unit; // Added to store unit (e.g., "kg")
 
   GroceryItem({
     required this.name,
     required this.price,
     required this.product,
+    this.suggestedQuantity,
+    this.unit,
   });
 }
 
@@ -1262,6 +1126,6 @@ extension DateTimeExtension on DateTime {
   int get dayOfYear {
     final yearStart = DateTime(year, 1, 1);
     final diff = difference(yearStart);
-    return diff.inDays + 1; // Add 1 because Jan 1 is day 1, not day 0
+    return diff.inDays + 1;
   }
 }

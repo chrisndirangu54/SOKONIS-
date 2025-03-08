@@ -38,6 +38,14 @@ class User with ChangeNotifier {
   final bool canConfirmPreparing;
   final bool canConfirmReadyForDelivery;
 
+  List<String>? importantHolidays;
+
+  List<String>? importantCuisines;
+
+  List<String>? preferredCuisines;
+
+  List<String>? customHolidays;
+
   User({
     required this.id,
     required this.uid,
@@ -65,6 +73,11 @@ class User with ChangeNotifier {
     required this.contact,
     this.referralCode,
     this.referredBy,
+    this.importantHolidays,
+    this.importantCuisines,
+    this.preferredCuisines,
+    this.customHolidays,
+
   }) {
     updateRiderLocation(); // Initial update
   }
@@ -116,6 +129,7 @@ class User with ChangeNotifier {
           : null,
       referralCode: json['referralCode'],
       referredBy: json['referredBy'],
+
     );
     return user;
   }
@@ -202,7 +216,7 @@ class User with ChangeNotifier {
     String? uid,
     String? contact,
     String? referralCode,
-    String? referredBy,
+    String? referredBy, List<String>? customHolidays, List<String>? importantHolidays, List<String>? importantCuisines, List<String>? preferredCuisines,
   }) {
     final newUser = User(
       id: id ?? this.id,

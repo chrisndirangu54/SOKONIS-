@@ -123,6 +123,7 @@ class Product {
   num? rating;
   late final String id;
   final String name;
+  final DateTime? createdAt; // Add this field for Firestore created timestamp
 
   final double basePrice;
   final String description;
@@ -168,6 +169,7 @@ class Product {
   List<String>? weather;
   List<Product> genomicAlternatives;
   Product({
+    this.createdAt,
     required this.id,
     required this.name,
     required this.basePrice,
@@ -250,6 +252,9 @@ class Product {
         : null;
     DateTime? seasonEnd = data['seasonEnd'] != null
         ? (data['seasonEnd'] as Timestamp).toDate()
+        : null;
+    DateTime? createdAt = data['createdAt'] != null
+        ? (data['createdAt'] as Timestamp).toDate()
         : null;
 
     // Handle lists safely
@@ -338,6 +343,8 @@ class Product {
   User? user;
   Variety? variety;
 
+  var mostPurchasedLocation;
+
   get userLocation => user?.pinLocation;
 
   //get selectedVariety => variety;
@@ -372,8 +379,7 @@ class Product {
       name: data['name'] ?? '',
       basePrice: data['basePrice'] ?? 0.0,
       description: data['description'] ?? '',
-      categories: 
-          List<Category>.from(data['subcategoryImageUrls'] ?? []),
+      categories: List<Category>.from(data['subcategoryImageUrls'] ?? []),
       tags: List<String>.from(data['tags'] ?? []),
       varieties: (data['varieties'] as List?)
               ?.map((v) => Variety.fromMap(v))
@@ -420,7 +426,6 @@ class Product {
       rating: data['rating'] ?? 0,
     );
   }
-
 
   // Add toMap method to map Product fields to a map
   Map<String, dynamic> toMap() {

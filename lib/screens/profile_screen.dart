@@ -7,6 +7,7 @@ import 'package:grocerry/main.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/user.dart';
 import 'package:grocerry/screens/group_buy_page.dart';
+import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' as latLng;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:grocerry/models/group_buy_model.dart';
@@ -526,7 +527,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             ElevatedButton(
               onPressed: () {
-                _showUpdateProfileDialog(context, userProvider);
+                showUpdateProfileDialog(context, userProvider);
               },
               child: const Text('Update Profile'),
             ),
@@ -766,6 +767,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget buildMealPlanScreen(BuildContext context) {
+    final User user = Provider.of<UserProvider>(context).user;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -809,7 +811,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ElevatedButton(
                     onPressed: () {
                       Navigator.of(context).push(MaterialPageRoute(
-                        builder: (context) => const MealPlanningScreen(),
+                        builder: (context) => MealPlanningScreen(user: user,),
                       ));
                     },
                     child: const Text('View Meal Plans'),
@@ -968,196 +970,363 @@ class _ProfileScreenState extends State<ProfileScreen> {
             )));
   }
 
-  void _showUpdateProfileDialog(
-      BuildContext context, UserProvider userProvider) {
-    final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController(text: userProvider.name);
-    final emailController = TextEditingController(text: userProvider.email);
-    final contactController = TextEditingController(text: userProvider.contact);
 
-    final cityController =
-        TextEditingController(text: userProvider.address?.city);
-    final townController =
-        TextEditingController(text: userProvider.address?.town);
-    final estateController =
-        TextEditingController(text: userProvider.address?.estate);
-    final buildingController =
-        TextEditingController(text: userProvider.address?.buildingName);
-    final houseNumberController =
-        TextEditingController(text: userProvider.address?.houseNumber);
 
-    latLng.LatLng? selectedLocation = userProvider.address?.pinLocation != null
-        ? latLng.LatLng(
-            userProvider.address!.pinLocation!.latitude,
-            userProvider.address!.pinLocation!.longitude,
-          )
-        : null;
+void showUpdateProfileDialog(BuildContext context, UserProvider userProvider) {
+  final user = userProvider.user;
+  final formKey = GlobalKey<FormState>();
+  final nameController = TextEditingController(text: userProvider.name);
+  final emailController = TextEditingController(text: userProvider.email);
+  final contactController = TextEditingController(text: userProvider.contact);
+  final cityController = TextEditingController(text: userProvider.address?.city ?? '');
+  final townController = TextEditingController(text: userProvider.address?.town ?? '');
+  final estateController = TextEditingController(text: userProvider.address?.estate ?? '');
+  final buildingController = TextEditingController(text: userProvider.address?.buildingName ?? '');
+  final houseNumberController = TextEditingController(text: userProvider.address?.houseNumber ?? '');
+  latLng.LatLng? selectedLocation = userProvider.address?.pinLocation != null
+      ? latLng.LatLng(userProvider.address!.pinLocation!.latitude, userProvider.address!.pinLocation!.longitude)
+      : null;
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Update Profile'),
-              content: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) =>
-                            value!.isEmpty ? 'Name is required' : null,
-                      ),
-                      TextFormField(
-                        controller: emailController,
-                        decoration: const InputDecoration(labelText: 'Email'),
-                        validator: (value) {
-                          if (value!.isEmpty) return 'Email is required';
-                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                              .hasMatch(value)) {
-                            return 'Enter a valid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      TextFormField(
-                        controller: contactController,
-                        decoration: const InputDecoration(labelText: 'Contact'),
-                        validator: (value) =>
-                            value!.isEmpty ? 'Contact is required' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text('Address Details',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      TextFormField(
-                        controller: cityController,
-                        decoration: const InputDecoration(labelText: 'City'),
-                        validator: (value) =>
-                            value!.isEmpty ? 'City is required' : null,
-                      ),
-                      TextFormField(
-                        controller: townController,
-                        decoration: const InputDecoration(labelText: 'Town'),
-                      ),
-                      TextFormField(
-                        controller: estateController,
-                        decoration: const InputDecoration(labelText: 'Estate'),
-                      ),
-                      TextFormField(
-                        controller: buildingController,
-                        decoration:
-                            const InputDecoration(labelText: 'Building Name'),
-                      ),
-                      TextFormField(
-                        controller: houseNumberController,
-                        decoration:
-                            const InputDecoration(labelText: 'House Number'),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Pin Location'),
-                          ElevatedButton(
-                            onPressed: () async {
-                              final latLng.LatLng? result =
-                                  await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => MapPickerScreen(
-                                    initialPosition: selectedLocation ??
-                                        latLng.LatLng(0.0, 0.0),
-                                    onLocationSelected: (latLng, placemarks) {
-                                      setState(() {
-                                        selectedLocation = latLng;
-                                        if (placemarks.isNotEmpty) {
-                                          final placemark = placemarks.first;
-                                          cityController.text =
-                                              placemark.locality ?? '';
-                                          townController.text =
-                                              placemark.subLocality ?? '';
-                                          estateController.text =
-                                              placemark.subAdministrativeArea ??
-                                                  '';
-                                          houseNumberController.text =
-                                              placemark.street ?? '';
-                                        }
-                                      });
-                                    },
-                                  ),
+  // Custom holidays
+  final List<String> predefinedCustomHolidays = [
+    'Chinese New Year',
+    'Thanksgiving',
+    'Independence Day (USA)',
+    'Mid-Autumn Festival',
+    'Bastille Day',
+  ];
+  List<String>? selectedCustomHolidays = List.from(user.customHolidays ?? []).where((h) => predefinedCustomHolidays.contains(h)).cast<String>().toList();
+  Map<String, DateTime> customDatedHolidays = Map.fromEntries(
+    (user.customHolidays ?? []).where((h) => !predefinedCustomHolidays.contains(h)).map((h) {
+      final parts = h.split(': ');
+      return MapEntry(parts[0], DateTime.parse(parts[1]));
+    }),
+  );
+  final customHolidayNameController = TextEditingController();
+
+  // Important holidays
+  final List<String> predefinedImportantHolidays = [
+    'Jamhuri Day',
+    'Madaraka Day',
+    'Easter Sunday',
+    'Eid al-Fitr',
+    'Diwali',
+  ];
+  List<String> selectedImportantHolidays = List.from(user.importantHolidays ?? []);
+
+  // Important cuisines (Kenyan-specific)
+  final List<String> predefinedImportantCuisines = [
+    'Swahili',
+    'Kikuyu',
+    'Luo',
+    'Luhya',
+    'Kamba',
+  ];
+  List<String> selectedImportantCuisines = List.from(user.importantCuisines ?? []);
+
+  // Preferred cuisines (global)
+  final List<String> predefinedPreferredCuisines = [
+    'Chinese',
+    'European',
+    'Italian',
+    'Indian',
+    'American',
+  ];
+  List<String> selectedPreferredCuisines = List.from(user.preferredCuisines ?? []);
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Update Profile'),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Name'),
+                      validator: (value) => value!.isEmpty ? 'Name is required' : null,
+                    ),
+                    TextFormField(
+                      controller: emailController,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                      validator: (value) {
+                        if (value!.isEmpty) return 'Email is required';
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                          return 'Enter a valid email';
+                        }
+                        return null;
+                      },
+                    ),
+                    TextFormField(
+                      controller: contactController,
+                      decoration: const InputDecoration(labelText: 'Contact'),
+                      validator: (value) => value!.isEmpty ? 'Contact is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Address Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                    TextFormField(
+                      controller: cityController,
+                      decoration: const InputDecoration(labelText: 'City'),
+                      validator: (value) => value!.isEmpty ? 'City is required' : null,
+                    ),
+                    TextFormField(
+                      controller: townController,
+                      decoration: const InputDecoration(labelText: 'Town'),
+                    ),
+                    TextFormField(
+                      controller: estateController,
+                      decoration: const InputDecoration(labelText: 'Estate'),
+                    ),
+                    TextFormField(
+                      controller: buildingController,
+                      decoration: const InputDecoration(labelText: 'Building Name'),
+                    ),
+                    TextFormField(
+                      controller: houseNumberController,
+                      decoration: const InputDecoration(labelText: 'House Number'),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Pin Location'),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final latLng.LatLng? result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MapPickerScreen(
+                                  initialPosition: selectedLocation ?? const latLng.LatLng(0.0, 0.0),
+                                  onLocationSelected: (latLng, placemarks) {
+                                    setState(() {
+                                      selectedLocation = latLng;
+                                      if (placemarks.isNotEmpty) {
+                                        final placemark = placemarks.first;
+                                        cityController.text = placemark.locality ?? '';
+                                        townController.text = placemark.subLocality ?? '';
+                                        estateController.text = placemark.subAdministrativeArea ?? '';
+                                        houseNumberController.text = placemark.street ?? '';
+                                      }
+                                    });
+                                  },
                                 ),
-                              );
-                              if (result != null) {
-                                setState(() {
-                                  selectedLocation = result;
-                                });
-                              }
-                            },
-                            child: const Text('Select on Map'),
-                          ),
-                        ],
+                              ),
+                            );
+                            if (result != null) {
+                              setState(() {
+                                selectedLocation = result;
+                              });
+                            }
+                          },
+                          child: const Text('Select on Map'),
+                        ),
+                      ],
+                    ),
+                    if (selectedLocation != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          'Selected: ${selectedLocation!.latitude}, ${selectedLocation!.longitude}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
-                      if (selectedLocation != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: Text(
-                            'Selected: ${selectedLocation!.latitude}, ${selectedLocation!.longitude}',
-                            style: const TextStyle(fontSize: 12),
+                    const SizedBox(height: 16),
+                    // Important Holidays
+                    const Text('Important Holidays', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Wrap(
+                      spacing: 8.0,
+                      children: predefinedImportantHolidays.map((holiday) {
+                        return ChoiceChip(
+                          label: Text(holiday),
+                          selected: selectedImportantHolidays.contains(holiday),
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                selectedImportantHolidays.add(holiday);
+                              } else {
+                                selectedImportantHolidays.remove(holiday);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    // Custom Holidays
+                    const Text('Custom Holidays', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Wrap(
+                      spacing: 8.0,
+                      children: predefinedCustomHolidays.map((holiday) {
+                        return ChoiceChip(
+                          label: Text(holiday),
+                          selected: selectedCustomHolidays.contains(holiday),
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                selectedCustomHolidays.add(holiday);
+                              } else {
+                                selectedCustomHolidays.remove(holiday);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: customHolidayNameController,
+                            decoration: const InputDecoration(labelText: 'Custom Holiday (e.g., Birthday)'),
                           ),
                         ),
-                    ],
-                  ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now(),
+                              firstDate: DateTime(2025),
+                              lastDate: DateTime(2030),
+                            );
+                            if (picked != null && customHolidayNameController.text.isNotEmpty) {
+                              setState(() {
+                                customDatedHolidays[customHolidayNameController.text] = picked;
+                                customHolidayNameController.clear();
+                              });
+                            }
+                          },
+                          child: const Text('Pick Date'),
+                        ),
+                      ],
+                    ),
+                    if (customDatedHolidays.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: customDatedHolidays.entries.map((entry) {
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('${entry.key}: ${DateFormat('yyyy-MM-dd').format(entry.value)}'),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, size: 20),
+                                  onPressed: () {
+                                    setState(() {
+                                      customDatedHolidays.remove(entry.key);
+                                    });
+                                  },
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    // Important Cuisines (Kenyan)
+                    const Text('Important Cuisines (Kenyan)', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Wrap(
+                      spacing: 8.0,
+                      children: predefinedImportantCuisines.map((cuisine) {
+                        return ChoiceChip(
+                          label: Text(cuisine),
+                          selected: selectedImportantCuisines.contains(cuisine),
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                selectedImportantCuisines.add(cuisine);
+                              } else {
+                                selectedImportantCuisines.remove(cuisine);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    // Preferred Cuisines (Global)
+                    const Text('Preferred Cuisines (Global)', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Wrap(
+                      spacing: 8.0,
+                      children: predefinedPreferredCuisines.map((cuisine) {
+                        return ChoiceChip(
+                          label: Text(cuisine),
+                          selected: selectedPreferredCuisines.contains(cuisine),
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                selectedPreferredCuisines.add(cuisine);
+                              } else {
+                                selectedPreferredCuisines.remove(cuisine);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    if (formKey.currentState!.validate()) {
-                      final newAddress = Address(
-                        city: cityController.text,
-                        town: townController.text,
-                        estate: estateController.text,
-                        buildingName: buildingController.text,
-                        houseNumber: houseNumberController.text,
-                        pinLocation: selectedLocation != null
-                            ? gmaps.LatLng(selectedLocation!.latitude,
-                                selectedLocation!.longitude)
-                            : userProvider.address?.pinLocation,
-                      );
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  if (formKey.currentState!.validate()) {
+                    final newAddress = Address(
+                      city: cityController.text,
+                      town: townController.text,
+                      estate: estateController.text,
+                      buildingName: buildingController.text,
+                      houseNumber: houseNumberController.text,
+                      pinLocation: selectedLocation != null
+                          ? gmaps.LatLng(selectedLocation!.latitude, selectedLocation!.longitude)
+                          : userProvider.address?.pinLocation,
+                    );
 
-                      userProvider.updateProfile(
-                        name: nameController.text,
-                        email: emailController.text,
-                        contact: contactController.text,
-                        address: newAddress,
-                        pinLocation: gmaps.LatLng(
-                          selectedLocation?.latitude ??
-                              userProvider.address!.pinLocation!.latitude,
-                          selectedLocation?.longitude ??
-                              userProvider.address!.pinLocation!.longitude,
-                        ),
-                      );
-                      Navigator.of(context).pop();
-                    }
-                  },
-                  child: const Text('Update'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
+                    final customHolidays = [
+                      ...selectedCustomHolidays,
+                      ...customDatedHolidays.entries.map((e) => '${e.key}: ${DateFormat('yyyy-MM-dd').format(e.value)}'),
+                    ];
+
+                    userProvider.updateProfile(
+                      name: nameController.text,
+                      email: emailController.text,
+                      contact: contactController.text,
+                      address: newAddress,
+                      pinLocation: gmaps.LatLng(
+                        selectedLocation?.latitude ?? userProvider.address!.pinLocation!.latitude,
+                        selectedLocation?.longitude ?? userProvider.address!.pinLocation!.longitude,
+                      ),
+                      customHolidays: customHolidays,
+                      importantHolidays: selectedImportantHolidays,
+                      importantCuisines: selectedImportantCuisines,
+                      preferredCuisines: selectedPreferredCuisines,
+                    );
+                    Navigator.of(context).pop();
+                  }
+                },
+                child: const Text('Update'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
 }
+  }
 
 class MapPickerScreen extends StatefulWidget {
   final latLng.LatLng initialPosition;

@@ -6,7 +6,7 @@ class RecipeService {
   final String apiKey =
       'your_openai_api_key'; // Replace with your OpenAI API key
 
-  Future<List<String>> getRecipesByPantryItems(List<String> orderItems) async {
+  Future<List<String>> getRecipesByPantryItems(List<String> orderItems, {required int numberOfPeople}) async {
     final prompt =
         'Suggest some recipes based on the following ingredients: ${orderItems.join(', ')}';
 
@@ -14,14 +14,14 @@ class RecipeService {
   }
 
   Future<List<String>> getUserSuggestedMeals(
-      List<String> userSuggestions) async {
+      List<String> userSuggestions, {required int numberOfPeople}) async {
     final prompt =
         'Suggest some meals based on the following user suggestions: ${userSuggestions.join(', ')}';
 
     return await _fetchRecipes(prompt);
   }
 
-  Future<List<String>> getRandomMeal() async {
+  Future<List<String>> getRandomMeal({required int numberOfPeople}) async {
     const prompt = 'Suggest a random meal for dinner.';
 
     return await _fetchRecipes(prompt);

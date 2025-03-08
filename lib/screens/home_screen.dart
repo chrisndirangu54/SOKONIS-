@@ -78,7 +78,7 @@ class HomeScreenState extends State<HomeScreen> {
   List<String> searchSuggestions = [];
   List<Product> seasonallyAvailable = [];
   String? selectedCategory;
-
+  late List<String> selectedSubcategories = [];
   User? user;
   String? _healthBenefits;
   Product? _selectedHealthBenefitsProduct;
@@ -119,10 +119,12 @@ class HomeScreenState extends State<HomeScreen> {
 // Initialize in your state class
   int _currentHintIndex = 0;
   Timer? _hintTimer;
+  List<String> allTags = []; // Store all unique tags
+  String? selectedTag; // Track the currently selected tag
+  List<Product> tagFilteredProducts = []; // Products filtered by selected tag
 
   static var _searchDebouncer;
   
-  late List<String> selectedSubcategories;
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -170,7 +172,34 @@ class HomeScreenState extends State<HomeScreen> {
     }
 
     _initializeUser();
+    _initializeTags(); // Initialize tags
   }
+
+  void _initializeTags() {
+    // Extract unique tags from products
+    setState(() {
+      allTags = products
+          .expand((product) => product.tags)
+          .toSet()
+          .toList()
+        ..sort(); // Optional: sort alphabetically
+    });
+  }
+
+  void _filterProductsByTag(String tag) {
+    setState(() {
+      selectedTag = tag;
+      tagFilteredProducts = products.where((product) => product.tags.contains(tag)).toList();
+    });
+  }
+
+  void _clearTagFilter() {
+    setState(() {
+      selectedTag = null;
+      tagFilteredProducts = [];
+    });
+  }
+
 
   void _listenToDiscountedPriceStream2(Stream<Map<String, double?>?>? stream) {
     if (stream != null) {
@@ -656,109 +685,172 @@ void _filterProducts() {
     );
   }
 
-  // Filter and Sort Controls (including Subcategory Selector)
-  Widget _buildFilterAndSortControls() {
-    // Fetch subcategories for the selected category
-    List<String> subcategories = products
-        .where((p) => p.categories.any((c) => c.name == selectedCategory))
-        .expand((p) => p.categories
-            .firstWhere((c) => c.name == selectedCategory)
-            .subcategories
-            .map((s) => s.name))
-        .toSet()
-        .toList();
+Widget _buildFilterAndSortControls() {
+  List<String> subcategories = products
+      .where((p) => p.categories.any((c) => c.name == selectedCategory))
+      .expand((p) => p.categories
+          .firstWhere((c) => c.name == selectedCategory)
+          .subcategories
+          .map((s) => s.name))
+      .toSet()
+      .toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Subcategory Selector
-        if (subcategories.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: Text("Subcategories", style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          Wrap(
-            spacing: 8.0,
-            children: subcategories.map((subcategory) => ChoiceChip(
-              label: Text(subcategory),
-              selected: selectedSubcategories.contains(subcategory),
-              onSelected: (selected) {
-                setState(() {
-                  if (selected) {
-                    selectedSubcategories.add(subcategory);
-                  } else {
-                    selectedSubcategories.remove(subcategory);
-                  }
-                });
-              },
-            )).toList(),
-          ),
-        ],
-        // Price Filter
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // Subcategory Selector
+      if (subcategories.isNotEmpty) ...[
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 8.0),
-          child: Text("Price Range", style: TextStyle(fontWeight: FontWeight.bold)),
+          child: Text("Subcategories", style: TextStyle(fontWeight: FontWeight.bold)),
         ),
-        RangeSlider(
-          values: RangeValues(minPrice!, maxPrice!),
-          min: 0.0,
-          max: 1000.0,
-          onChanged: (values) {
-            setState(() {
-              minPrice = values.start;
-              maxPrice = values.end;
-            });
-          },
-        ),
-        Text('Price: \$${minPrice!.toStringAsFixed(2)} - \$${maxPrice!.toStringAsFixed(2)}'),
-        // Sort Dropdown
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8.0),
-          child: Text("Sort By", style: TextStyle(fontWeight: FontWeight.bold)),
-        ),
-        DropdownButton<String>(
-          value: sortBy,
-          onChanged: (newValue) {
-            setState(() {
-              sortBy = newValue!;
-            });
-          },
-          items: ['default', 'priceLow', 'priceHigh'].map((value) => DropdownMenuItem(
-            value: value,
-            child: Text(
-              value == 'default'
-                  ? 'Default'
-                  : value == 'priceLow'
-                      ? 'Price: Low to High'
-                      : 'Price: High to Low',
-            ),
+        Wrap(
+          spacing: 8.0,
+          children: subcategories.map((subcategory) => ChoiceChip(
+            label: Text(subcategory),
+            selected: selectedSubcategories.contains(subcategory),
+            onSelected: (selected) {
+              setState(() {
+                if (selected) {
+                  selectedSubcategories.add(subcategory);
+                } else {
+                  selectedSubcategories.remove(subcategory);
+                }
+              });
+            },
           )).toList(),
         ),
       ],
-    );
-  }
+      // Price Filter
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8.0),
+        child: Text("Price Range", style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+      RangeSlider(
+        values: RangeValues(minPrice!, maxPrice!),
+        min: 0.0,
+        max: 1000.0,
+        onChanged: (values) {
+          setState(() {
+            minPrice = values.start;
+            maxPrice = values.end;
+          });
+        },
+      ),
+      Text('Price: \$${minPrice!.toStringAsFixed(2)} - \$${maxPrice!.toStringAsFixed(2)}'),
+      // Sort Dropdown
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8.0),
+        child: Text("Sort By", style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+      DropdownButton<String>(
+        value: sortBy,
+        onChanged: (newValue) {
+          setState(() {
+            sortBy = newValue!;
+          });
+        },
+        items: [
+          'default',
+          'priceLow',
+          'priceHigh',
+          'weather',
+          'consumptionTime',
+          'newest',
+          'trending',
+          'inSeason',
+          'organic',
+          'ecofriendly',
+          'discounted'
+        ].map((value) => DropdownMenuItem(
+          value: value,
+          child: Text(
+            value == 'default' ? 'Default'
+                : value == 'priceLow' ? 'Price: Low to High'
+                : value == 'priceHigh' ? 'Price: High to Low'
+                : value == 'weather' ? 'Weather Suitability'
+                : value == 'consumptionTime' ? 'Time of Consumption'
+                : value == 'newest' ? 'Newest Products'
+                : value == 'trending' ? 'Trending Products'
+                : value == 'inSeason' ? 'In Season'
+                : value == 'organic' ? 'Organic First'
+                : value == 'ecofriendly' ? 'Eco-Friendly First'
+                : 'Discounted First',
+          ),
+        )).toList(),
+      ),
+    ],
+  );
+}
 
-  // Filtering and Sorting Logic
-  List<Product> _applyFiltersAndSort(List<Product> products) {
-    return products.where((product) {
-      // Filter by category
-      if (!product.categories.any((c) => c.name == selectedCategory)) return false;
-      // Filter by price
-      if (product.basePrice < minPrice! || product.basePrice > maxPrice!) return false;
-      // Filter by subcategories if any are selected
-      if (selectedSubcategories.isNotEmpty) {
-        Category category = product.categories.firstWhere((c) => c.name == selectedCategory!);
-        if (!category.subcategories.any((s) => selectedSubcategories.contains(s.name))) return false;
-      }
-      return true;
-    }).toList()
-      ..sort((a, b) => sortBy == 'priceLow'
-          ? a.basePrice.compareTo(b.basePrice)
-          : sortBy == 'priceHigh'
-              ? b.basePrice.compareTo(a.basePrice)
-              : 0);
-  }
+List<Product> _applyFiltersAndSort(List<Product> products) {
+  // Current date for season and new product checks
+  final DateTime now = DateTime.now();
+  final DateTime twoMonthsAgo = DateTime(now.year, now.month - 2, now.day);
 
+  // First apply filters
+  List<Product> filtered = products.where((product) {
+    if (!product.categories.any((c) => c.name == selectedCategory)) return false;
+    if (product.basePrice < minPrice! || product.basePrice > maxPrice!) return false;
+    if (selectedSubcategories.isNotEmpty) {
+      Category category = product.categories.firstWhere((c) => c.name == selectedCategory!);
+      if (!category.subcategories.any((s) => selectedSubcategories.contains(s.name))) return false;
+    }
+    return true;
+  }).toList();
+
+  // Then apply sorting
+  return filtered..sort((a, b) {
+    switch (sortBy) {
+      case 'priceLow':
+        return a.basePrice.compareTo(b.basePrice);
+      case 'priceHigh':
+        return b.basePrice.compareTo(a.basePrice);
+      case 'weather':
+        return (b.weather?.length ?? 0).compareTo(a.weather?.length ?? 0);
+      case 'consumptionTime':
+        return (b.consumptionTime?.length ?? 0).compareTo(a.consumptionTime?.length ?? 0);
+      case 'newest':
+        // Sort by products added in the last 2 months based on createdAt
+        bool aIsNew = a.createdAt != null && a.createdAt!.isAfter(twoMonthsAgo);
+        bool bIsNew = b.createdAt != null && b.createdAt!.isAfter(twoMonthsAgo);
+        if (aIsNew == bIsNew) {
+          return (b.createdAt ?? DateTime(2000)).compareTo(a.createdAt ?? DateTime(2000));
+        }
+        return aIsNew ? -1 : 1;
+      case 'trending':
+        return b.recentPurchaseCount.compareTo(a.recentPurchaseCount);
+      case 'inSeason':
+        // Check if currently in season based on seasonStart and seasonEnd
+        bool aInSeason = a.isSeasonal &&
+            a.seasonStart != null &&
+            a.seasonEnd != null &&
+            now.isAfter(a.seasonStart!) &&
+            now.isBefore(a.seasonEnd!);
+        bool bInSeason = b.isSeasonal &&
+            b.seasonStart != null &&
+            b.seasonEnd != null &&
+            now.isAfter(b.seasonStart!) &&
+            now.isBefore(b.seasonEnd!);
+        if (aInSeason == bInSeason) return 0;
+        return aInSeason ? -1 : 1;
+      case 'organic':
+        if (a.isOrganic == b.isOrganic) return 0;
+        return a.isOrganic ? -1 : 1;
+      case 'ecofriendly':
+        if (a.isEcoFriendly == b.isEcoFriendly) return 0;
+        return a.isEcoFriendly ? -1 : 1;
+      case 'discounted':
+        if (a.hasDiscounts == b.hasDiscounts) {
+          return b.discountedPrice.compareTo(a.discountedPrice);
+        }
+        return a.hasDiscounts ? -1 : 1;
+      case 'default':
+      default:
+        return 0;
+    }
+  });
+}
 
   Future<void> fetchHealthBenefits(Product? product) async {
     setState(() {
@@ -2120,7 +2212,75 @@ void _filterProducts() {
       throw 'Could not launch WhatsApp';
     }
   }
-
+Widget _buildTagsSection() {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('Explore by Tags'),
+        SizedBox(
+          height: 40.0, // Fixed height for horizontal scroll of tags
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: allTags.length + 1, // +1 for "Clear" chip
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                // "Clear" chip to reset filter
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ActionChip(
+                    label: const Text('Clear'),
+                    backgroundColor: selectedTag == null ? Colors.blue : Colors.grey,
+                    labelStyle: TextStyle(color: selectedTag == null ? Colors.white : Colors.black),
+                    onPressed: _clearTagFilter,
+                  ),
+                );
+              }
+              final tag = allTags[index - 1];
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ActionChip(
+                  label: Text(tag),
+                  backgroundColor: selectedTag == tag ? Colors.blue : null,
+                  labelStyle: TextStyle(color: selectedTag == tag ? Colors.white : Colors.black),
+                  onPressed: () => _filterProductsByTag(tag),
+                ),
+              );
+            },
+          ),
+        ),
+        // Display filtered products in a grid if a tag is selected
+        if (selectedTag != null && tagFilteredProducts.isNotEmpty)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionTitle('Products tagged "$selectedTag"'),
+              GridView.builder(
+                shrinkWrap: true, // Important for nesting in SingleChildScrollView
+                physics: const NeverScrollableScrollPhysics(), // Disable inner scrolling
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2, // 2 columns for grid
+                  crossAxisSpacing: 10.0,
+                  mainAxisSpacing: 10.0,
+                  childAspectRatio: 0.75, // Adjust as needed for card proportions
+                ),
+                itemCount: tagFilteredProducts.length,
+                itemBuilder: (context, index) {
+                  return _buildProductCard(tagFilteredProducts[index], isGrid: true);
+                },
+              ),
+            ],
+          )
+        else if (selectedTag != null && tagFilteredProducts.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text('No products found for this tag.'),
+          ),
+      ],
+    ),
+  );
+}
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
@@ -2146,86 +2306,53 @@ void _filterProducts() {
 
                 title: Row(
                   children: [
-                    GestureDetector(
-                      onTapDown: (_) {
-                        // Animation trigger when pressed.
-                      },
-                      onTapUp: (_) {
-                        // Additional logic on release can be added here.
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  Colors.black.withOpacity(0.2), // Shadow color
-                              spreadRadius: 2,
-                              blurRadius: 10,
-                              offset: const Offset(0, 4), // Shadow offset
-                            ),
-                          ],
-                        ),
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween<double>(begin: 0.0, end: 0.1),
-                          duration: const Duration(
-                              milliseconds: 500), // Bounce effect duration
-                          curve: Curves.elasticInOut, // Elastic effect curve
-                          builder: (context, tiltValue, child) {
-                            // Get screen dimensions
-                            final screenWidth =
-                                MediaQuery.of(context).size.width;
-                            final screenHeight =
-                                MediaQuery.of(context).size.height;
-                            // Define adaptive sizes (e.g., 25% of screen width, capped at 100)
-                            final containerSize =
-                                (screenWidth * 0.25).clamp(40.0, 100.0);
-                            final lottieSize =
-                                (containerSize * 0.8).clamp(30.0, 80.0);
+                    Container(
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            spreadRadius: 2,
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Builder(
+                        builder: (context) {
+                          final screenWidth = MediaQuery.of(context).size.width;
+                          final containerSize = (screenWidth * 0.25).clamp(40.0, 100.0);
+                          final lottieSize = (containerSize * 0.8).clamp(30.0, 80.0);
 
-                            return GlassmorphicContainer(
-                              width: containerSize, // Adaptive width
-                              height:
-                                  containerSize, // Keep square, adaptive height
-                              borderRadius: 20,
-                              blur: 15,
-                              alignment: Alignment.center,
-                              border: 2,
-                              linearGradient: LinearGradient(
-                                colors: [
-                                  Colors.lightGreenAccent.withOpacity(0.2),
-                                  Colors.orange.withOpacity(0.05),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderGradient: LinearGradient(
-                                colors: [
-                                  Colors.redAccent.withOpacity(0.4),
-                                  Colors.purpleAccent.withOpacity(0.2),
-                                  Colors.pinkAccent.withOpacity(0.1),
-                                ],
-                              ),
-                              child: Transform(
-                                transform: Matrix4.identity()
-                                  ..setEntry(
-                                      3, 2, 0.005) // Stronger perspective
-                                  ..rotateY(
-                                      tiltValue * 3) // Amplify Y-axis rotation
-                                  ..rotateX(
-                                      tiltValue * 3) // Amplify X-axis rotation
-                                  ..scale(1.1), // Optional scale
-                                alignment: Alignment
-                                    .center, // Updated to Alignment.center
-                                child: Lottie.network(
-                                  'https://lottie.host/f0e504ff-1b4a-43d1-a08c-93fa0aa5e4ae/6xKWN4vKCF.json',
-                                  height: lottieSize, // Adaptive height
-                                  width: lottieSize, // Adaptive width
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                          return GlassmorphicContainer(
+                            width: containerSize,
+                            height: containerSize,
+                            borderRadius: 20,
+                            blur: 15,
+                            alignment: Alignment.center,
+                            border: 2,
+                            linearGradient: LinearGradient(
+                              colors: [
+                                Colors.lightGreenAccent.withOpacity(0.2),
+                                Colors.orange.withOpacity(0.05),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderGradient: LinearGradient(
+                              colors: [
+                                Colors.redAccent.withOpacity(0.4),
+                                Colors.purpleAccent.withOpacity(0.2),
+                                Colors.pinkAccent.withOpacity(0.1),
+                              ],
+                            ),
+                            child: Lottie.network(
+                              'https://lottie.host/f0e504ff-1b4a-43d1-a08c-93fa0aa5e4ae/6xKWN4vKCF.json',
+                              height: lottieSize,
+                              width: lottieSize,
+                              fit: BoxFit.contain,
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 8), // Spacing between logo and title
@@ -2653,6 +2780,9 @@ void _filterProducts() {
                     Text(_getGreeting(), style: const TextStyle(fontSize: 24)),
                   ],
                 ),
+
+                _buildTagsSection(), // Updated tags section with grid
+                // Check if there are offers and no search query
                 if (offers.isNotEmpty && searchController.text.isEmpty)
                   Column(
                     children: [
@@ -2782,8 +2912,7 @@ void _filterProducts() {
                               SliverList(
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
-                                    final product = filteredProducts[index];
-                                    return _buildProductCard(products[index],
+                                    return _buildProductCard(filteredProducts[index],
                                         isGrid: false);
                                   },
                                   childCount: filteredProducts.length,

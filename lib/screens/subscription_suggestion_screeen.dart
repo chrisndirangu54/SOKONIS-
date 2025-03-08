@@ -52,32 +52,28 @@ class _SubscriptionSuggestionScreenState
     super.dispose();
   }
 
+
   Future<void> _generateSuggestions() async {
     setState(() => _isLoading = true);
 
     try {
       // Check if a health condition is already selected
-      bool hasHealthCondition =
-          await _checkHealthConditionSelected(widget.user.id);
+      bool hasHealthCondition = await _checkHealthConditionSelected(widget.user.id);
 
       String? selectedHealthCondition;
       if (!hasHealthCondition) {
         bool? wantsToSelectCondition = await _askToSelectHealthCondition();
         if (wantsToSelectCondition == true) {
-          List<String> conditions = await _healthConditionService
-              .fetchHealthConditions(widget.user.id);
+          List<String> conditions = await _healthConditionService.fetchHealthConditions(widget.user.id);
           if (conditions.isNotEmpty) {
-            selectedHealthCondition =
-                await _showHealthConditionSelectionDialog(conditions);
+            selectedHealthCondition = await _showHealthConditionSelectionDialog(conditions);
             if (selectedHealthCondition != null) {
-              _healthConditionService
-                  .updateSelectedHealthCondition(selectedHealthCondition);
+              _healthConditionService.updateSelectedHealthCondition(selectedHealthCondition);
             }
           }
         }
       } else {
-        selectedHealthCondition =
-            await _healthConditionService.healthConditionStream.firstWhere(
+        selectedHealthCondition = await _healthConditionService.healthConditionStream.firstWhere(
           (condition) => condition != null,
           orElse: () => '',
         );
@@ -91,12 +87,62 @@ class _SubscriptionSuggestionScreenState
           .limit(50)
           .get();
 
-      List<Map<String, dynamic>> purchaseHistory =
-          purchasesSnapshot.docs.map((doc) => doc.data()).toList();
+      List<Map<String, dynamic>> purchaseHistory = purchasesSnapshot.docs.map((doc) => doc.data()).toList();
 
-      // Generate suggestions with or without health condition
+      // Fetch user cuisines from Firestore
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(widget.user.id).get();
+      final userData = userDoc.data() ?? {};
+      final List<String> importantCuisines = List<String>.from(userData['importantCuisines'] ?? []);
+      final List<String> preferredCuisines = List<String>.from(userData['preferredCuisines'] ?? []);
+
+      // Prompt for number of people
+      int? numberOfPeople = await _promptForNumberOfPeople();
+      if (numberOfPeople == null) {
+        setState(() => _isLoading = false);
+        return; // Abort if user cancels
+      }
+
+      // Ask if cuisines should be selected
+      bool? shouldSelectCuisines = await _askToSelectCuisines();
+      if (shouldSelectCuisines == null) {
+        setState(() => _isLoading = false);
+        return; // Abort if user cancels
+      }
+
+      List<String> selectedCuisines;
+      bool useSavedCuisines = false; // Default to false, will be updated if needed
+      if (shouldSelectCuisines) {
+        // Navigate to saved vs. new cuisine selection
+        bool? useSaved = await _askToUseSavedCuisines();
+        if (useSaved == null) {
+          setState(() => _isLoading = false);
+          return; // Abort if user cancels
+        }
+
+        useSavedCuisines = useSaved;
+        if (useSaved) {
+          selectedCuisines = [...importantCuisines, ...preferredCuisines]; // Use saved cuisines
+        } else {
+          selectedCuisines = (await _showCuisineSelectionDialog(importantCuisines, preferredCuisines)) ?? [];
+          if (selectedCuisines.isEmpty && importantCuisines.isEmpty && preferredCuisines.isEmpty) {
+            setState(() => _isLoading = false);
+            return; // Abort if no cuisines selected and no saved ones
+          }
+        }
+      } else {
+        selectedCuisines = []; // No cuisines used
+      }
+
+      // Generate suggestions
       final suggestions = await _getChatGPTSuggestions(
-          purchaseHistory, selectedHealthCondition);
+        purchaseHistory,
+        selectedHealthCondition,
+        importantCuisines,
+        preferredCuisines,
+        numberOfPeople: numberOfPeople,
+        selectedCuisines: selectedCuisines,
+        useSavedCuisines: useSavedCuisines,
+      );
 
       setState(() {
         _suggestions = suggestions;
@@ -110,6 +156,198 @@ class _SubscriptionSuggestionScreenState
         );
       }
     }
+  }
+
+  Future<Map<String, List<ProductSuggestion>>> _getChatGPTSuggestions(
+    List<Map<String, dynamic>> purchases,
+    String? healthCondition,
+    List<String> importantCuisines,
+    List<String> preferredCuisines, {
+    required int numberOfPeople,
+    required List<String> selectedCuisines,
+    required bool useSavedCuisines,
+  }) async {
+    const apiKey = 'YOUR_OPENAI_API_KEY';
+    const url = 'https://api.openai.com/v1/chat/completions';
+
+    // Determine cuisines based on user choice
+    final allCuisines = useSavedCuisines
+        ? [...importantCuisines, ...preferredCuisines] // Use saved cuisines only
+        : selectedCuisines; // Use only newly selected cuisines or empty list if no cuisines selected
+
+    // Determine if cuisines should be included
+    bool includeCuisines = purchases.length < 5 || allCuisines.isNotEmpty;
+
+    final prompt = '''
+    Based on this purchase history: ${jsonEncode(purchases)}
+    ${healthCondition != null ? 'And this health condition: $healthCondition' : ''}
+    ${includeCuisines && allCuisines.isNotEmpty ? 'And these preferred cuisines: ${allCuisines.join(', ')}' : ''}
+    For $numberOfPeople people,
+    Suggest subscription products and their frequencies (Daily, Weekly, Bi-weekly, Monthly).
+    Group them by frequency and return in JSON format like this:
+    {
+      "Daily": [{"name": "product1", "quantity": 1}, ...],
+      "Weekly": [{"name": "product2", "quantity": 2}, ...],
+      "Bi-weekly": [{"name": "product3", "quantity": 1}, ...],
+      "Monthly": [{"name": "product4", "quantity": 3}, ...]
+    }
+    Consider purchase frequency, quantity patterns, and 
+    ${healthCondition != null ? 'tailor suggestions to the health condition' : 'general preferences'}.
+    ${includeCuisines ? 'Incorporate cuisine preferences into the suggestions, adjusting quantities based on the number of people.' : ''}
+    Scale quantities appropriately for $numberOfPeople people.
+    ''';
+
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $apiKey',
+      },
+      body: jsonEncode({
+        'model': 'gpt-3.5-turbo',
+        'messages': [
+          {'role': 'user', 'content': prompt}
+        ],
+        'temperature': 0.7,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final content = jsonDecode(data['choices'][0]['message']['content']);
+      return content.map((key, value) => MapEntry(
+            key,
+            (value as List).map((item) => ProductSuggestion.fromJson(item)).toList(),
+          ));
+    } else {
+      throw Exception('Failed to get ChatGPT response: ${response.statusCode}');
+    }
+  }
+
+  Future<int?> _promptForNumberOfPeople() async {
+    TextEditingController controller = TextEditingController();
+    return await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Number of People'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: 'e.g., 4'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text);
+              if (value != null && value > 0) {
+                Navigator.pop(context, value);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a valid number')),
+                );
+              }
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _askToUseSavedCuisines() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Use Saved Cuisines?'),
+        content: const Text('Would you like to use your saved cuisines or select new ones?'),
+        actions: [
+          TextButton(
+            child: const Text('Use Saved'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+          TextButton(
+            child: const Text('Select New'),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<List<String>?> _showCuisineSelectionDialog(List<String> importantCuisines, List<String> preferredCuisines) async {
+    final List<String> predefinedCuisines = ['Swahili', 'Italian', 'Chinese', 'Indian', 'American'];
+    final List<String> allCuisines = [...predefinedCuisines, ...importantCuisines, ...preferredCuisines];
+    List<String> selectedCuisines = [];
+
+    return await showDialog<List<String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Select Cuisines'),
+          content: SingleChildScrollView(
+            child: Column(
+              children: allCuisines.map((cuisine) {
+                return CheckboxListTile(
+                  title: Text(cuisine),
+                  value: selectedCuisines.contains(cuisine),
+                  onChanged: (bool? value) {
+                    setState(() {
+                      if (value == true) {
+                        selectedCuisines.add(cuisine);
+                      } else {
+                        selectedCuisines.remove(cuisine);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, selectedCuisines),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+    Future<bool?> _askToSelectCuisines() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Cuisines?'),
+        content: const Text('Would you like to include cuisine preferences in your suggestions?'),
+        actions: [
+          TextButton(
+            child: const Text('No'),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          TextButton(
+            child: const Text('Yes'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<bool> _checkHealthConditionSelected(String userId) async {
@@ -175,53 +413,6 @@ class _SubscriptionSuggestionScreenState
     );
   }
 
-  Future<Map<String, List<ProductSuggestion>>> _getChatGPTSuggestions(
-      List<Map<String, dynamic>> purchases, String? healthCondition) async {
-    const apiKey = 'YOUR_OPENAI_API_KEY';
-    const url = 'https://api.openai.com/v1/chat/completions';
-
-    final prompt = '''
-    Based on this purchase history: ${jsonEncode(purchases)}
-    ${healthCondition != null ? 'And this health condition: $healthCondition' : ''}
-    Suggest subscription products and their frequencies (Daily, Weekly, Bi-weekly, Monthly).
-    Group them by frequency and return in JSON format like this:
-    {
-      "Daily": [{"name": "product1", "quantity": 1}, ...],
-      "Weekly": [{"name": "product2", "quantity": 2}, ...],
-      "Bi-weekly": [{"name": "product3", "quantity": 1}, ...],
-      "Monthly": [{"name": "product4", "quantity": 3}, ...]
-    }
-    Consider purchase frequency, quantity patterns, and ${healthCondition != null ? 'tailor suggestions to the health condition' : 'general preferences'}.
-    ''';
-
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $apiKey',
-      },
-      body: jsonEncode({
-        'model': 'gpt-3.5-turbo',
-        'messages': [
-          {'role': 'user', 'content': prompt}
-        ],
-        'temperature': 0.7,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final content = jsonDecode(data['choices'][0]['message']['content']);
-      return content.map((key, value) => MapEntry(
-            key,
-            (value as List)
-                .map((item) => ProductSuggestion.fromJson(item))
-                .toList(),
-          ));
-    } else {
-      throw Exception('Failed to get ChatGPT response: ${response.statusCode}');
-    }
-  }
 
   Future<void> _addProduct(String frequency) async {
     final searchTerm = _searchController.text.trim();

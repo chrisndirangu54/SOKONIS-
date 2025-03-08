@@ -6,15 +6,15 @@ class MLService {
   final String apiKey = 'your_openai_api_key';
 
   // Use OpenAI's ChatGPT to recommend meals based on past purchases
-  Future<List<String>> recommendMeals(List<String> pastPurchases,
+  Future<List<Map<String, dynamic>>> recommendMeals(List<String> pastPurchases, int numberOfPeople,
       [selectedHealthCondition]) async {
     try {
       // Create a request prompt for ChatGPT
       String prompt =
-          'Given these past purchases: ${pastPurchases.join(", ")}, suggest 3 meal recommendations.';
+          'Given these past purchases: ${pastPurchases.join(", ")}, suggest 3 meal recommendations (breakfast, lunch, super) for $numberOfPeople people.';
 
       // Call the ChatGPT API
-      List<String> recommendations = await _callChatGPT(prompt);
+      List<Map<String, dynamic>> recommendations = await _callChatGPT(prompt);
       return recommendations;
     } catch (e) {
       throw Exception('Error in recommending meals: $e');
@@ -22,7 +22,7 @@ class MLService {
   }
 
   // Helper function to call the OpenAI API and get meal recommendations
-  Future<List<String>> _callChatGPT(String prompt) async {
+  Future<List<Map<String, dynamic>>> _callChatGPT(String prompt) async {
     try {
       // Define the headers for the API request
       final headers = {
@@ -57,10 +57,37 @@ class MLService {
         final jsonResponse = json.decode(response.body);
         final chatResponse = jsonResponse['choices'][0]['message']['content'];
 
-        // Split the response into a list of recommendations (assuming comma separation)
-        List<String> recommendations =
-            chatResponse.split(',').map((s) => s.trim()).toList();
-        return recommendations;
+      // Assuming chatResponse is a JSON string
+      List<Map<String, dynamic>> recommendations = [];
+      try {
+        // Decode JSON string into a List<dynamic>
+        final decoded = jsonDecode(chatResponse);
+        if (decoded is List) {
+          recommendations = decoded.cast<Map<String, dynamic>>().toList();
+        } else {
+          throw const FormatException('Expected a JSON list');
+        }
+      } catch (e) {
+        // Fallback: Treat as comma-separated list if JSON parsing fails
+        recommendations = chatResponse
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .map((s) {
+              // Parse quantity and name if present (e.g., "10kg rice")
+              final match = RegExp(r'(\d+\.?\d*)([a-zA-Z]+)?\s*(.*)').firstMatch(s);
+              if (match != null) {
+                return {
+                  'quantity': double.tryParse(match.group(1)!)?.toInt() ?? 1,
+                  'unit': match.group(2),
+                  'name': match.group(3) ?? s,
+                };
+              }
+              return {'name': s}; // Default to just name if no quantity/unit
+            })
+            .toList();
+      }
+      return recommendations;
       } else {
         throw Exception(
             'Failed to get response from ChatGPT API: ${response.statusCode}');

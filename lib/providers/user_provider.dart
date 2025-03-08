@@ -151,7 +151,11 @@ class UserProvider with ChangeNotifier {
     required String contact,
     required Address address,
     String? referralCode,
-    required LatLng pinLocation,
+    required LatLng pinLocation, 
+    List<String>? customHolidays, 
+    List<String>? importantHolidays, 
+    List<String>? preferredCuisines, 
+    List<String>? importantCuisines,
   }) {
     _user = _user.copyWith(
       name: name,
@@ -162,6 +166,10 @@ class UserProvider with ChangeNotifier {
       address: address,
       referralCode: referralCode,
       pinLocation: pinLocation,
+      customHolidays: customHolidays,
+      importantHolidays: importantHolidays, 
+      preferredCuisines: preferredCuisines,
+      importantCuisines: importantCuisines,
     );
     _userStreamController.add(_user);
     notifyListeners();
@@ -500,6 +508,8 @@ class UserProvider with ChangeNotifier {
   String? _referredBy;
 
   bool hasUsedReferral;
+
+  var customHolidays;
 
   // Method to select and upload a profile picture
   Future<void> selectAndUploadProfilePicture() async {

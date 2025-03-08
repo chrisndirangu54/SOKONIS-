@@ -122,7 +122,9 @@ class OrderItem {
   final DateTime date;
 
   String? notes;
-String status; // New field for notes
+String status;
+
+  int? purchaseCount; // New field for notes
   OrderItem({
     required this.user,
     required this.product,
