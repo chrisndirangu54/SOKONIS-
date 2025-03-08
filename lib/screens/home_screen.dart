@@ -289,13 +289,6 @@ class HomeScreenState extends State<HomeScreen> {
     return productsWithUserAnalytics.take(10).toList();
   }
 
-  Widget buildLists(BuildContext context) {
-
-
-    return selectedCategory == null
-        ? _buildCategorySelector()
-        : _buildProductGrid();
-  }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -611,32 +604,154 @@ void _filterProducts() {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
-  // Category Selection UI
-  Widget _buildCategorySelector() {
-    Set<String> categories = products.expand((p) => p.categories.map((c) => c.name)).toSet();
-    return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 10.0,
-        mainAxisSpacing: 10.0,
-        childAspectRatio: 3,
-      ),
-      itemCount: categories.length,
-      itemBuilder: (context, index) {
-        String category = categories.elementAt(index);
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              selectedCategory = category;
-              selectedSubcategories.clear(); // Reset subcategories when category changes
-            });
-          },
-          child: Card(child: Center(child: Text(category, style: const TextStyle(fontSize: 18)))),
-        );
-      },
+
+Widget buildLists(BuildContext context) {
+  return selectedCategory == null
+      ? _buildCategorySelector() // Show categories if none selected
+      : _buildSubcategorySelector(); // Show subcategories if category selected
+}
+
+// Category Selection UI
+Widget _buildCategorySelector() {
+  Set<String> categories = products.expand((p) => p.categories.map((c) => c.name)).toSet();
+  if (categories.isEmpty) {
+    return const Center(
+      child: Text('No categories available', style: TextStyle(fontSize: 18)),
     );
   }
+  final screenWidth = MediaQuery.of(context).size.width;
+  final aspectRatio = screenWidth > 600 ? 4 : 3;
+  return GridView.builder(
+    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 2,
+      crossAxisSpacing: 10.0,
+      mainAxisSpacing: 10.0,
+      childAspectRatio: aspectRatio as double,
+    ),
+    itemCount: categories.length,
+    itemBuilder: (context, index) {
+      String category = categories.elementAt(index);
+      return GestureDetector(
+        onTap: () {
+          setState(() {
+            selectedCategory = category;
+            selectedSubcategories.clear(); // Reset subcategories when category changes
+          });
+        },
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          color: selectedCategory == category ? Colors.blue.withOpacity(0.1) : Colors.white,
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.category, size: 20, color: selectedCategory == category ? Colors.blue : Colors.grey),
+                const SizedBox(width: 8),
+                Text(
+                  category,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: selectedCategory == category ? Colors.blue : Colors.black,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
 
+// Subcategory Selection UI
+Widget _buildSubcategorySelector() {
+  // Get subcategories for the selected category
+  List<String> subcategories = products
+      .where((p) => p.categories.any((c) => c.name == selectedCategory))
+      .expand((p) => p.categories
+          .firstWhere((c) => c.name == selectedCategory!)
+          .subcategories
+          .map((s) => s.name))
+      .toSet()
+      .toList();
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // Header with back button
+      Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () {
+                setState(() {
+                  selectedCategory = null; // Go back to category selection
+                  selectedSubcategories.clear();
+                });
+              },
+            ),
+            Text(
+              selectedCategory!,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const Spacer(),
+          ],
+        ),
+      ),
+      // Subcategory grid or product grid
+      subcategories.isEmpty || selectedSubcategories.isNotEmpty
+          ? _buildProductGrid() // Show products if no subcategories or one is selected
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: GridView.builder(
+                shrinkWrap: true, // Fit within Column
+                physics: const NeverScrollableScrollPhysics(), // Disable inner scrolling
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10.0,
+                  mainAxisSpacing: 10.0,
+                  childAspectRatio: 3,
+                ),
+                itemCount: subcategories.length,
+                itemBuilder: (context, index) {
+                  String subcategory = subcategories[index];
+                  bool isSelected = selectedSubcategories.contains(subcategory);
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (isSelected) {
+                          selectedSubcategories.remove(subcategory); // Deselect
+                        } else {
+                          selectedSubcategories.add(subcategory); // Select
+                        }
+                      });
+                    },
+                    child: Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.white,
+                      child: Center(
+                        child: Text(
+                          subcategory,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: isSelected ? Colors.blue : Colors.black,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+    ],
+  );
+}
   // Product Grid UI with Filters
   Widget _buildProductGrid() {
     List<Product> productsToShow = _applyFiltersAndSort(products);
