@@ -45,37 +45,40 @@ class ProductProvider with ChangeNotifier {
   // Getter for products
   List<Product> get products => _products;
 
-  Future<List<Product>> fetchNearbyUsersBought() async {
-    try {
-      User? user;
-      LatLng.LatLng? userPinLocation = user!.pinLocation as LatLng.LatLng?;
-      double maxDistanceKm = 10.0;
-      final querySnapshot = await _firestore
-          .collection('products')
-          .orderBy('purchaseCount', descending: true)
-          .get();
-
-      final List<Product> allProducts = querySnapshot.docs.map((doc) {
-        return Product.fromFirestore(doc: doc);
-      }).toList();
-
-      // Filter by proximity to mostPurchasedLocation
-      final List<Product> nearbyProducts = allProducts.where((product) {
-        if (product.mostPurchasedLocation == null) return false;
-        return _calculateDistance(
-                userPinLocation!, product.mostPurchasedLocation!) <=
-            maxDistanceKm;
-      }).toList();
-
-      _nearbyProductsStreamController.add(nearbyProducts);
-      return nearbyProducts;
-    } catch (e) {
-      print('Error fetching nearby products: $e');
+Future<List<Product>> fetchNearbyUsersBought() async {
+  try {
+    final userProvider = UserProvider(); // Assume injected or accessed somehow
+    final User? user = userProvider.user; // Get user from provider
+    if (user == null || user.pinLocation == null) {
+      print('User or pinLocation is null, returning empty list');
       _nearbyProductsStreamController.add([]);
       return [];
     }
-  }
 
+    LatLng.LatLng userPinLocation = user.pinLocation as LatLng.LatLng;
+    const double maxDistanceKm = 10.0;
+    final querySnapshot = await _firestore
+        .collection('products')
+        .orderBy('purchaseCount', descending: true)
+        .get();
+
+    final List<Product> allProducts = querySnapshot.docs.map((doc) {
+      return Product.fromFirestore(doc: doc);
+    }).toList();
+
+    final List<Product> nearbyProducts = allProducts.where((product) {
+      if (product.mostPurchasedLocation == null) return false;
+      return _calculateDistance(userPinLocation, product.mostPurchasedLocation!) <= maxDistanceKm;
+    }).toList();
+
+    _nearbyProductsStreamController.add(nearbyProducts);
+    return nearbyProducts;
+  } catch (e) {
+    print('Error fetching nearby products: $e');
+    _nearbyProductsStreamController.add([]);
+    return [];
+  }
+}
   double _calculateDistance(LatLng.LatLng point1, LatLng.LatLng point2) {
     const double earthRadius = 6371;
     final double lat1 = point1.latitude * pi / 180;
@@ -220,58 +223,52 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  Future<List<Product>> fetchProductsByWeather() async {
-    try {
-      // Use Nairobi, KE as an example; replace with user's location if available
-      User user = UserProvider().user;
-      const apiKey =
-          'YOUR_OPENWEATHERMAP_API_KEY'; // Replace with your OpenWeatherMap API key
-      var city = user.pinLocation; // Can be dynamic based on user location
-      final response = await http.get(Uri.parse(
-          'https://api.openweathermap.org/data/2.5/weather?q=$city&appid=$apiKey'));
-
-      if (response.statusCode == 200) {
-        final weatherData = jsonDecode(response.body);
-        final currentCondition =
-            weatherData['weather']?[0]?['description']?.toLowerCase() ??
-                'unknown';
-
-        // Fetch all products from Firestore
-        final querySnapshot = await _firestore.collection('products').get();
-        final List<Product> allProducts = querySnapshot.docs
-            .map((doc) => Product.fromFirestore(doc: doc))
-            .toList();
-
-        // Determine weather condition and filter products
-        String weatherCondition = 'other'; // Default condition
-        if (currentCondition.contains('rain') ||
-            currentCondition.contains('drizzle')) {
-          weatherCondition = 'rainy';
-        } else if (currentCondition.contains('cloud') ||
-            currentCondition.contains('overcast')) {
-          weatherCondition = 'cloudy';
-        } else if (currentCondition.contains('clear') ||
-            currentCondition.contains('sun')) {
-          weatherCondition = 'sunny';
-        }
-
-        // Filter products based on weather condition
-        final filteredProducts = allProducts.where((product) {
-          return product.weather?.contains(weatherCondition) ?? false;
-        }).toList();
-
-        _weatherProductsStreamController.add(filteredProducts);
-        return filteredProducts; // Return the filtered list
-      } else {
-        throw Exception('Failed to load weather data: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Error fetching products by weather: $e');
-      _weatherProductsStreamController.add([]); // Send an empty list on error
-      return []; // Return an empty list on error
+Future<List<Product>> fetchProductsByWeather() async {
+  try {
+    final userProvider = UserProvider(); // Inject or access properly
+    final User? user = userProvider.user;
+    if (user == null || user.pinLocation == null) {
+      print('User or pinLocation is null, returning empty list');
+      _weatherProductsStreamController.add([]);
+      return [];
     }
-  }
 
+    const apiKey = 'YOUR_OPENWEATHERMAP_API_KEY';
+    final city = user.pinLocation.toString(); // Convert LatLng to string if needed
+    final response = await http.get(Uri.parse(
+        'https://api.openweathermap.org/data/2.5/weather?lat=${user.pinLocation!.latitude}&lon=${user.pinLocation!.longitude}&appid=$apiKey'));
+
+    if (response.statusCode == 200) {
+      final weatherData = jsonDecode(response.body);
+      final currentCondition = weatherData['weather']?[0]?['description']?.toLowerCase() ?? 'unknown';
+
+      String weatherCondition = 'other';
+      if (currentCondition.contains('rain') || currentCondition.contains('drizzle')) {
+        weatherCondition = 'rainy';
+      } else if (currentCondition.contains('cloud') || currentCondition.contains('overcast')) {
+        weatherCondition = 'cloudy';
+      } else if (currentCondition.contains('clear') || currentCondition.contains('sun')) {
+        weatherCondition = 'sunny';
+      }
+
+      final querySnapshot = await _firestore.collection('products').get();
+      final List<Product> allProducts = querySnapshot.docs.map((doc) => Product.fromFirestore(doc: doc)).toList();
+
+      final filteredProducts = allProducts.where((product) {
+        return product.weather?.contains(weatherCondition) ?? false;
+      }).toList();
+
+      _weatherProductsStreamController.add(filteredProducts);
+      return filteredProducts;
+    } else {
+      throw Exception('Failed to load weather data: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error fetching products by weather: $e');
+    _weatherProductsStreamController.add([]);
+    return [];
+  }
+}
   // Get a single product by its ID from the cached products list
   Product? getProductById(String id) {
     if (_products.isNotEmpty) {
@@ -342,31 +339,20 @@ class ProductProvider with ChangeNotifier {
 
 class StockManager {
   final NotificationService _notificationService;
-  late UserProvider _userProvider;
+  final UserProvider _userProvider; // Remove late, make required
 
-  StockManager(this._notificationService);
+  StockManager(this._notificationService, this._userProvider); // Initialize here
 
-  // Method to check if a product is in stock based on quantity and notify isAdmin and isAttendant if out of stock
   bool isInStock(Product product) {
     bool inStock = product.itemQuantity > 0;
-
     if (!inStock) {
-      // Notify both isAdmin and isAttendant that the product is out of stock
       notifyRoles(product);
     }
-
     return inStock;
   }
 
-  // Method to get the remaining stock for a product
-  int getRemainingStock(Product product) {
-    return product.itemQuantity;
-  }
-
-  // Method to notify admin and attendant if a product is out of stock
   void notifyRoles(Product product) {
     if (_userProvider.user.isAdmin) {
-      // Notify Admin
       _notificationService.sendNotification(
         title: 'Product Out of Stock',
         body: 'Product ${product.name} is out of stock.',
@@ -374,15 +360,17 @@ class StockManager {
         data: {},
       );
     }
-
     if (_userProvider.user.isAttendant) {
-      // Notify Attendant
       _notificationService.sendNotification(
         title: 'Product Out of Stock',
         body: 'Product ${product.name} is out of stock.',
-        data: {},
         to: _userProvider.user.id,
+        data: {},
       );
     }
+  }
+
+  int getRemainingStock(Product product) {
+    return product.itemQuantity;
   }
 }

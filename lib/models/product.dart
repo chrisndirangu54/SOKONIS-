@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:grocerry/models/user.dart';
 import 'package:grocerry/services/groupbuy_service.dart';
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart' as latLng;
 
 class ProductPriceFloating extends StatelessWidget {
   final String userId;
@@ -124,6 +125,7 @@ class Product {
   late final String id;
   final String name;
   final DateTime? createdAt; // Add this field for Firestore created timestamp
+  final latLng.LatLng? mostPurchasedLocation;
 
   final double basePrice;
   final String description;
@@ -211,7 +213,8 @@ class Product {
     this.weather = const [],
     this.rating,
     this.reviews,
-    this.genomicAlternatives = const [],
+    this.genomicAlternatives = const [], 
+    this.mostPurchasedLocation,
   });
 
 // Factory constructor to create a Product instance from Firestore data
@@ -316,6 +319,12 @@ class Product {
       weather: weather,
       rating: rating,
       genomicAlternatives: const [],
+      mostPurchasedLocation: data['mostPurchasedLocation'] != null
+      ? latLng.LatLng(
+          data['mostPurchasedLocation']['lat'] ?? 0.0,
+          data['mostPurchasedLocation']['lng'] ?? 0.0,
+        )
+      : null,
     );
   }
 
@@ -343,7 +352,6 @@ class Product {
   User? user;
   Variety? variety;
 
-  var mostPurchasedLocation;
 
   get userLocation => user?.pinLocation;
 
