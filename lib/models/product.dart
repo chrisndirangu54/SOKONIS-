@@ -127,7 +127,7 @@ class Product {
 
   final double basePrice;
   final String description;
-  final List<Category> categories; // Updated to List<Category>
+  late final List<Category> categories; // Updated to List<Category>
   final String units;
   final List<String> tags;
   final List<Variety> varieties;

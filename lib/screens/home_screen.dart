@@ -390,7 +390,21 @@ class HomeScreenState extends State<HomeScreen> {
           await Future.wait(futureList.map((future) => future));
 
       // Storing the results in class properties with proper casting
-      products = results[0];
+    products = results[0].map((p) {
+      p.categories = p.categories.map((c) {
+        return Category(
+          name: c.name,
+          imageUrl: c.imageUrl.isNotEmpty ? c.imageUrl : 'https://via.placeholder.com/150', // Mock or fetch
+          subcategories: c.subcategories.map((s) {
+            return Subcategory(
+              name: s.name,
+              imageUrl: s.imageUrl.isNotEmpty ? s.imageUrl : 'https://via.placeholder.com/150', // Mock or fetch
+            );
+          }).toList(),
+        );
+      }).toList();
+      return p;
+    }).toList();
       nearbyUsersBought = results[1];
       seasonallyAvailable = results[2];
       favorites = results[3];
@@ -607,20 +621,26 @@ void _filterProducts() {
 
 Widget buildLists(BuildContext context) {
   return selectedCategory == null
-      ? _buildCategorySelector() // Show categories if none selected
-      : _buildSubcategorySelector(); // Show subcategories if category selected
+      ? _buildCategorySelector()
+      : _buildSubcategorySelector();
 }
 
 // Category Selection UI
 Widget _buildCategorySelector() {
-  Set<String> categories = products.expand((p) => p.categories.map((c) => c.name)).toSet();
-  if (categories.isEmpty) {
+  // Use a Map to store category name and imageUrl pairs
+  Map<String, String> categoryMap = {};
+  for (var product in products) {
+    for (var category in product.categories) {
+      categoryMap[category.name] = category.imageUrl;
+    }
+  }
+  if (categoryMap.isEmpty) {
     return const Center(
       child: Text('No categories available', style: TextStyle(fontSize: 18)),
     );
   }
   final screenWidth = MediaQuery.of(context).size.width;
-  final aspectRatio = screenWidth > 600 ? 4 : 3;
+  final aspectRatio = screenWidth > 600 ? 2 : 1.5; // Adjusted for image + text
   return GridView.builder(
     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
       crossAxisCount: 2,
@@ -628,36 +648,45 @@ Widget _buildCategorySelector() {
       mainAxisSpacing: 10.0,
       childAspectRatio: aspectRatio as double,
     ),
-    itemCount: categories.length,
+    itemCount: categoryMap.length,
     itemBuilder: (context, index) {
-      String category = categories.elementAt(index);
+      String category = categoryMap.keys.elementAt(index);
+      String imageUrl = categoryMap[category] ?? 'https://via.placeholder.com/150'; // Fallback image
       return GestureDetector(
         onTap: () {
           setState(() {
             selectedCategory = category;
-            selectedSubcategories.clear(); // Reset subcategories when category changes
+            selectedSubcategories.clear();
           });
         },
         child: Card(
           elevation: 4,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           color: selectedCategory == category ? Colors.blue.withOpacity(0.1) : Colors.white,
-          child: Center(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.category, size: 20, color: selectedCategory == category ? Colors.blue : Colors.grey),
-                const SizedBox(width: 8),
-                Text(
-                  category,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: selectedCategory == category ? Colors.blue : Colors.black,
-                  ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                child: Image.network(
+                  imageUrl,
+                  height: 60, // Fixed height for consistency
+                  width: 60,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.error, size: 60),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                category,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: selectedCategory == category ? Colors.blue : Colors.black,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       );
@@ -667,15 +696,14 @@ Widget _buildCategorySelector() {
 
 // Subcategory Selection UI
 Widget _buildSubcategorySelector() {
-  // Get subcategories for the selected category
-  List<String> subcategories = products
-      .where((p) => p.categories.any((c) => c.name == selectedCategory))
-      .expand((p) => p.categories
-          .firstWhere((c) => c.name == selectedCategory!)
-          .subcategories
-          .map((s) => s.name))
-      .toSet()
-      .toList();
+  // Get subcategories with their imageUrls for the selected category
+  Map<String, String> subcategoryMap = {};
+  for (var product in products.where((p) => p.categories.any((c) => c.name == selectedCategory))) {
+    var category = product.categories.firstWhere((c) => c.name == selectedCategory!);
+    for (var subcategory in category.subcategories) {
+      subcategoryMap[subcategory.name] = subcategory.imageUrl;
+    }
+  }
 
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -689,7 +717,7 @@ Widget _buildSubcategorySelector() {
               icon: const Icon(Icons.arrow_back),
               onPressed: () {
                 setState(() {
-                  selectedCategory = null; // Go back to category selection
+                  selectedCategory = null;
                   selectedSubcategories.clear();
                 });
               },
@@ -703,30 +731,31 @@ Widget _buildSubcategorySelector() {
         ),
       ),
       // Subcategory grid or product grid
-      subcategories.isEmpty || selectedSubcategories.isNotEmpty
-          ? _buildProductGrid() // Show products if no subcategories or one is selected
+      subcategoryMap.isEmpty || selectedSubcategories.isNotEmpty
+          ? _buildProductGrid()
           : Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: GridView.builder(
-                shrinkWrap: true, // Fit within Column
-                physics: const NeverScrollableScrollPhysics(), // Disable inner scrolling
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   crossAxisSpacing: 10.0,
                   mainAxisSpacing: 10.0,
-                  childAspectRatio: 3,
+                  childAspectRatio: 1.5, // Adjusted for image + text
                 ),
-                itemCount: subcategories.length,
+                itemCount: subcategoryMap.length,
                 itemBuilder: (context, index) {
-                  String subcategory = subcategories[index];
+                  String subcategory = subcategoryMap.keys.elementAt(index);
+                  String imageUrl = subcategoryMap[subcategory] ?? 'https://via.placeholder.com/150'; // Fallback image
                   bool isSelected = selectedSubcategories.contains(subcategory);
                   return GestureDetector(
                     onTap: () {
                       setState(() {
                         if (isSelected) {
-                          selectedSubcategories.remove(subcategory); // Deselect
+                          selectedSubcategories.remove(subcategory);
                         } else {
-                          selectedSubcategories.add(subcategory); // Select
+                          selectedSubcategories.add(subcategory);
                         }
                       });
                     },
@@ -734,15 +763,30 @@ Widget _buildSubcategorySelector() {
                       elevation: 4,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.white,
-                      child: Center(
-                        child: Text(
-                          subcategory,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: isSelected ? Colors.blue : Colors.black,
-                            fontWeight: FontWeight.w500,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8.0),
+                            child: Image.network(
+                              imageUrl,
+                              height: 50,
+                              width: 50,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => const Icon(Icons.error, size: 50),
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 8),
+                          Text(
+                            subcategory,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isSelected ? Colors.blue : Colors.black,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -751,54 +795,48 @@ Widget _buildSubcategorySelector() {
             ),
     ],
   );
+}  
+// Product Grid UI with Filters
+Widget _buildProductGrid() {
+  List<Product> productsToShow = _applyFiltersAndSort(products);
+  return Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Text(selectedCategory!, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () {
+                setState(() {
+                  selectedCategory = null;
+                  selectedSubcategories.clear();
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+      _buildFilterAndSortControls(),
+      Expanded(
+        child: GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10.0,
+            mainAxisSpacing: 10.0,
+            childAspectRatio: 0.75,
+          ),
+          itemCount: productsToShow.length,
+          itemBuilder: (context, index) {
+            return _buildProductCard(productsToShow[index], isGrid: true);
+          },
+        ),
+      ),
+    ],
+  );
 }
-  // Product Grid UI with Filters
-  Widget _buildProductGrid() {
-    List<Product> productsToShow = _applyFiltersAndSort(products);
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Text(selectedCategory!, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  setState(() {
-                    selectedCategory = null;
-                    selectedSubcategories.clear();
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-        _buildFilterAndSortControls(),
-        Expanded(
-          child: GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 10.0,
-              mainAxisSpacing: 10.0,
-              childAspectRatio: 0.75,
-            ),
-            itemCount: productsToShow.length,
-            itemBuilder: (context, index) => Card(
-              child: Column(
-                children: [
-                  Image.network(productsToShow[index].pictureUrl, height: 100, fit: BoxFit.cover),
-                  Text(productsToShow[index].name),
-                  Text('\$${productsToShow[index].basePrice.toStringAsFixed(2)}'),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
 Widget _buildFilterAndSortControls() {
   List<String> subcategories = products
