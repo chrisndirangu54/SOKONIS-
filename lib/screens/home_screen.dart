@@ -390,21 +390,21 @@ class HomeScreenState extends State<HomeScreen> {
           await Future.wait(futureList.map((future) => future));
 
       // Storing the results in class properties with proper casting
-    products = results[0].map((p) {
-      p.categories = p.categories.map((c) {
-        return Category(
-          name: c.name,
-          imageUrl: c.imageUrl.isNotEmpty ? c.imageUrl : 'https://via.placeholder.com/150', // Mock or fetch
-          subcategories: c.subcategories.map((s) {
-            return Subcategory(
-              name: s.name,
-              imageUrl: s.imageUrl.isNotEmpty ? s.imageUrl : 'https://via.placeholder.com/150', // Mock or fetch
-            );
-          }).toList(),
-        );
+      products = results[0].map((p) {
+        p.categories = p.categories.map((c) {
+          return Category(
+            name: c.name,
+            imageUrl: c.imageUrl.isNotEmpty ? c.imageUrl : 'https://via.placeholder.com/150', // Mock or fetch
+            subcategories: c.subcategories.map((s) {
+              return Subcategory(
+                name: s.name,
+                imageUrl: s.imageUrl.isNotEmpty ? s.imageUrl : 'https://via.placeholder.com/150', // Mock or fetch
+              );
+            }).toList(),
+          );
+        }).toList();
+        return p;
       }).toList();
-      return p;
-    }).toList();
       nearbyUsersBought = results[1];
       seasonallyAvailable = results[2];
       favorites = results[3];
