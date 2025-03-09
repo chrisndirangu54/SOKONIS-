@@ -41,57 +41,64 @@ class ProductProvider with ChangeNotifier {
       _weatherProductsStreamController.stream;
 
   Product? product;
-
+ User? user;
   // Getter for products
   List<Product> get products => _products;
 
-Future<List<Product>> fetchNearbyUsersBought() async {
-  try {
-    final userProvider = UserProvider(); // Assume injected or accessed somehow
-    final User? user = userProvider.user; // Get user from provider
-    if (user == null || user.pinLocation == null) {
-      print('User or pinLocation is null, returning empty list');
+  //  Future<void> _initializeUser() async {
+  //user ??= await User.guest();
+  //}
+
+  Future<List<Product>> fetchNearbyUsersBought() async {
+    try {
+    user ??= await User.guest();
+
+      if (user!.pinLocation == null) {
+        print('User or pinLocation is null, returning empty list');
+        _nearbyProductsStreamController.add([]);
+        return [];
+      }
+
+      LatLng.LatLng userPinLocation = user!.pinLocation as LatLng.LatLng;
+      const double maxDistanceKm = 10.0;
+      final querySnapshot = await _firestore
+          .collection('products')
+          .orderBy('purchaseCount', descending: true)
+          .get();
+
+      List<Product>? allProducts = querySnapshot.docs.map((doc) {
+        return Product.fromFirestore(doc: doc);
+      }).toList();
+
+      List<Product>? nearbyProducts = allProducts.where((product) {
+        if (product.mostPurchasedLocation == null) return false;
+        return _calculateDistance(
+                userPinLocation, product.mostPurchasedLocation!) <=
+            maxDistanceKm;
+      }).toList();
+
+      _nearbyProductsStreamController.add(nearbyProducts);
+      return nearbyProducts;
+    } catch (e) {
+      print('Error fetching nearby products: $e');
       _nearbyProductsStreamController.add([]);
       return [];
     }
-
-    LatLng.LatLng userPinLocation = user.pinLocation as LatLng.LatLng;
-    const double maxDistanceKm = 10.0;
-    final querySnapshot = await _firestore
-        .collection('products')
-        .orderBy('purchaseCount', descending: true)
-        .get();
-
-    final List<Product> allProducts = querySnapshot.docs.map((doc) {
-      return Product.fromFirestore(doc: doc);
-    }).toList();
-
-    final List<Product> nearbyProducts = allProducts.where((product) {
-      if (product.mostPurchasedLocation == null) return false;
-      return _calculateDistance(userPinLocation, product.mostPurchasedLocation!) <= maxDistanceKm;
-    }).toList();
-
-    _nearbyProductsStreamController.add(nearbyProducts);
-    return nearbyProducts;
-  } catch (e) {
-    print('Error fetching nearby products: $e');
-    _nearbyProductsStreamController.add([]);
-    return [];
   }
-}
+
   double _calculateDistance(LatLng.LatLng point1, LatLng.LatLng point2) {
     const double earthRadius = 6371;
-    final double lat1 = point1.latitude * pi / 180;
-    final double lon1 = point1.longitude * pi / 180;
-    final double lat2 = point2.latitude * pi / 180;
-    final double lon2 = point2.longitude * pi / 180;
+    double? lat1 = point1.latitude * pi / 180;
+    double? lon1 = point1.longitude * pi / 180;
+    double? lat2 = point2.latitude * pi / 180;
+    double? lon2 = point2.longitude * pi / 180;
 
-    final double dLat = lat2 - lat1;
-    final double dLon = lon2 - lon1;
+    double? dLat = lat2 - lat1;
+    double? dLon = lon2 - lon1;
 
-    final double a =
+    double? a =
         pow(sin(dLat / 2), 2) + cos(lat1) * cos(lat2) * pow(sin(dLon / 2), 2);
-    final double c = 2 * asin(sqrt(a));
+    double? c = 2 * asin(sqrt(a));
     return earthRadius * c;
   }
 
@@ -223,52 +230,60 @@ Future<List<Product>> fetchNearbyUsersBought() async {
     }
   }
 
-Future<List<Product>> fetchProductsByWeather() async {
-  try {
-    final userProvider = UserProvider(); // Inject or access properly
-    final User? user = userProvider.user;
-    if (user == null || user.pinLocation == null) {
-      print('User or pinLocation is null, returning empty list');
+  Future<List<Product>> fetchProductsByWeather() async {
+    try {
+    user ??= await User.guest();
+      if (user!.pinLocation == null) {
+        print('User or pinLocation is null, returning empty list');
+        _weatherProductsStreamController.add([]);
+        return [];
+      }
+
+      const apiKey = 'YOUR_OPENWEATHERMAP_API_KEY';
+      final city =
+          user!.pinLocation.toString(); // Convert LatLng to string if needed
+      final response = await http.get(Uri.parse(
+          'https://api.openweathermap.org/data/2.5/weather?lat=${user!.pinLocation!.latitude}&lon=${user!.pinLocation!.longitude}&appid=$apiKey'));
+
+      if (response.statusCode == 200) {
+        final weatherData = jsonDecode(response.body);
+        String? currentCondition =
+            weatherData['weather']?[0]?['description']?.toLowerCase() ??
+                'unknown';
+
+        String? weatherCondition = 'other';
+        if (currentCondition!.contains('rain') ||
+            currentCondition.contains('drizzle')) {
+          weatherCondition = 'rainy';
+        } else if (currentCondition.contains('cloud') ||
+            currentCondition.contains('overcast')) {
+          weatherCondition = 'cloudy';
+        } else if (currentCondition.contains('clear') ||
+            currentCondition.contains('sun')) {
+          weatherCondition = 'sunny';
+        }
+
+        final querySnapshot = await _firestore.collection('products').get();
+        List<Product>? allProducts = querySnapshot.docs
+            .map((doc) => Product.fromFirestore(doc: doc))
+            .toList();
+
+        final filteredProducts = allProducts.where((product) {
+          return product.weather?.contains(weatherCondition) ?? false;
+        }).toList();
+
+        _weatherProductsStreamController.add(filteredProducts);
+        return filteredProducts;
+      } else {
+        throw Exception('Failed to load weather data: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching products by weather: $e');
       _weatherProductsStreamController.add([]);
       return [];
     }
-
-    const apiKey = 'YOUR_OPENWEATHERMAP_API_KEY';
-    final city = user.pinLocation.toString(); // Convert LatLng to string if needed
-    final response = await http.get(Uri.parse(
-        'https://api.openweathermap.org/data/2.5/weather?lat=${user.pinLocation!.latitude}&lon=${user.pinLocation!.longitude}&appid=$apiKey'));
-
-    if (response.statusCode == 200) {
-      final weatherData = jsonDecode(response.body);
-      final currentCondition = weatherData['weather']?[0]?['description']?.toLowerCase() ?? 'unknown';
-
-      String weatherCondition = 'other';
-      if (currentCondition.contains('rain') || currentCondition.contains('drizzle')) {
-        weatherCondition = 'rainy';
-      } else if (currentCondition.contains('cloud') || currentCondition.contains('overcast')) {
-        weatherCondition = 'cloudy';
-      } else if (currentCondition.contains('clear') || currentCondition.contains('sun')) {
-        weatherCondition = 'sunny';
-      }
-
-      final querySnapshot = await _firestore.collection('products').get();
-      final List<Product> allProducts = querySnapshot.docs.map((doc) => Product.fromFirestore(doc: doc)).toList();
-
-      final filteredProducts = allProducts.where((product) {
-        return product.weather?.contains(weatherCondition) ?? false;
-      }).toList();
-
-      _weatherProductsStreamController.add(filteredProducts);
-      return filteredProducts;
-    } else {
-      throw Exception('Failed to load weather data: ${response.statusCode}');
-    }
-  } catch (e) {
-    print('Error fetching products by weather: $e');
-    _weatherProductsStreamController.add([]);
-    return [];
   }
-}
+
   // Get a single product by its ID from the cached products list
   Product? getProductById(String id) {
     if (_products.isNotEmpty) {
@@ -341,7 +356,8 @@ class StockManager {
   final NotificationService _notificationService;
   final UserProvider _userProvider; // Remove late, make required
 
-  StockManager(this._notificationService, this._userProvider); // Initialize here
+  StockManager(
+      this._notificationService, this._userProvider); // Initialize here
 
   bool isInStock(Product product) {
     bool inStock = product.itemQuantity > 0;

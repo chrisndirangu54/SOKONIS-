@@ -51,7 +51,7 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> {
   List<String> categories = []; // Track if initial suggestions are provided.
 // Convert your List<Product> into a Map<String, List<Product>> grouped by category
-  late Map<String, List<Product>>? categoryProducts;
+  Map<String, List<Product>>? categoryProducts;
   List<Product> complementaryProducts = [];
   final cs.CarouselSliderController controller = cs.CarouselSliderController();
   List<Product> favorites = [];
@@ -77,7 +77,7 @@ class HomeScreenState extends State<HomeScreen> {
   List<String> searchSuggestions = [];
   List<Product> seasonallyAvailable = [];
   String? selectedCategory;
-  late List<String> selectedSubcategories = [];
+  List<String>? selectedSubcategories = [];
   User? user;
   String? _healthBenefits;
   Product? _selectedHealthBenefitsProduct;
@@ -87,13 +87,13 @@ class HomeScreenState extends State<HomeScreen> {
   bool? _isFlipped = false;
   bool _isPressed = false;
   final NotificationService _notificationService = NotificationService();
-  late OfferProvider _offerProvider;
-  late ProductProvider _productProvider;
+  OfferProvider? _offerProvider;
+  ProductProvider? _productProvider;
   int? _unreadNotificationsCount = 0;
   final UserAnalyticsService _userAnalyticsService = UserAnalyticsService();
-  late UserProvider _userProvider;
+  UserProvider? _userProvider;
   double? discountedPrice;
-  late StreamSubscription<double?>? _discountedPriceSubscription;
+  StreamSubscription<double?>? _discountedPriceSubscription;
 // Define these in your state class
   final ScrollController _scrollController = ScrollController();
   final ScrollController _hintScrollController = ScrollController();
@@ -106,7 +106,7 @@ class HomeScreenState extends State<HomeScreen> {
   // OpenAI API details
   final String? apiKey = 'YOUR_OPENAI_API_KEY';
   final String? apiUrl = 'https://api.openai.com/v1/chat/completions';
-  late DateTime? viewStartTime;
+  DateTime? viewStartTime;
   // StreamController for predicted products
   final StreamController<List<Product>> _predictedProductsController =
       StreamController<List<Product>>.broadcast();
@@ -366,7 +366,7 @@ class HomeScreenState extends State<HomeScreen> {
   Future<void> _initializeOffers() async {
     try {
       // Moved fetchOffers to its own method
-      offers = await _offerProvider.fetchOffers();
+      offers = await _offerProvider!.fetchOffers();
     } catch (e) {
       print('Error initializing offers: $e');
     }
@@ -375,13 +375,13 @@ class HomeScreenState extends State<HomeScreen> {
   Future<void> _initializeProducts() async {
     try {
       var futureList = [
-        _productProvider.fetchProducts(),
-        _productProvider.fetchNearbyUsersBought(),
-        _productProvider.fetchSeasonallyAvailable(),
-        _userProvider.fetchFavorites(),
-        _userProvider.fetchRecentlyBought(),
-        _productProvider.fetchProductsByConsumptionTime(),
-        _productProvider.fetchProductsByWeather(),
+        _productProvider!.fetchProducts(),
+        _productProvider!.fetchNearbyUsersBought(),
+        _productProvider!.fetchSeasonallyAvailable(),
+        _userProvider!.fetchFavorites(),
+        _userProvider!.fetchRecentlyBought(),
+        _productProvider!.fetchProductsByConsumptionTime(),
+        _productProvider!.fetchProductsByWeather(),
       ];
 
       // Await all futures and ensure type safety for results
@@ -655,7 +655,7 @@ Widget _buildCategorySelector() {
         onTap: () {
           setState(() {
             selectedCategory = category;
-            selectedSubcategories.clear();
+            selectedSubcategories!.clear();
           });
         },
         child: Card(
@@ -717,7 +717,7 @@ Widget _buildSubcategorySelector() {
               onPressed: () {
                 setState(() {
                   selectedCategory = null;
-                  selectedSubcategories.clear();
+                  selectedSubcategories!.clear();
                 });
               },
             ),
@@ -730,7 +730,7 @@ Widget _buildSubcategorySelector() {
         ),
       ),
       // Subcategory grid or product grid
-      subcategoryMap.isEmpty || selectedSubcategories.isNotEmpty
+      subcategoryMap.isEmpty || selectedSubcategories!.isNotEmpty
           ? _buildProductGrid()
           : Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -747,14 +747,14 @@ Widget _buildSubcategorySelector() {
                 itemBuilder: (context, index) {
                   String subcategory = subcategoryMap.keys.elementAt(index);
                   String imageUrl = subcategoryMap[subcategory] ?? 'https://via.placeholder.com/150'; // Fallback image
-                  bool isSelected = selectedSubcategories.contains(subcategory);
+                  bool isSelected = selectedSubcategories!.contains(subcategory);
                   return GestureDetector(
                     onTap: () {
                       setState(() {
                         if (isSelected) {
-                          selectedSubcategories.remove(subcategory);
+                          selectedSubcategories!.remove(subcategory);
                         } else {
-                          selectedSubcategories.add(subcategory);
+                          selectedSubcategories!.add(subcategory);
                         }
                       });
                     },
@@ -811,7 +811,7 @@ Widget _buildProductGrid() {
               onPressed: () {
                 setState(() {
                   selectedCategory = null;
-                  selectedSubcategories.clear();
+                  selectedSubcategories!.clear();
                 });
               },
             ),
@@ -860,13 +860,13 @@ Widget _buildFilterAndSortControls() {
           spacing: 8.0,
           children: subcategories.map((subcategory) => ChoiceChip(
             label: Text(subcategory),
-            selected: selectedSubcategories.contains(subcategory),
+            selected: selectedSubcategories!.contains(subcategory),
             onSelected: (selected) {
               setState(() {
                 if (selected) {
-                  selectedSubcategories.add(subcategory);
+                  selectedSubcategories!.add(subcategory);
                 } else {
-                  selectedSubcategories.remove(subcategory);
+                  selectedSubcategories!.remove(subcategory);
                 }
               });
             },
@@ -944,9 +944,9 @@ List<Product> _applyFiltersAndSort(List<Product> products) {
   List<Product> filtered = products.where((product) {
     if (!product.categories.any((c) => c.name == selectedCategory)) return false;
     if (product.basePrice < minPrice! || product.basePrice > maxPrice!) return false;
-    if (selectedSubcategories.isNotEmpty) {
+    if (selectedSubcategories!.isNotEmpty) {
       Category category = product.categories.firstWhere((c) => c.name == selectedCategory!);
-      if (!category.subcategories.any((s) => selectedSubcategories.contains(s.name))) return false;
+      if (!category.subcategories.any((s) => selectedSubcategories!.contains(s.name))) return false;
     }
     return true;
   }).toList();
@@ -1605,7 +1605,7 @@ List<Product> _applyFiltersAndSort(List<Product> products) {
     }
 
     // Check if the product is in stock
-    bool inStock = _productProvider.isInStock(product);
+    bool inStock = _productProvider!.isInStock(product);
     const int highlyRatedThreshold = 100;
     // Create a dynamic list of icons
     List<IconDetail> dynamicIconsList = [
@@ -2259,9 +2259,9 @@ List<Product> _applyFiltersAndSort(List<Product> products) {
   }
 
   Widget _buildFloatingActionButton(BuildContext context) {
-    if (_userProvider.user.isAdmin ||
-        _userProvider.user.isRider ||
-        _userProvider.user.isAttendant) {
+    if (_userProvider!.user.isAdmin ||
+        _userProvider!.user.isRider ||
+        _userProvider!.user.isAttendant) {
       return StatefulBuilder(
         builder: (BuildContext context, StateSetter setState) {
           return GestureDetector(
@@ -2272,13 +2272,13 @@ List<Product> _applyFiltersAndSort(List<Product> products) {
             onTapCancel: () => setState(() => _isPressed = false),
             onTap: () {
               // Button action logic here
-              if (_userProvider.user.isAdmin && !_userProvider.user.isRider) {
+              if (_userProvider!.user.isAdmin && !_userProvider!.user.isRider) {
                 Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const AdminDashboardScreen()));
-              } else if (_userProvider.user.isRider) {
+              } else if (_userProvider!.user.isRider) {
                 Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const PendingDeliveriesScreen()));
-              } else if (_userProvider.user.isAttendant) {
+              } else if (_userProvider!.user.isAttendant) {
                 showModalBottomSheet(
                   context: context,
                   builder: (BuildContext context) {
@@ -2537,7 +2537,7 @@ Widget _buildTagsSection() {
                             setState(() {
                               // Code to modify the background color, if necessary.
                             });
-                            if (_userProvider.isLoggedIn() == true) {  // Add parentheses to execute the function
+                            if (_userProvider!.isLoggedIn() == true) {  // Add parentheses to execute the function
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                     builder: (context) =>
@@ -2724,7 +2724,7 @@ Widget _buildTagsSection() {
                             setState(() {
                               // Code to modify the background color if required.
                             });
-                            if (_userProvider.isLoggedIn() == true) {  // Add parentheses to execute the function
+                            if (_userProvider!.isLoggedIn() == true) {  // Add parentheses to execute the function
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                     builder: (_) => const CartScreen()),
@@ -3101,9 +3101,9 @@ Widget _buildTagsSection() {
             ),
           )),
       // FloatingActionButton logic for Admin, Rider, or Attendant users
-      floatingActionButton: _userProvider.user.isAdmin ||
-              _userProvider.user.isRider ||
-              _userProvider.user.isAttendant
+      floatingActionButton: _userProvider!.user.isAdmin ||
+              _userProvider!.user.isRider ||
+              _userProvider!.user.isAttendant
           ? _buildFloatingActionButton(context)
           : null,
     );

@@ -7,6 +7,7 @@ import 'package:grocerry/main.dart';
 import 'package:grocerry/models/product.dart';
 import 'package:grocerry/models/user.dart';
 import 'package:grocerry/screens/group_buy_page.dart';
+import 'package:grocerry/screens/packages_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' as latLng;
 import 'package:flutter_map/flutter_map.dart';
@@ -140,6 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     'buildGroupBuyAccessWidget': 4,
     '_buildTopUpSection': 6,
     '_buildThemeToggle': 1, // New section for theme toggle
+    'buildPackagesScreenCard': 4,
   };
 
   late Map<String, Function> _sectionWidgets;
@@ -190,6 +192,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           (BuildContext context, WalletProvider walletProvider) =>
               _buildTopUpSection(context, walletProvider),
       '_buildThemeToggle': (BuildContext context) => _buildThemeToggle(context),
+      'buildPackagesScreenCard': (BuildContext context) =>
+          buildPackagesScreenCard(context),
     };
   }
 
@@ -291,6 +295,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return [groupBuyService, userProvider.user, userProvider.pinLocation];
       case '_buildTopUpSection':
         return [walletProvider];
+      case 'buildPackagesScreenCard':
+        return [];
       default:
         return [];
     }
@@ -375,6 +381,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 '_buildTopUpSection', context, [walletProvider]),
             const SizedBox(height: 20),
             _buildSectionWidget('_buildThemeToggle', context),
+            const SizedBox(height: 20),
+            _buildSectionWidget('buildPackagesScreenCard', context),
           ],
         ),
       ),
@@ -970,7 +978,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
             )));
   }
 
-
+Widget buildPackagesScreenCard(BuildContext context) {
+    return Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    color: Colors.white,
+                    border: Border.all(
+                        color: Colors.grey.withOpacity(0.2),
+                        width: 1),
+                  ),
+                  padding: const EdgeInsets.all(20),
+                  margin:
+                      const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Explore Packages!',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Discover our various package options tailored for you.',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).push(MaterialPageRoute(
+                            builder: (context) => const PackagesScreen(),
+                          ));
+                        },
+                        child: const Text('View Packages'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )));
+  }
 
 void showUpdateProfileDialog(BuildContext context, UserProvider userProvider) {
   final user = userProvider.user;
@@ -1095,7 +1156,7 @@ void showUpdateProfileDialog(BuildContext context, UserProvider userProvider) {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Pin Location'),
+                        const Text('GPS Location'),
                         ElevatedButton(
                           onPressed: () async {
                             final latLng.LatLng? result = await Navigator.push(
